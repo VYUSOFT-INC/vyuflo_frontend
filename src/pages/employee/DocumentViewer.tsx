@@ -37,6 +37,11 @@ export default function DocumentViewer() {
   const [searchParams] = useSearchParams();
   const docId          = searchParams.get("doc_id")         ?? undefined;
   const returnAppId    = searchParams.get("application_id") ?? undefined;
+  const returnUrl = searchParams.get("return_url")
+  ? decodeURIComponent(searchParams.get("return_url")!)
+  : returnAppId
+  ? `/applications/${returnAppId}`
+  : "/documents";
 
   const { data: doc, isLoading: docLoading, error: docError } = useDocument(docId);
 
@@ -265,7 +270,7 @@ export default function DocumentViewer() {
                 <circle cx="12" cy="5" r="2" stroke="#94a3b8" strokeWidth="1.5"/>
                 <path d="M12 7v3M8 14h.01M16 14h.01M9 17h6" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
-              <button onClick={async () => { await submitFields(); setRightOpen(true); setMobileTab("data"); }}
+              <button onClick={async () => { await submitFields(); navigate(returnUrl); }}
                 className="flex items-center gap-[6px] h-[34px] px-[20px] rounded-[8px] text-white text-[12px] font-semibold cursor-pointer hover:opacity-90 active:scale-[0.98] transition"
                 style={{ background: "linear-gradient(135deg, var(--theme-primary), var(--theme-gradient-end))" }}>
                 {source === "db" ? "Update" : "Submit"}
@@ -512,7 +517,7 @@ export default function DocumentViewer() {
         )}
         {!rightOpen && fields.length > 0 && (
           <div className="absolute bottom-[56px] right-[16px]">
-            <button onClick={async () => { await submitFields(); setRightOpen(true); }}
+            <button onClick={async () => { await submitFields(); navigate(returnUrl); }}
               className="flex items-center gap-[6px] h-[34px] px-[12px] rounded-[8px] bg-white border border-[#e5e7eb] text-[#374151] text-[12px] font-medium shadow-md hover:bg-[#f9fafb] transition">
               {source === "db" ? "Update" : "Submit"}
             </button>
