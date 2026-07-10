@@ -537,14 +537,6 @@
 // }
 
 
-
-
-
-
-
-
-
-
 // src/pages/employee/ApplicationDetail.tsx
 
 import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
@@ -1060,10 +1052,17 @@ function Sidebar({ app, tasksArr, onMessage, onUpload }: {
 function TaskRow({ task, onView, onUpload }: {
   task: Task;
   onView?: (docId: string) => void;
-  onUpload?: (taskId: string) => void;
+  onUpload?: (taskId: string, file: File) => void;
 }) {
-  const done   = task.is_completed;
-  const hasDoc = done && !!task.document_name;
+  const done      = task.is_completed;
+  const hasDoc    = done && !!task.document_name;
+  const inputRef  = useRef<HTMLInputElement>(null);
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) onUpload?.(task.id, file);
+    e.target.value = ''; // reset so same file can be re-selected
+  }
 
   return (
     <div className={`flex items-start gap-[12px] p-[14px] rounded-[12px] border transition ${
@@ -1090,7 +1089,7 @@ function TaskRow({ task, onView, onUpload }: {
           </div>
         ) : (
           <p className={`text-[12px] mt-[2px] ${done ? 'text-[#15803d] font-medium' : 'text-[#94a3b8]'}`}>
-            {done ? '✓ Completed' : (task.description ?? 'Pending upload')}
+            {done ? '✓ Completed' : (task.description ?? 'Click Upload to attach a document')}
           </p>
         )}
       </div>
@@ -1101,11 +1100,22 @@ function TaskRow({ task, onView, onUpload }: {
             View
           </button>
         ) : !done ? (
-          <button onClick={() => onUpload?.(task.id)}
-            className="h-[28px] px-[10px] rounded-[8px] text-white text-[12px] font-medium hover:opacity-90 transition"
-            style={{ backgroundImage: PRIMARY_GRADIENT }}>
-            Upload
-          </button>
+          <>
+            {/* Hidden file input — triggered by the Upload button */}
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+            <button
+              onClick={() => inputRef.current?.click()}
+              className="h-[28px] px-[10px] rounded-[8px] text-white text-[12px] font-medium hover:opacity-90 transition flex items-center gap-[4px]"
+              style={{ backgroundImage: PRIMARY_GRADIENT }}>
+              <Upload size={11} /> Upload
+            </button>
+          </>
         ) : null}
       </div>
     </div>
@@ -1214,7 +1224,7 @@ function OverviewTab({ app, tasksArr, onViewAllTasks, onViewTimeline, onUpload, 
   tasksArr: Task[];
   onViewAllTasks: () => void;
   onViewTimeline: () => void;
-  onUpload: (taskId: string) => void;
+  onUpload: (taskId: string, file: File) => void;
   onView: (docId: string) => void;
 }) {
   const tok          = statusToken(app.status as string);
@@ -1222,83 +1232,99 @@ function OverviewTab({ app, tasksArr, onViewAllTasks, onViewTimeline, onUpload, 
 
   return (
     <div className="flex flex-col gap-[16px]">
-      <SectionCard title="Application Summary">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-[20px]">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#94a3b8] mb-[10px]">Details</p>
-            <InfoPair label="Application #:" value={app.application_number as string} />
-            <InfoPair label="Visa Type:"     value={(app.visa_type as { name?: string })?.name} />
-            <InfoPair label="Status:"
-              badge={
-                <span className="px-[8px] py-[2px] rounded-full text-[11px] font-semibold" style={{ backgroundColor: tok.bg, color: tok.text }}>
-                  {tok.label}
-                </span>
-              }
-            />
-            <InfoPair label="Sponsor:"      value={app.sponsor_employer as string} />
-            <InfoPair label="Submitted:"    value={fmtDate((app.submission_date as string) ?? (app.created_at as string))} />
-            <InfoPair label="Last Updated:" value={fmtRelative(app.updated_at as string)} />
-          </div>
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#94a3b8] mb-[10px]">Timeline</p>
-            <InfoPair label="Start Date:"    value={fmtDate((app.start_date as string) ?? (app.created_at as string))} />
-            <InfoPair label="Deadline:"      value={fmtDate(app.due_date as string)} />
-            <InfoPair label="Current Stage:" value={(app.current_stage as string)?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} />
-            <InfoPair label="Progress:"
-              badge={
-                <div className="flex items-center gap-[8px] flex-1">
-                  <div className="flex-1 h-[5px] bg-[#f1f5f9] rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all" style={{ width: `${app.progress_percent ?? 0}%`, backgroundImage: PRIMARY_GRADIENT }} />
+
+      {/* ── Single unified overview card ── */}
+      <div className="bg-white border border-[#f1f5f9] rounded-[14px] shadow-[0px_1px_1px_rgba(0,0,0,0.04)] overflow-hidden">
+
+        {/* Application Summary */}
+        <div className="px-[24px] py-[20px] border-b border-[#f8fafc]">
+          <h2 className="text-[15px] font-bold text-[#0f172a] mb-[16px]">Application Summary</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-[20px]">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#94a3b8] mb-[10px]">Details</p>
+              <InfoPair label="Application #:" value={app.application_number as string} />
+              <InfoPair label="Visa Type:"     value={(app.visa_type as { name?: string })?.name} />
+              <InfoPair label="Status:"
+                badge={
+                  <span className="px-[8px] py-[2px] rounded-full text-[11px] font-semibold" style={{ backgroundColor: tok.bg, color: tok.text }}>
+                    {tok.label}
+                  </span>
+                }
+              />
+              <InfoPair label="Sponsor:"      value={app.sponsor_employer as string} />
+              <InfoPair label="Submitted:"    value={fmtDate((app.submission_date as string) ?? (app.created_at as string))} />
+              <InfoPair label="Last Updated:" value={fmtRelative(app.updated_at as string)} />
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#94a3b8] mb-[10px]">Timeline</p>
+              <InfoPair label="Start Date:"    value={fmtDate((app.start_date as string) ?? (app.created_at as string))} />
+              <InfoPair label="Deadline:"      value={fmtDate(app.due_date as string)} />
+              <InfoPair label="Current Stage:" value={(app.current_stage as string)?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} />
+              <InfoPair label="Progress:"
+                badge={
+                  <div className="flex items-center gap-[8px] flex-1">
+                    <div className="flex-1 h-[5px] bg-[#f1f5f9] rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all" style={{ width: `${(app.progress_percent as number) ?? 0}%`, backgroundImage: PRIMARY_GRADIENT }} />
+                    </div>
+                    <span className="text-[12px] font-semibold" style={{ color: PRIMARY }}>{(app.progress_percent as number) ?? 0}%</span>
                   </div>
-                  <span className="text-[12px] font-semibold" style={{ color: PRIMARY }}>{app.progress_percent as number ?? 0}%</span>
-                </div>
-              }
-            />
+                }
+              />
+            </div>
           </div>
         </div>
-      </SectionCard>
 
-      {pendingTasks.length > 0 && (
-        <SectionCard
-          title="Action Required"
-          icon={<AlertCircle size={14} className="text-[#ea580c]" />}
-          action={
-            <button onClick={onViewAllTasks} className="text-[12px] font-medium text-indigo-600 hover:underline flex items-center gap-[3px]">
-              All tasks <ArrowRight size={11} />
-            </button>
-          }>
-          <div className="flex flex-col gap-[8px]">
-            {pendingTasks.slice(0, 3).map(task => (
-              <TaskRow key={task.id} task={task} onView={onView} onUpload={onUpload} />
-            ))}
-            {pendingTasks.length > 3 && (
-              <button onClick={onViewAllTasks}
-                className="text-[13px] font-medium text-indigo-600 hover:underline flex items-center gap-[3px] mt-[4px]">
-                View {pendingTasks.length - 3} more tasks <ArrowRight size={12} />
+        {/* Action Required */}
+        {pendingTasks.length > 0 && (
+          <div className="px-[24px] py-[20px] border-b border-[#f8fafc]">
+            <div className="flex items-center justify-between mb-[14px]">
+              <h2 className="text-[15px] font-bold text-[#0f172a] flex items-center gap-[8px]">
+                <AlertCircle size={14} className="text-[#ea580c]" /> Action Required
+              </h2>
+              <button onClick={onViewAllTasks} className="text-[12px] font-medium text-indigo-600 hover:underline flex items-center gap-[3px]">
+                All tasks <ArrowRight size={11} />
               </button>
-            )}
+            </div>
+            <div className="flex flex-col gap-[8px]">
+              {pendingTasks.slice(0, 3).map(task => (
+                <TaskRow key={task.id} task={task} onView={onView} onUpload={onUpload} />
+              ))}
+              {pendingTasks.length > 3 && (
+                <button onClick={onViewAllTasks}
+                  className="text-[13px] font-medium text-indigo-600 hover:underline flex items-center gap-[3px] mt-[4px]">
+                  View {pendingTasks.length - 3} more tasks <ArrowRight size={12} />
+                </button>
+              )}
+            </div>
           </div>
-        </SectionCard>
-      )}
+        )}
 
-      <SectionCard
-        title="Application Stage"
-        icon={<Activity size={14} />}
-        action={
-          <button onClick={onViewTimeline} className="text-[12px] font-medium text-indigo-600 hover:underline flex items-center gap-[3px]">
-            Full timeline <ArrowRight size={11} />
-          </button>
-        }>
-        <ApplicationStageTracker
-          currentStage={app.current_stage as string}
-          progressPct={app.progress_percent as number ?? 0}
-        />
-      </SectionCard>
+        {/* Application Stage */}
+        <div className="border-b border-[#f8fafc]">
+          <div className="px-[24px] pt-[20px] pb-[4px] flex items-center justify-between">
+            <h2 className="text-[15px] font-bold text-[#0f172a] flex items-center gap-[8px]">
+              <Activity size={14} className="text-[#64748b]" /> Application Stage
+            </h2>
+            <button onClick={onViewTimeline} className="text-[12px] font-medium text-indigo-600 hover:underline flex items-center gap-[3px]">
+              Full timeline <ArrowRight size={11} />
+            </button>
+          </div>
+          <ApplicationStageTracker
+            currentStage={app.current_stage as string}
+            progressPct={(app.progress_percent as number) ?? 0}
+          />
+        </div>
 
-      <AIInsightsCard app={app} tasksArr={tasksArr} />
+        {/* AI Tips */}
+        <div className="px-[24px] py-[20px]">
+          <AIInsightsCard app={app} tasksArr={tasksArr} />
+        </div>
+
+      </div>
     </div>
   );
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TASKS TAB
@@ -1307,7 +1333,7 @@ function OverviewTab({ app, tasksArr, onViewAllTasks, onViewTimeline, onUpload, 
 function TasksTab({ tasksArr, onView, onUpload }: {
   tasksArr: Task[];
   onView: (docId: string) => void;
-  onUpload: (taskId: string) => void;
+  onUpload: (taskId: string, file: File) => void;
 }) {
   const completed = tasksArr.filter(t => t.is_completed);
   const pending   = tasksArr.filter(t => !t.is_completed);
@@ -1488,9 +1514,48 @@ export default function ApplicationDetail() {
 
   const tasksArr = tasks ?? [];
 
-  function handleUpload(taskId?: string) {
-    const q = taskId ? `?application_id=${id}&task_id=${taskId}` : `?application_id=${id}`;
-    navigate(`/documents/upload${q}`);
+  // Upload a specific task's file inline — no page navigation
+  // After upload succeeds, navigate to DocumentViewer for OCR review
+  async function handleUpload(taskId: string, file: File) {
+    const DOCUMENT_CATEGORY_MAP: Record<string, string> = {
+      "Passport Copy": "identity", "Birth Certificate": "identity",
+      "Two Passport Photos": "identity", "Copy of Current Visa": "identity",
+      "Current Immigration Status Evidence": "identity",
+      "Offer Letter": "employment", "Resume / CV": "employment",
+      "Pay Stubs (Last 3 Months)": "employment", "Employment Verification Letter": "employment",
+      "Organizational Chart": "employment", "Contracts or Itinerary": "employment",
+      "Employer Attestation": "employment", "Enrollment Verification": "employment",
+      "Educational Transcripts": "education", "STEM Degree Transcript": "education",
+      "Acceptance Letter": "education", "Professional License (if applicable)": "education",
+    };
+    try {
+      const task     = tasksArr.find(t => t.id === taskId);
+      const taskName = task?.name ?? '';
+      const category = DOCUMENT_CATEGORY_MAP[taskName] ?? 'other';
+
+      pushToast('info', 'Uploading…', file.name);
+
+      const uploadedDoc = await documentsApi.upload({
+        application_id: id!,
+        document_type:  taskName || taskId,
+        category,
+        file,
+      });
+
+      pushToast('success', 'Uploaded!', 'Reviewing extracted data…');
+
+      // Navigate to DocumentViewer for OCR review
+      // return_url brings user back to this application's Required Tasks tab
+      const returnUrl = encodeURIComponent(`/applications/${id}?tab=tasks`);
+      navigate(`/documents/viewer?doc_id=${uploadedDoc.id}&application_id=${id}&return_url=${returnUrl}`);
+    } catch {
+      pushToast('error', 'Upload failed', 'Please try again.');
+    }
+  }
+
+  // General upload (sidebar button, Documents tab) → Document Hub
+  function handleUploadGeneral() {
+    navigate(`/documents?application_id=${id}`);
   }
 
   async function handleMessage() {
@@ -1670,7 +1735,7 @@ export default function ApplicationDetail() {
               app={appObj}
               tasksArr={tasksArr}
               onMessage={handleMessage}
-              onUpload={() => handleUpload()}
+              onUpload={() => handleUploadGeneral()}
             />
 
             <div className="flex-1 min-w-0 flex flex-col gap-[16px]">
@@ -1688,7 +1753,7 @@ export default function ApplicationDetail() {
                 <DocumentsTab
                   tasksArr={tasksArr}
                   onView={setPreviewDocId}
-                  onUpload={() => handleUpload()}
+                  onUpload={() => handleUploadGeneral()}
                 />
               )}
               {activeTab === 'tasks' && (

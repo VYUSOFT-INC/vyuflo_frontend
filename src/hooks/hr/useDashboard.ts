@@ -1,4 +1,5 @@
 // src/hooks/hr/useDashboard.ts
+
 import { useState, useEffect, useCallback } from 'react';
 import type { AxiosError } from 'axios';
 import type { HRDashboardData } from '../../types/hr/dashboard.types';

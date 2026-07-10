@@ -219,13 +219,14 @@
 //   };
 // }
 
+
+
+
 // src/hooks/useOCR.ts
 
 import { useState, useCallback } from "react";
 import ocrApi from "../../api/employee/ocr.api";
 import type { OCRField } from "../../types/employee/ocr.types";
-
-//const OCR_BASE = import.meta.env.VITE_API_BASE_URL;
 
 // ── Map DB field → local OCRField (adds UI-only fields) ──────────────────────
 function mapSavedField(f: {
@@ -255,11 +256,11 @@ function calcAvg(fields: OCRField[]): number {
 
 // ─────────────────────────────────────────────────────────────────────────────
 export function useOCR(documentId: string | undefined) {
-  const [fields,        setFields]  = useState<OCRField[]>([]);
-  const [avgConfidence, setAvgConf] = useState(0);
-  const [isLoading,     setIsLoading] = useState(false);
-  const [error,         setError]   = useState<string | null>(null);
-  const [source,        setSource]  = useState<"db" | "ocr" | null>(null);
+  const [fields,       setFields]    = useState<OCRField[]>([]);
+  const [avgConfidence,setAvgConf]   = useState(0);
+  const [isLoading,    setIsLoading] = useState(false);
+  const [error,        setError]     = useState<string | null>(null);
+  const [source,       setSource]    = useState<"db" | "ocr" | null>(null);
 
   // ── Main load function — called once file blob is ready ───────────────────
   const loadFields = useCallback(async (blob: Blob, fileName: string) => {
@@ -269,10 +270,11 @@ export function useOCR(documentId: string | undefined) {
 
     try {
       // ── Step 1: Check DB first ────────────────────────────────────────────
+      // Returns [] if OCR has never run → proceed to OCR service.
+      // Returns fields if already done  → load instantly, skip OCR call.
       const saved = await ocrApi.getFields(documentId);
 
       if (saved.length > 0) {
-        // ✅ Already extracted — load from DB instantly, never call OCR
         const mapped = saved.map(mapSavedField);
         setFields(mapped);
         setAvgConf(calcAvg(mapped));
@@ -281,19 +283,21 @@ export function useOCR(documentId: string | undefined) {
         return;
       }
 
-      // ── Step 2: No DB fields — call OCR service ───────────────────────────
+      // ── Step 2: No DB fields — call OCR microservice ─────────────────────
       const safeName = fileName && /\.(jpg|jpeg|png|pdf)$/i.test(fileName)
         ? fileName
         : `document_${Date.now()}.jpg`;
 
       const form = new FormData();
       form.append("file", blob, safeName);
+      const ocrBase = (import.meta.env.VITE_API_BASE_URL as string ?? "").replace(/\/api\/v1\/?$/, "");
+      const ocrUrl  = `${ocrBase}/api/v1/ocr/extract`;
 
-      // ✅ Correct (relative path → goes through Vite proxy)
-       const res = await fetch('/api/v1/ocr/extract', {
-        method: 'POST',
-        body: form,
-         });
+      const res = await fetch(ocrUrl, {
+        method:      "POST",
+        body:        form,
+        credentials: "include",   // send cookies so auth works
+      });
 
       if (!res.ok) {
         const text = await res.text();
@@ -302,11 +306,16 @@ export function useOCR(documentId: string | undefined) {
 
       const data = await res.json() as {
         document_type: string;
-        fields: { field_name: string; extracted_value: string; confidence_score: number; needs_review: boolean }[];
+        fields: {
+          field_name:       string;
+          extracted_value:  string;
+          confidence_score: number;
+          needs_review:     boolean;
+        }[];
       };
 
       const mapped: OCRField[] = data.fields.map((f, i) => ({
-        id:               `f-${i}`,   // temporary local ID until saved to DB
+        id:               `f-${i}`,   // temp local ID — replaced with real UUID after saveFields()
         field_name:       f.field_name,
         extracted_value:  f.extracted_value,
         confidence_score: f.confidence_score,
@@ -327,33 +336,31 @@ export function useOCR(documentId: string | undefined) {
     }
   }, [documentId]);
 
-  // ── Submit / Update — single call to POST /ocr-fields/save ───────────────
-  // Works for both flows:
-  //   source="ocr"  → no existing fields in DB → backend INSERTs all
-  //   source="db"   → fields exist in DB       → backend UPDATEs by field id
+  // ── Submit / Update ───────────────────────────────────────────────────────
+  // source="ocr" → no DB fields yet → backend INSERTs all
+  // source="db"  → fields exist     → backend UPDATEs by field id
   const submitFields = useCallback(async () => {
     if (!documentId || !fields.length) return;
 
-    const snapshot = fields; // capture current state
+    const snapshot = fields;
 
-    // 1. Optimistic UI update
+    // Optimistic UI — mark everything confirmed immediately
     setFields(prev => prev.map(f => ({
       ...f, is_confirmed: true, needs_review: false, is_editing: false,
     })));
 
-    // 2. One API call — backend decides insert vs update
     try {
       const saved = await ocrApi.saveFields(documentId, {
         fields: snapshot.map(f => ({
-          id:               f.id.startsWith("f-") ? undefined : f.id,  // omit temp IDs
+          id:               f.id.startsWith("f-") ? undefined : f.id,
           field_name:       f.field_name,
-          extracted_value:  f.edit_value || f.extracted_value,          // use edited value
+          extracted_value:  f.edit_value || f.extracted_value,
           confidence_score: f.confidence_score,
           needs_review:     false,
         })),
       });
 
-      // Update local fields with real DB UUIDs (important after first insert)
+      // Replace temp IDs with real DB UUIDs returned from backend
       if (saved.length === snapshot.length) {
         setFields(saved.map(mapSavedField).map(f => ({
           ...f, is_confirmed: true, needs_review: false,
@@ -365,14 +372,14 @@ export function useOCR(documentId: string | undefined) {
     }
   }, [documentId, fields]);
 
-  // ── Confirm single field — local state only (no separate API call) ────────
+  // ── Single field confirm (local state only) ───────────────────────────────
   const confirmField = useCallback((id: string) => {
     setFields(prev => prev.map(f =>
       f.id === id ? { ...f, is_confirmed: true, needs_review: false, is_editing: false } : f
     ));
   }, []);
 
-  // ── Save edited field — local state only ─────────────────────────────────
+  // ── Edit helpers (local state only — persisted on submitFields) ───────────
   const saveEdit = useCallback((id: string) => {
     setFields(prev => prev.map(f =>
       f.id === id
@@ -381,7 +388,6 @@ export function useOCR(documentId: string | undefined) {
     ));
   }, []);
 
-  // ── Local UI actions (no backend call) ───────────────────────────────────
   const startEdit = useCallback((id: string) => {
     setFields(prev => prev.map(f =>
       f.id === id ? { ...f, is_editing: true, edit_value: f.extracted_value } : f
@@ -405,11 +411,11 @@ export function useOCR(documentId: string | undefined) {
     avgConfidence,
     isLoading,
     error,
-    source,           // "db" | "ocr" | null
-    loadFields,       // call when blob is ready
-    submitFields,     // Submit (first open) or Update (re-open) — one function, one API
-    confirmField,     // local state toggle only
-    saveEdit,         // local state only — persisted on submitFields
+    source,
+    loadFields,
+    submitFields,
+    confirmField,
+    saveEdit,
     startEdit,
     cancelEdit,
     updateEditValue,
