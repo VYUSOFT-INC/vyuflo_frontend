@@ -1,6 +1,6 @@
 // src/api/notifications.api.ts
 
-import axios from "./axios";
+import axios from "../axios";
 
 // ── Types ──────────────────────────────────────────────────────────
 export type ChannelType = "Email" | "In-App" | "SMS" | "Push";

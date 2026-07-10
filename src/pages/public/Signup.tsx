@@ -186,8 +186,11 @@ export default function Signup() {
       setLoading(false);
     }
   }
-
-  async function handleSSOSuccess(provider: string, token: string) {
+async function handleSSOSuccess(
+  provider: 'google' | 'microsoft' | 'linkedin',
+  token: string
+)
+   {
     setSsoLoading(provider);
     setSsoError(null);
     try {

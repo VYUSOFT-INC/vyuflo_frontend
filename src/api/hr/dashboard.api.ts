@@ -88,6 +88,13 @@ export const dashboardApi = {
       { month: 'Nov 2025', critical:  2, warning:  6, upcoming: 15 },
       { month: 'Dec 2025', critical:  1, warning:  4, upcoming: 17 },
     ],
+
+    visa_distribution: [],
+  cases_by_stage: [],
+  monthly_trend: [],
+  department_compliance: [],
+  processing_time: [],
+   document_completion: [],
   }),
 };
 

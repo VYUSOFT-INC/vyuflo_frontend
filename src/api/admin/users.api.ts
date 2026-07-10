@@ -1,6 +1,6 @@
 // src/api/users.api.ts
 
-import axios from "./axios";
+import axios from "../axios";
 
 // ── Types ──────────────────────────────────────────────────────────
 export type UserRole   = "HR Admin" | "Applicant" | "Lawyer" | "Admin";
