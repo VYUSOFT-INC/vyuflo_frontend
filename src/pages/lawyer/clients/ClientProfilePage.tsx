@@ -108,7 +108,7 @@ export default function ClientProfilePage() {
         </nav>
 
         {/* Hero card */}
-        <HeroCard profile={profile} />
+        <HeroCard profile={profile} clientUserId={clientId} />
 
         {/* Quick stats */}
         <QuickStats profile={profile} />
@@ -149,7 +149,8 @@ export default function ClientProfilePage() {
 /* ════════════════════════════════════════════════════════════════════
  * HERO CARD
  * ════════════════════════════════════════════════════════════════════ */
-function HeroCard({ profile }: { profile: ClientProfileResponse }) {
+function HeroCard({ profile, clientUserId }: { profile: ClientProfileResponse; clientUserId: string }) {
+  const navigate = useNavigate();
   const hasPic = Boolean(profile.profile_picture_url);
 
   return (
@@ -205,7 +206,18 @@ function HeroCard({ profile }: { profile: ClientProfileResponse }) {
 
         {/* Actions */}
         <div className="flex flex-wrap gap-2 sm:shrink-0">
-          <button className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50">
+          <button
+            onClick={() => {
+              // Deep-link to Messages with this client's user_id → SecureMessaging
+              // auto-opens the existing thread (or creates one if not found).
+              const params = new URLSearchParams({
+                userId: clientUserId,
+                name:   profile.full_name || '',
+              });
+              navigate(`/lawyer/messages?${params.toString()}`);
+            }}
+            className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+          >
             ✉ Send Message
           </button>
         </div>

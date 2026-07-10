@@ -1,6 +1,6 @@
 // src/api/admin-dashboard.api.ts
 
-import axios from "../axios";
+import axios from "./axios";
 
 // ── Types ──────────────────────────────────────────────────────────
 export interface DashboardStats {

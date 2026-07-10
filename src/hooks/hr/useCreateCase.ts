@@ -1,28 +1,22 @@
 // src/hooks/hr/useCreateCase.ts
 //
 // Changes from previous version:
-//   - saveDraft() no longer hits the backend — it's a local sessionStorage
-//     save. POST /hr/cases activates a case immediately (checklist, employee
-//     notification, thread creation) with no draft mode on the backend, so
-//     calling it twice (once for "draft", once for real submit) triggered a
-//     409 duplicate-case conflict on every real submission. Drafts now live
-//     entirely in the browser until true server-side draft support exists.
-//   - visa types are now fetched from GET /hr/visa-types instead of a
-//     hardcoded array — loaded once on mount alongside employees.
-//   - attorneys typed as AttorneyAssignOption (single source of truth,
-//     shared with the employee-facing SelectAttorney screen's avatar/rating
-//     primitives), not a separate duplicate AttorneyOption type.
+//   - Removed getVisaTypes() call (no longer needed — backend resolves from code)
+//   - submit() sends employee_link_id directly (not user_id lookup)
+//   - saveDraft() requires step 1+2 to be complete (employee + visa)
+//   - form.attorney_id maps to attorney_user_id in the request
+//   - Result is HRCaseCreateResponse (slim, not full ApplicationResponse)
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createCaseApi } from '../../api/hr/createCase.api';
 import type {
   CreateCaseForm,
   EmployeeOption,
-  VisaTypeOption,
+  AttorneyOption,
   HRCaseCreateResponse,
+  // HRCasePriority,
   CaseStep,
 } from '../../types/hr/createCase.types';
-import type { AttorneyAssignOption } from '../../types/hr/attorneyAssign.types';
 
 const INITIAL_FORM: CreateCaseForm = {
   selected_employee_id: null,
@@ -36,34 +30,19 @@ const INITIAL_FORM: CreateCaseForm = {
   sponsor_employer:     '',
 };
 
-const DRAFT_STORAGE_KEY = 'hr_create_case_draft';
-
 export function useCreateCase() {
-  const [step, setStep] = useState<CaseStep>(1);
-  const [form, setForm] = useState<CreateCaseForm>(INITIAL_FORM);
+  const [step, setStep]             = useState<CaseStep>(1);
+  const [form, setForm]             = useState<CreateCaseForm>(INITIAL_FORM);
 
   const [employees, setEmployees]   = useState<EmployeeOption[]>([]);
-  const [attorneys, setAttorneys]   = useState<AttorneyAssignOption[]>([]);
-  const [visaTypes, setVisaTypes]   = useState<VisaTypeOption[]>([]);
+  const [attorneys, setAttorneys]   = useState<AttorneyOption[]>([]);
   const [empLoading, setEmpLoading] = useState(true);
   const [attLoading, setAttLoading] = useState(false);
-  const [visaLoading, setVisaLoading] = useState(true);
 
   const [submitting, setSubmitting]   = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [result, setResult]           = useState<HRCaseCreateResponse | null>(null);
-
-  // ── Restore any in-progress local draft on mount ──────────────────────────
-  useEffect(() => {
-    const raw = sessionStorage.getItem(DRAFT_STORAGE_KEY);
-    if (!raw) return;
-    try {
-      setForm(JSON.parse(raw) as CreateCaseForm);
-    } catch {
-      sessionStorage.removeItem(DRAFT_STORAGE_KEY); // corrupt — discard silently
-    }
-  }, []);
 
   // ── Load employees once on mount ──────────────────────────────────────────
   useEffect(() => {
@@ -72,15 +51,6 @@ export function useCreateCase() {
       .then(setEmployees)
       .catch(() => setEmployees([]))
       .finally(() => setEmpLoading(false));
-  }, []);
-
-  // ── Load visa types once on mount (needed as early as Step 2) ────────────
-  useEffect(() => {
-    setVisaLoading(true);
-    createCaseApi.getVisaTypes()
-      .then(setVisaTypes)
-      .catch(() => setVisaTypes([]))
-      .finally(() => setVisaLoading(false));
   }, []);
 
   // ── Load attorneys lazily when reaching step 4 ───────────────────────────
@@ -92,12 +62,11 @@ export function useCreateCase() {
         .catch(() => setAttorneys([]))
         .finally(() => setAttLoading(false));
     }
-  }, [step, attorneys.length, attLoading]);
+  }, [step]);
 
   // ── Derived values ────────────────────────────────────────────────────────
   const selectedEmployee = employees.find(e => e.id === form.selected_employee_id) ?? null;
   const selectedAttorney = attorneys.find(a => a.user_id === form.attorney_id) ?? null;
-  const selectedVisa     = visaTypes.find(v => v.code === form.visa_type_code) ?? null;
 
   // ── Generic field updater ─────────────────────────────────────────────────
   const update = useCallback(<K extends keyof CreateCaseForm>(
@@ -127,7 +96,7 @@ export function useCreateCase() {
     if (!form.visa_type_code || !form.selected_employee_id) {
       autoNameRef.current = false;
     }
-  }, [form.visa_type_code, form.selected_employee_id, form.case_name, selectedEmployee]);
+  }, [form.visa_type_code, form.selected_employee_id]);
 
   // ── Step validation ───────────────────────────────────────────────────────
   const canAdvance = useCallback((): boolean => {
@@ -153,22 +122,31 @@ export function useCreateCase() {
     if (s < step) setStep(s);   // only allow navigating back
   }, [step]);
 
-  // ── Save Draft — LOCAL ONLY, no network call ──────────────────────────────
-  // POST /hr/cases activates the case immediately on the backend (no draft
-  // mode exists there yet), so this must never call that endpoint — doing so
-  // creates a real active case that then collides with the real submission
-  // via the backend's duplicate-case check. This persists to sessionStorage
-  // instead; it survives a refresh in the same tab but not across devices.
+  // ── Save Draft ───────────────────────────────────────────────────────────
+  // Requires step 1 + 2 to be complete (employee + visa).
+  // Backend needs employee_link_id + visa_type_code + case_name minimum.
   const saveDraft = useCallback(async () => {
+    if (!form.selected_employee_id || !form.visa_type_code) return;
     setSavingDraft(true);
     try {
-      sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(form));
-      // brief delay purely so the "Saving..." spinner is visible
-      await new Promise(r => setTimeout(r, 250));
+      const year = new Date().getFullYear();
+      await createCaseApi.saveDraft({
+        employee_link_id: form.selected_employee_id,
+        visa_type_code:   form.visa_type_code,
+        case_name:        form.case_name || `${selectedEmployee?.full_name ?? 'Employee'} - ${form.visa_type_code} ${year}`,
+        case_description: form.case_description || undefined,
+        target_date:      form.target_date || undefined,
+        priority:         form.priority,
+        internal_notes:   form.internal_notes || undefined,
+        attorney_user_id: form.attorney_id || undefined,
+        sponsor_employer: form.sponsor_employer || undefined,
+      });
+    } catch {
+      // Silent fail — draft save is best-effort
     } finally {
       setSavingDraft(false);
     }
-  }, [form]);
+  }, [form, selectedEmployee]);
 
   // ── Submit ────────────────────────────────────────────────────────────────
   const submit = useCallback(async (): Promise<HRCaseCreateResponse | null> => {
@@ -213,7 +191,6 @@ export function useCreateCase() {
       });
 
       setResult(res);
-      sessionStorage.removeItem(DRAFT_STORAGE_KEY);   // real case created — drop local draft
       return res;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to create case. Please try again.';
@@ -231,7 +208,6 @@ export function useCreateCase() {
     setResult(null);
     setSubmitError(null);
     autoNameRef.current = false;
-    sessionStorage.removeItem(DRAFT_STORAGE_KEY);
   }, []);
 
   return {
@@ -243,13 +219,10 @@ export function useCreateCase() {
     // Data
     employees,
     attorneys,
-    visaTypes,
     selectedEmployee,
     selectedAttorney,
-    selectedVisa,
     empLoading,
     attLoading,
-    visaLoading,
 
     // Navigation
     canAdvance,

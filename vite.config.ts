@@ -13,12 +13,12 @@ export default defineConfig(({ mode }) => {
       allowedHosts: ['.ngrok-free.dev', '.ngrok-free.app'],
       proxy: {
         '/api': {
-          target: env.VITE_API_BASE_URL,
+          target: env.VITE_PROXY_TARGET,
           changeOrigin: true,
           secure: false,
         },
         '/static': {
-          target: env.VITE_API_BASE_URL,
+          target: 'https://lying-cruelly-scanner.ngrok-free.dev/',
           changeOrigin: true,
           secure: false,
         },
@@ -26,4 +26,3 @@ export default defineConfig(({ mode }) => {
     },
   }
 })
-

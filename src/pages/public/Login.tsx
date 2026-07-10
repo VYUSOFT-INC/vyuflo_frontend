@@ -17,8 +17,7 @@ import imgEyeIcon      from "../../assets/icons/eye-icon.svg";
 import imgArrowIcon    from "../../assets/icons/arrow-icon.svg";
 import imgGoogleIcon   from "../../assets/icons/google-icon.svg";
 import imgMsIcon       from "../../assets/icons/microsoft-icon.svg";
-// import imgLinkedInIcon from "../../assets/icons/linkedin-icon.svg";
-import imgAppleIcon from "../../assets/icons/signup-apple.svg";
+import imgLinkedInIcon from "../../assets/icons/linkedin-icon.svg";
 import imgSoc2Icon     from "../../assets/icons/soc2-icon.svg";
 import imgEncIcon      from "../../assets/icons/enc-icon.svg";
 import imgGdprIcon     from "../../assets/icons/gdpr-icon.svg";
@@ -65,7 +64,7 @@ export default function Login() {
     }
   }
 
-  async function handleSSOSuccess(provider: 'google' | 'microsoft' | 'linkedin', token: string) {
+  async function handleSSOSuccess(provider: string, token: string) {
     setSsoLoading(provider);
     setSsoError(null);
     try {
@@ -96,21 +95,21 @@ export default function Login() {
     }
   }
 
-  function loginWithApple() {
-    const clientId    = import.meta.env.VITE_APPLE_CLIENT_ID;
-    const redirectUri = encodeURIComponent(window.location.origin + "/auth/apple/callback");
+  function loginWithLinkedIn() {
+    const clientId    = import.meta.env.VITE_LINKEDIN_CLIENT_ID;
+    const redirectUri = encodeURIComponent(window.location.origin + "/auth/linkedin/callback");
+    const scope       = encodeURIComponent("openid profile email");
     const state       = crypto.randomUUID();
-    const nonce       = crypto.randomUUID();
-    sessionStorage.setItem("apple_state", state);
+    sessionStorage.setItem("linkedin_state", state);
+    sessionStorage.setItem("linkedin_post_login", "/dashboard");
     window.location.href =
-      `https://appleid.apple.com/auth/authorize?response_type=code%20id_token&response_mode=form_post` +
-      `&client_id=${clientId}&redirect_uri=${redirectUri}&scope=name%20email&state=${state}&nonce=${nonce}`;
+      `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${state}`;
   }
 
   const SSO_BUTTONS = [
     { icon: imgGoogleIcon,   label: "Sign in with Google",    provider: "google",    onClick: () => loginWithGoogle()    },
     { icon: imgMsIcon,       label: "Sign in with Microsoft", provider: "microsoft", onClick: loginWithMicrosoft          },
-    { icon: imgAppleIcon,  label: "Sign in with Apple",     provider: "apple",     onClick: loginWithApple           },
+    { icon: imgLinkedInIcon, label: "Sign in with LinkedIn",  provider: "linkedin",  onClick: loginWithLinkedIn           },
   ];
 
   return (

@@ -1,13 +1,13 @@
 // src/api/hr/createCase.api.ts
 //
-// Calls the /hr/cases, /hr/attorneys, and /hr/visa-types endpoints.
+// Calls the new /hr/cases endpoints from hr_case_routes.py.
 // NO longer calls /applications (employee endpoint).
 // NO longer needs visa_type UUID lookup — backend resolves from code.
-// NO draft-save network call — drafts are local-only (see useCreateCase.ts).
 
 import axios from '../axios';
 import type {
   EmployeeOption,
+  AttorneyOption,
   HRCaseCreateRequest,
   HRCaseCreateResponse,
   HRCaseResponse,
@@ -16,9 +16,7 @@ import type {
   HRCaseStatusUpdateRequest,
   HRApprovalUpdateRequest,
   HRCaseHistoryItem,
-  VisaTypeOption,
 } from '../../types/hr/createCase.types';
-import type { AttorneyAssignOption } from '../../types/hr/attorneyAssign.types';
 
 const HR_BASE = '/hr';
 
@@ -28,6 +26,7 @@ export const createCaseApi = {
 
   /**
    * GET /hr/employees
+   * Reuse existing invitation endpoint — maps EmployeeLink → EmployeeOption.
    */
   getEmployees: async (): Promise<EmployeeOption[]> => {
     const res = await axios.get(`${HR_BASE}/employees`, {
@@ -57,36 +56,18 @@ export const createCaseApi = {
   // ── Attorney data for Step 4 picker ───────────────────────────────────────
 
   /**
-   * GET /hr/attorneys
-   * NOT /attorneys — that's the Screen 20 marketplace endpoint, keyed by
-   * attorney_profiles.id (wrong ID for Application.assigned_attorney_id,
-   * which is a FK to users.id). /hr/attorneys returns AttorneyAssignOption
-   * keyed by user_id, matching what the case-assignment FK actually needs.
+   * GET /attorneys
    */
-  getAttorneys: async (): Promise<AttorneyAssignOption[]> => {
+  getAttorneys: async (): Promise<AttorneyOption[]> => {
     try {
-      const res = await axios.get<{ attorneys: AttorneyAssignOption[] }>(`${HR_BASE}/attorneys`);
-      return res.data.attorneys ?? [];
+      const res = await axios.get('/attorneys', {
+        params: { is_accepting: true, limit: 50 },
+      });
+      return res.data.items ?? [];
     } catch {
       // Attorney list is optional — degrade gracefully
       return [];
     }
-  },
-
-  // ── Visa type data for Step 2 picker ──────────────────────────────────────
-
-  /**
-   * GET /hr/visa-types
-   * Curated work-visa subset (H-1B, L-1A, L-1B, O-1A, TN, E-3) with
-   * doc_count/timeline/requirements computed server-side.
-   */
-  getVisaTypes: async (): Promise<VisaTypeOption[]> => {
-    const res = await axios.get<{
-      items: VisaTypeOption[];
-      total: number;
-    }>('/visa-types');
-
-    return res.data.items ?? [];
   },
 
   // ── HR Case CRUD ──────────────────────────────────────────────────────────
@@ -94,13 +75,35 @@ export const createCaseApi = {
   /**
    * POST /hr/cases
    * Creates an immigration case on behalf of the selected employee.
-   * This immediately activates the case (status → in_progress, checklist
-   * tasks created, employee notified) — there is currently no draft mode
-   * on the backend. Do NOT call this for "Save Draft" — see useCreateCase.ts,
-   * which persists drafts to sessionStorage instead.
+   *
+   * Key: sends employee_link_id (employer_employees.id) + visa_type_code (string).
+   * Backend resolves both to UUIDs — frontend never needs visa_type UUID.
    */
   createCase: async (data: HRCaseCreateRequest): Promise<HRCaseCreateResponse> => {
     const res = await axios.post(`${HR_BASE}/cases`, data);
+    return res.data;
+  },
+
+  /**
+   * POST /hr/cases  (draft variant — same endpoint, priority = standard, minimal fields)
+   * Used by "Save Draft" button before the form is complete.
+   */
+  saveDraft: async (data: Partial<HRCaseCreateRequest>): Promise<HRCaseCreateResponse> => {
+    // Backend requires these three fields minimum to create a draft
+    if (!data.employee_link_id || !data.visa_type_code || !data.case_name) {
+      throw new Error('employee_link_id, visa_type_code, and case_name are required to save a draft.');
+    }
+    const res = await axios.post(`${HR_BASE}/cases`, {
+      employee_link_id: data.employee_link_id,
+      visa_type_code:   data.visa_type_code,
+      case_name:        data.case_name,
+      case_description: data.case_description,
+      target_date:      data.target_date,
+      priority:         data.priority ?? 'standard',
+      internal_notes:   data.internal_notes,
+      attorney_user_id: data.attorney_user_id,
+      sponsor_employer: data.sponsor_employer,
+    });
     return res.data;
   },
 

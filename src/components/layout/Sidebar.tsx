@@ -60,13 +60,13 @@ const subscriptionNavItems = [{ Icon: CreditCard, label: 'Subscription & Pricing
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
-// function formatRole(role?: string): string {
-//   if (!role) return '';
-//   return role
-//     .split('_')
-//     .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-//     .join(' ');
-// }
+function formatRole(role?: string): string {
+  if (!role) return '';
+  return role
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
 
 // Section header shown above the main nav, per primary role.
 // Employee intentionally shows no header (matches the original employee layout).
@@ -106,7 +106,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
   const navItems      = getNavItems(session?.roles);
   const fullName      = session ? `${session.first_name} ${session.last_name}`.trim() || 'User' : 'User';
   const avatarUrl     = getFileUrl(session?.profile ?? null);
-  // const roleLabel     = formatRole(session?.roles?.[0]);
+  const roleLabel     = formatRole(session?.roles?.[0]);
   const sectionHeader = consoleLabel(session?.roles);
 
   // ── Admin sub-page context (drives which contextual block renders) ──────
@@ -228,11 +228,11 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
               <p className="text-[18px] font-semibold text-[#0f172a] tracking-[-0.5px] whitespace-nowrap leading-[18px]">
                 {fullName}
               </p>
-              {/* {roleLabel && (
+              {roleLabel && (
                 <p className="text-[12px] text-[#64748b] tracking-[-0.5px] whitespace-nowrap leading-[16px] mt-0.5">
                   {roleLabel}
                 </p>
-              )} */}
+              )}
             </div>
           </div>
         </div>

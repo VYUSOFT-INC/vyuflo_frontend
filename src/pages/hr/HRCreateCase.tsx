@@ -6,11 +6,9 @@
 //
 // HR-specific changes vs Figma:
 //   ✓ Step 1: "Select Employee" replaces "Who is initiating?" (HR always initiates)
-//   ✓ Step 2: Visa type — Work visas only, fetched from GET /hr/visa-types
-//     (H-1B, L-1A, L-1B, O-1A, TN, E-3) — NOT hardcoded
+//   ✓ Step 2: Visa type — Work visas only (H-1B, L-1A, L-1B, O-1, TN, E-3)
 //   ✓ Step 3: Case Details (name, description, target date, priority)
-//   ✓ Step 4: Assign Attorney (optional) — uses GET /api/v1/hr/attorneys,
-//     keyed by user_id (matches Application.assigned_attorney_id FK)
+//   ✓ Step 4: Assign Attorney (optional)
 //   ✓ Step 5: Review & Submit
 //   ✗ Removed: "Who is initiating?" section (always HR/Employer)
 //   ✗ Removed: Student/Dependent visa tabs
@@ -28,32 +26,130 @@ import {
 import { PageHeader, PageContent } from '../../components/layout/Pageheader';
 import { useCreateCase } from '../../hooks/hr/useCreateCase';
 import type { CaseStep, VisaTypeOption } from '../../types/hr/createCase.types';
-import type { AttorneyAssignOption } from '../../types/hr/attorneyAssign.types';
 import { getFileUrl } from '../../utils/fileUrl';
-import { AttorneyAvatar } from '../../components/hr/AttorneyDisplay';
 
+// const PRIMARY = '#4f46e5';
 const PRIMARY_GRADIENT = 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// COSMETIC-ONLY VISA ICON LOOKUP
-// Icon color is presentation, not business data — not round-tripped through
-// the API. Keyed by the real seed codes (O-1A, not a fictional generic O-1).
+// VISA TYPE DATA
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VISA_ICON_STYLE: Record<string, { bg: string; color: string }> = {
-  'H-1B': { bg: '#dbeafe', color: '#2563eb' },
-  'L-1A': { bg: '#f3e8ff', color: '#7e22ce' },
-  'L-1B': { bg: '#fce7f3', color: '#be185d' },
-  'O-1A': { bg: '#dcfce7', color: '#15803d' },
-  'TN':   { bg: '#ffedd5', color: '#c2410c' },
-  'E-3':  { bg: '#e0e7ff', color: '#4338ca' },
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// EDITORIAL CONTENT — no DB backing yet (would need visa_type_stages /
-// visa_type_tips tables). Left as static fallback content deliberately;
-// flagged as follow-up work, not silently hardcoded without reason.
-// ─────────────────────────────────────────────────────────────────────────────
+const VISA_TYPES: VisaTypeOption[] = [
+  {
+    code: 'H-1B',
+    name: 'H-1B Specialty Occupation',
+    description: "Most common work visa for professionals with bachelor's degree or higher",
+    timeline: '6-12 months',
+    doc_count: 8,
+    category: 'work',
+    icon_bg: '#dbeafe',
+    icon_color: '#2563eb',
+    lca_required: true,
+    total_estimate: '6-12 months',
+    requirements: [
+      { name: 'Valid Passport',       description: 'Must be valid for at least 6 months' },
+      { name: 'Form I-129',           description: 'Petition for Nonimmigrant Worker' },
+      { name: 'LCA Approval Notice',  description: 'From Department of Labor' },
+      { name: 'Degree Certificates',  description: "Bachelor's or higher required" },
+      { name: 'Employment Letter',    description: 'From sponsoring employer' },
+    ],
+  },
+  {
+    code: 'L-1A',
+    name: 'L-1A Intracompany Transfer',
+    description: 'For managers and executives transferring within company',
+    timeline: '4-8 months',
+    doc_count: 10,
+    category: 'work',
+    icon_bg: '#f3e8ff',
+    icon_color: '#7e22ce',
+    lca_required: false,
+    total_estimate: '4-8 months',
+    requirements: [
+      { name: 'Valid Passport',        description: 'Must be valid for at least 6 months' },
+      { name: 'Form I-129',            description: 'Petition for Nonimmigrant Worker' },
+      { name: 'Evidence of Employment', description: 'Abroad for 1 of last 3 years' },
+      { name: 'Org Charts',            description: 'Showing managerial position' },
+      { name: 'Support Letter',        description: 'From US employer' },
+    ],
+  },
+  {
+    code: 'L-1B',
+    name: 'L-1B Specialized Knowledge',
+    description: 'For employees with specialized knowledge transferring within company',
+    timeline: '4-8 months',
+    doc_count: 9,
+    category: 'work',
+    icon_bg: '#fce7f3',
+    icon_color: '#be185d',
+    lca_required: false,
+    total_estimate: '4-8 months',
+    requirements: [
+      { name: 'Valid Passport',          description: 'Must be valid for at least 6 months' },
+      { name: 'Form I-129',              description: 'Petition for Nonimmigrant Worker' },
+      { name: 'Evidence of Employment',  description: 'Abroad for 1 of last 3 years' },
+      { name: 'Specialized Knowledge',   description: 'Evidence of unique knowledge' },
+      { name: 'Support Letter',          description: 'From US employer' },
+    ],
+  },
+  {
+    code: 'O-1',
+    name: 'O-1 Extraordinary Ability',
+    description: 'For individuals with extraordinary ability in sciences, arts, etc.',
+    timeline: '3-6 months',
+    doc_count: 12,
+    category: 'work',
+    icon_bg: '#dcfce7',
+    icon_color: '#15803d',
+    lca_required: false,
+    total_estimate: '3-6 months',
+    requirements: [
+      { name: 'Valid Passport',     description: 'Must be valid for at least 6 months' },
+      { name: 'Form I-129',         description: 'Petition for Nonimmigrant Worker' },
+      { name: 'Advisory Opinion',   description: 'From peer group or union' },
+      { name: 'Awards & Recognition', description: 'Evidence of extraordinary ability' },
+      { name: 'Employment Contract', description: 'With US employer' },
+    ],
+  },
+  {
+    code: 'TN',
+    name: 'TN NAFTA Professional',
+    description: 'For Canadian and Mexican citizens in professional occupations',
+    timeline: '1-3 months',
+    doc_count: 6,
+    category: 'work',
+    icon_bg: '#ffedd5',
+    icon_color: '#c2410c',
+    lca_required: false,
+    total_estimate: '1-3 months',
+    requirements: [
+      { name: 'Canadian/Mexican Passport', description: 'Valid citizen document' },
+      { name: 'Degree Certificates',       description: 'Professional qualification' },
+      { name: 'Employment Letter',          description: 'From US employer' },
+      { name: 'License (if applicable)',   description: 'Professional license' },
+    ],
+  },
+  {
+    code: 'E-3',
+    name: 'E-3 Australian Specialty',
+    description: 'For Australian citizens in specialty occupation roles',
+    timeline: '2-4 months',
+    doc_count: 7,
+    category: 'work',
+    icon_bg: '#e0e7ff',
+    icon_color: '#4338ca',
+    lca_required: true,
+    total_estimate: '2-4 months',
+    requirements: [
+      { name: 'Australian Passport',  description: 'Valid Australian citizenship' },
+      { name: 'LCA Certification',    description: 'From Department of Labor' },
+      { name: 'Degree Certificates',  description: "Bachelor's or equivalent" },
+      { name: 'DS-160 Form',          description: 'Nonimmigrant visa application' },
+      { name: 'Employment Letter',    description: 'From sponsoring employer' },
+    ],
+  },
+];
 
 const TIMELINE_STEPS: Record<string, Array<{ label: string; time: string; color: string }>> = {
   'H-1B': [
@@ -72,7 +168,7 @@ const TIMELINE_STEPS: Record<string, Array<{ label: string; time: string; color:
     { label: 'USCIS Filing',     time: '1 day',       color: '#dcfce7' },
     { label: 'USCIS Processing', time: '3-5 months',  color: '#ffedd5' },
   ],
-  'O-1A': [
+  'O-1': [
     { label: 'Case Preparation', time: '2-4 weeks',   color: '#dbeafe' },
     { label: 'USCIS Filing',     time: '1 day',       color: '#dcfce7' },
     { label: 'USCIS Processing', time: '2-4 months',  color: '#ffedd5' },
@@ -113,6 +209,16 @@ const PRO_TIPS: Record<string, string[]> = {
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
+function initials(name: string): string {
+  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+}
+
+const AVATAR_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6'];
+function avatarColor(seed: string): string {
+  const i = seed.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_COLORS.length;
+  return AVATAR_COLORS[i];
+}
+
 function fmtDate(iso?: string): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -136,6 +242,7 @@ function StepBar({ current, onGoTo }: { current: CaseStep; onGoTo: (s: CaseStep)
       {STEPS.map((s, idx) => {
         const done    = s.n < current;
         const active  = s.n === current;
+        // const future  = s.n > current;
         return (
           <div key={s.n} className="flex items-center flex-1 last:flex-none">
             <button
@@ -200,9 +307,6 @@ function RequirementsCard({ visa }: { visa: VisaTypeOption | null }) {
       <p className="text-[13px] text-[#9ca3af]">Select a visa type to see requirements</p>
     </div>
   );
-
-  const requirements = visa.requirements ?? [];   // ← guard
-
   return (
     <div className="bg-white border border-[#e5e7eb] rounded-[12px] p-[20px] shadow-[0px_1px_1px_rgba(0,0,0,0.05)]">
       <div className="flex items-center justify-between mb-[14px]">
@@ -212,9 +316,7 @@ function RequirementsCard({ visa }: { visa: VisaTypeOption | null }) {
         </span>
       </div>
       <div className="flex flex-col gap-[10px]">
-        {requirements.length === 0 ? (
-          <p className="text-[13px] text-[#9ca3af]">No specific requirements listed.</p>
-        ) : requirements.map(r => (
+        {visa.requirements.map(r => (
           <div key={r.name} className="flex items-start gap-[10px]">
             <div className="size-[18px] rounded-[4px] bg-[#fee2e2] flex items-center justify-center shrink-0 mt-[1px]">
               <span className="text-[10px] font-bold text-[#dc2626]">*</span>
@@ -254,7 +356,7 @@ function TimelineCard({ visa }: { visa: VisaTypeOption | null }) {
       </div>
       <div className="mt-[14px] pt-[12px] border-t border-[#f3f4f6] flex items-center justify-between">
         <span className="text-[13px] font-semibold text-[#374151]">Total Estimate:</span>
-        <span className="text-[13px] font-bold text-indigo-600">{visa?.timeline ?? '6-12 months'}</span>
+        <span className="text-[13px] font-bold text-indigo-600">{visa?.total_estimate ?? '6-12 months'}</span>
       </div>
     </div>
   );
@@ -350,7 +452,14 @@ function Step1Employee({ employees, loading, selectedId, onSelect }: {
                     ? 'border-indigo-600 bg-indigo-50'
                     : 'border-[#e5e7eb] bg-white hover:border-indigo-300 hover:bg-[#f8fafc]'
                 }`}>
-                <AttorneyAvatar photoUrl={avatarSrc} name={emp.full_name} seed={emp.full_name} size={40} />
+                {avatarSrc ? (
+                  <img src={avatarSrc} alt="" className="size-[40px] rounded-full object-cover shrink-0 border border-[#e5e7eb]" />
+                ) : (
+                  <div className="size-[40px] rounded-full flex items-center justify-center text-white text-[13px] font-semibold shrink-0"
+                       style={{ backgroundColor: avatarColor(emp.full_name) }}>
+                    {initials(emp.full_name)}
+                  </div>
+                )}
                 <div className="min-w-0 flex-1">
                   <p className="text-[14px] font-semibold text-[#111827] truncate">{emp.full_name}</p>
                   <p className="text-[11px] text-[#6b7280] truncate">{emp.job_title || emp.email}</p>
@@ -387,9 +496,7 @@ function Step1Employee({ employees, loading, selectedId, onSelect }: {
 // STEP 2 — SELECT VISA TYPE
 // ─────────────────────────────────────────────────────────────────────────────
 
-function Step2VisaType({ visaTypes, loading, selected, onSelect }: {
-  visaTypes: VisaTypeOption[];
-  loading: boolean;
+function Step2VisaType({ selected, onSelect }: {
   selected: string | null;
   onSelect: (code: string) => void;
 }) {
@@ -397,11 +504,11 @@ function Step2VisaType({ visaTypes, loading, selected, onSelect }: {
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    if (!q) return visaTypes;
-    return visaTypes.filter(v =>
+    if (!q) return VISA_TYPES;
+    return VISA_TYPES.filter(v =>
       `${v.code} ${v.name} ${v.description}`.toLowerCase().includes(q)
     );
-  }, [visaTypes, search]);
+  }, [search]);
 
   return (
     <div className="bg-white border border-[#e5e7eb] rounded-[12px] p-[28px] shadow-[0px_1px_1px_rgba(0,0,0,0.05)]">
@@ -413,73 +520,60 @@ function Step2VisaType({ visaTypes, loading, selected, onSelect }: {
       </div>
 
       {/* Visa grid */}
-      {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-[12px]">
-          {[0,1,2,3].map(i => (
-            <div key={i} className="h-[140px] bg-[#f8fafc] rounded-[12px] animate-pulse" />
-          ))}
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="py-[32px] text-center text-[#6b7280] text-[14px]">
-          {search ? 'No visa types match your search.' : 'No visa types available.'}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-[12px]">
-          {filtered.map(v => {
-            const sel = v.code === selected;
-            const iconStyle = VISA_ICON_STYLE[v.code] ?? { bg: '#e5e7eb', color: '#6b7280' };
-            return (
-              <button
-                key={v.code}
-                onClick={() => onSelect(v.code)}
-                className={`flex flex-col gap-[10px] p-[18px] rounded-[12px] border-2 text-left transition ${
-                  sel
-                    ? 'border-indigo-600 bg-indigo-50'
-                    : 'border-[#e5e7eb] bg-white hover:border-indigo-300 hover:bg-[#fafbfc]'
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-[12px]">
+        {filtered.map(v => {
+          const sel = v.code === selected;
+          return (
+            <button
+              key={v.code}
+              onClick={() => onSelect(v.code)}
+              className={`flex flex-col gap-[10px] p-[18px] rounded-[12px] border-2 text-left transition ${
+                sel
+                  ? 'border-indigo-600 bg-indigo-50'
+                  : 'border-[#e5e7eb] bg-white hover:border-indigo-300 hover:bg-[#fafbfc]'
+              }`}>
+              <div className="flex items-center justify-between">
+                <div className="size-[36px] rounded-[8px] flex items-center justify-center shrink-0"
+                     style={{ backgroundColor: v.icon_bg }}>
+                  <Briefcase size={16} style={{ color: v.icon_color }} />
+                </div>
+                <div className={`size-[18px] rounded-full border-2 flex items-center justify-center ${
+                  sel ? 'border-indigo-600 bg-indigo-600' : 'border-[#d1d5db]'
                 }`}>
-                <div className="flex items-center justify-between">
-                  <div className="size-[36px] rounded-[8px] flex items-center justify-center shrink-0"
-                       style={{ backgroundColor: iconStyle.bg }}>
-                    <Briefcase size={16} style={{ color: iconStyle.color }} />
-                  </div>
-                  <div className={`size-[18px] rounded-full border-2 flex items-center justify-center ${
-                    sel ? 'border-indigo-600 bg-indigo-600' : 'border-[#d1d5db]'
-                  }`}>
-                    {sel && <Check size={10} className="text-white" />}
-                  </div>
+                  {sel && <Check size={10} className="text-white" />}
                 </div>
-                <div>
-                  <p className="text-[14px] font-bold text-[#111827]">{v.name}</p>
-                  <p className="text-[12px] text-[#4b5563] mt-[3px] leading-[1.4]">{v.description}</p>
-                </div>
-                <div className="flex items-center gap-[12px]">
-                  <span className="text-[11px] text-[#6b7280] flex items-center gap-[3px]">
-                    <Clock size={10} /> {v.timeline}
+              </div>
+              <div>
+                <p className="text-[14px] font-bold text-[#111827]">{v.name}</p>
+                <p className="text-[12px] text-[#4b5563] mt-[3px] leading-[1.4]">{v.description}</p>
+              </div>
+              <div className="flex items-center gap-[12px]">
+                <span className="text-[11px] text-[#6b7280] flex items-center gap-[3px]">
+                  <Clock size={10} /> {v.timeline}
+                </span>
+                <span className="text-[11px] text-[#6b7280] flex items-center gap-[3px]">
+                  <FileText size={10} /> {v.doc_count} docs
+                </span>
+                {v.lca_required && (
+                  <span className="text-[10px] font-semibold bg-[#fef9c3] text-[#a16207] px-[6px] py-[1px] rounded-full border border-[#fef08a]">
+                    LCA required
                   </span>
-                  <span className="text-[11px] text-[#6b7280] flex items-center gap-[3px]">
-                    <FileText size={10} /> {v.doc_count} docs
-                  </span>
-                  {v.lca_required && (
-                    <span className="text-[10px] font-semibold bg-[#fef9c3] text-[#a16207] px-[6px] py-[1px] rounded-full border border-[#fef08a]">
-                      LCA required
-                    </span>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
 
       {/* Search other */}
       <div className="mt-[16px]">
-        <p className="text-[13px] font-semibold text-[#374151] mb-[8px]">Filter visa types</p>
+        <p className="text-[13px] font-semibold text-[#374151] mb-[8px]">Can't find your visa type?</p>
         <div className="relative">
           <Search size={15} className="absolute left-[12px] top-1/2 -translate-y-1/2 text-[#9ca3af] pointer-events-none" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search visa types..."
+            placeholder="Search from 50+ visa types..."
             className="w-full h-[44px] bg-white border border-[#d1d5db] rounded-[8px] pl-[36px] pr-[14px] text-[14px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition"
           />
         </div>
@@ -591,7 +685,11 @@ function Step3Details({ form, update }: {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function Step4Attorney({ attorneys, loading, selectedId, onSelect }: {
-  attorneys: AttorneyAssignOption[];
+  attorneys: Array<{
+    user_id: string; full_name: string; email: string;
+    profile_picture_url: string | null; law_firm_name: string | null;
+    specialisations: string[]; active_cases: number; is_accepting: boolean;
+  }>;
   loading: boolean;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
@@ -650,7 +748,14 @@ function Step4Attorney({ attorneys, loading, selectedId, onSelect }: {
                     ? 'border-indigo-600 bg-indigo-50'
                     : 'border-[#e5e7eb] bg-white hover:border-indigo-300 hover:bg-[#fafbfc]'
                 }`}>
-                <AttorneyAvatar photoUrl={avatarSrc} name={att.full_name} seed={att.full_name} size={40} />
+                {avatarSrc ? (
+                  <img src={avatarSrc} alt="" className="size-[40px] rounded-full object-cover shrink-0 border border-[#e5e7eb]" />
+                ) : (
+                  <div className="size-[40px] rounded-full flex items-center justify-center text-white text-[13px] font-semibold shrink-0"
+                       style={{ backgroundColor: avatarColor(att.full_name) }}>
+                    {initials(att.full_name)}
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <p className="text-[14px] font-semibold text-[#111827] truncate">{att.full_name}</p>
                   <p className="text-[11px] text-[#6b7280] truncate">{att.law_firm_name ?? att.email}</p>
@@ -855,13 +960,16 @@ export default function HRCreateCase() {
   const navigate = useNavigate();
   const {
     step, form, update,
-    employees, attorneys, visaTypes,
-    selectedEmployee, selectedAttorney, selectedVisa,
-    empLoading, attLoading, visaLoading,
+    employees, attorneys,
+    selectedEmployee,
+    empLoading, attLoading,
     canAdvance, next, back, goToStep,
     submitting, savingDraft, submitError, result,
     saveDraft, submit, reset,
   } = useCreateCase();
+
+  const selectedVisa     = VISA_TYPES.find(v => v.code === form.visa_type_code) ?? null;
+  const selectedAttorney = attorneys.find(a => a.user_id === form.attorney_id) ?? null;
 
   const progressPercent = Math.round(((step - 1) / (STEPS.length - 1)) * 100);
 
@@ -905,7 +1013,7 @@ export default function HRCreateCase() {
           <div className="flex items-center gap-[8px]">
             <button
               onClick={() => void saveDraft()}
-              disabled={savingDraft}
+              disabled={savingDraft || !form.selected_employee_id}
               className="flex items-center gap-[6px] h-[38px] px-[14px] rounded-[8px] border border-[#e5e7eb] text-[13px] font-medium text-[#374151] hover:bg-[#f8fafc] transition disabled:opacity-50">
               <Save size={13} className={savingDraft ? 'animate-spin' : ''} />
               {savingDraft ? 'Saving...' : 'Save Draft'}
@@ -946,7 +1054,7 @@ export default function HRCreateCase() {
             {/* Auto-save indicator */}
             <div className="flex items-center justify-between mt-[10px]">
               <p className="text-[11px] text-[#9ca3af] flex items-center gap-[4px]">
-                <CheckCircle2 size={10} className="text-[#16a34a]" /> Draft saved locally
+                <CheckCircle2 size={10} className="text-[#16a34a]" /> Auto-save enabled
               </p>
               {selectedEmployee && (
                 <p className="text-[11px] text-[#6b7280]">
@@ -972,8 +1080,6 @@ export default function HRCreateCase() {
               )}
               {step === 2 && (
                 <Step2VisaType
-                  visaTypes={visaTypes}
-                  loading={visaLoading}
                   selected={form.visa_type_code}
                   onSelect={code => update('visa_type_code', code)}
                 />
@@ -1011,7 +1117,7 @@ export default function HRCreateCase() {
                 <div className="flex items-center gap-[10px]">
                   <button
                     onClick={() => void saveDraft()}
-                    disabled={savingDraft}
+                    disabled={savingDraft || !form.selected_employee_id}
                     className="flex items-center gap-[8px] h-[44px] px-[18px] rounded-[8px] border border-[#e5e7eb] text-[14px] font-medium text-[#374151] hover:bg-[#f8fafc] transition disabled:opacity-50">
                     <Save size={14} className={savingDraft ? 'animate-spin' : ''} />
                     Save Draft

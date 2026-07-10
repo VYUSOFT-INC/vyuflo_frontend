@@ -13,8 +13,7 @@ export const msalInstance = new PublicClientApplication({
   cache: { cacheLocation: "sessionStorage" },
 });
 
-
-export async function callSSOEndpoint(provider: 'google' | 'microsoft' | 'linkedin', providerToken: string) {
+export async function callSSOEndpoint(provider: string, providerToken: string) {
   return authApi.sso({
     provider,
     provider_token: providerToken,

@@ -205,30 +205,36 @@ export interface EmployeeOption {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ATTORNEY OPTION  (from GET /attorneys — used in Step 4 picker)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface AttorneyOption {
+  user_id:             string;
+  full_name:           string;
+  email:               string;
+  profile_picture_url: string | null;
+  law_firm_name:       string | null;
+  specialisations:     string[];
+  active_cases:        number;
+  is_accepting:        boolean;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // STEP CONFIG  (used in stepper)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type CaseStep = 1 | 2 | 3 | 4 | 5;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// VISA TYPE OPTION  (from GET /hr/visa-types — used in Step 2 picker)
-//
-// NOTE: no icon_bg/icon_color/total_estimate here — those are pure UI
-// presentation, kept as a small lookup in HRCreateCase.tsx (VISA_ICON_STYLE),
-// not round-tripped through the API. This type is the real API response shape.
-// ─────────────────────────────────────────────────────────────────────────────
-
-export interface VisaRequirement {
-  name:        string;
-  description: string;
-}
-
 export interface VisaTypeOption {
-  code:         string;
-  name:         string;
-  description:  string;
-  timeline:     string;
-  doc_count:    number;
-  lca_required: boolean;
-  requirements: VisaRequirement[];
+  code:           string;
+  name:           string;
+  description:    string;
+  timeline:       string;
+  doc_count:      number;
+  category:       'work';
+  icon_bg:        string;
+  icon_color:     string;
+  lca_required:   boolean;
+  total_estimate: string;
+  requirements:   Array<{ name: string; description: string }>;
 }

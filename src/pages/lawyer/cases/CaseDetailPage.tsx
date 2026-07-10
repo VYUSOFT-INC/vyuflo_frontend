@@ -461,9 +461,16 @@ export default function CaseDetailPage() {
               </button>
               <button
                 type="button"
-                onClick={() =>
-                  navigate(`/lawyer/messages?clientId=${detail.client_id}`)
-                }
+                onClick={() => {
+                  // Same deep-link contract as Client Profile → Send Message.
+                  // SecureMessaging reads userId (with clientId as fallback)
+                  // and name (last-resort match if participant_id is missing).
+                  const params = new URLSearchParams({
+                    userId: detail.client_id,
+                    name:   detail.client_name || '',
+                  });
+                  navigate(`/lawyer/messages?${params.toString()}`);
+                }}
                 className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
               >
                 Message client
