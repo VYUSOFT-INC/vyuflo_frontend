@@ -18,6 +18,8 @@ jobs:
           key: ${{ secrets.STAGING_SSH_KEY }}
           script: |
             cd /opt/vyuflo-staging/frontend
+
+            git remote set-url origin https://x-access-token:${{ secrets.GH_PAT }}@github.com/VYUSOFT-INC/vyuflo_frontend.git
             git pull origin main
 
             cd /opt/vyuflo-staging
