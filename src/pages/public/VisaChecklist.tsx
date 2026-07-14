@@ -29,9 +29,6 @@ import {
   type VisaType,
 } from '../../data/visaChecklist';
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const _keepToUiVisa = toUiVisa; // keep the import active — used inside handlers
-
 // Category → icon (used on popular cards + "view all" group headers)
 function categoryIcon(cat: VisaCategoryKey) {
   switch (cat) {
@@ -236,7 +233,7 @@ export default function VisaChecklist() {
 
         {/* ── Header hero ──────────────────────────────────────── */}
         <header className="print:hidden relative overflow-hidden rounded-2xl shadow-lg"
-          style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 55%, #4e46a6 100%)' }}
+          style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 55%, #db2777 100%)' }}
         >
           <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
           <div className="pointer-events-none absolute -bottom-16 -left-6 h-52 w-52 rounded-full bg-fuchsia-400/20 blur-3xl" />
