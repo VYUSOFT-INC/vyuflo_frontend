@@ -38,6 +38,8 @@ import {
   DollarSign,
   ScrollText,
   Package,
+  // ── Shared: Visa Checklist ────────────────────────────────────────────────
+  FileCheck2,
 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -68,19 +70,21 @@ const employeeNav: NavItem[] = [
   { to: '/consultations',     label: 'Book Consultation',     icon: { kind: 'lucide', Icon: CalendarDays  } },
   { to: '/profile',           label: 'Settings',              icon: { kind: 'lucide', Icon: Settings      } },
   { to: '/notifications',     label: 'Notifications',         icon: { kind: 'lucide', Icon: Bell         } },
+  { to: '/visa-checklist',    label: 'Visa Checklist',        icon: { kind: 'lucide', Icon: FileCheck2   } },
 ];
 
 // ── HR / EMPLOYER NAV ─────────────────────────────────────────────────────────
 
 const hrNav: NavItem[] = [
-  { to: '/employer/dashboard',     label: 'Dashboard',     icon: { kind: 'lucide', Icon: LayoutDashboard } },
-  { to: '/employer/employees',     label: 'Employees',     icon: { kind: 'lucide', Icon: Users           } },
-  { to: '/employer/cases',         label: 'Cases',         icon: { kind: 'lucide', Icon: Briefcase       } },
-  { to: '/employer/approvals',     label: 'Approvals',     icon: { kind: 'lucide', Icon: CheckSquare     } },
-  { to: '/employer/deadlines',     label: 'Deadlines',     icon: { kind: 'lucide', Icon: Clock           } },
-  { to: '/employer/messages',      label: 'Messages',      icon: { kind: 'lucide', Icon: MessageSquare   } },
-  { to: '/employer/profile',       label: 'Settings',      icon: { kind: 'lucide', Icon: Settings        } },
-  { to: '/employer/notifications', label: 'Notifications', icon: { kind: 'lucide', Icon: Bell            } },
+  { to: '/employer/dashboard',     label: 'Dashboard',      icon: { kind: 'lucide', Icon: LayoutDashboard } },
+  { to: '/employer/employees',     label: 'Employees',      icon: { kind: 'lucide', Icon: Users           } },
+  { to: '/employer/cases',         label: 'Cases',          icon: { kind: 'lucide', Icon: Briefcase       } },
+  { to: '/employer/approvals',     label: 'Approvals',      icon: { kind: 'lucide', Icon: CheckSquare     } },
+  { to: '/employer/deadlines',     label: 'Deadlines',      icon: { kind: 'lucide', Icon: Clock           } },
+  { to: '/employer/messages',      label: 'Messages',       icon: { kind: 'lucide', Icon: MessageSquare   } },
+  { to: '/employer/profile',       label: 'Settings',       icon: { kind: 'lucide', Icon: Settings        } },
+  { to: '/employer/notifications', label: 'Notifications',  icon: { kind: 'lucide', Icon: Bell            } },
+  { to: '/visa-checklist',         label: 'Visa Checklist', icon: { kind: 'lucide', Icon: FileCheck2      } },
 ];
 
 // ── ATTORNEY / LAWYER NAV ─────────────────────────────────────────────────────
@@ -99,6 +103,7 @@ const attorneyNav: NavItem[] = [
   { to: '/lawyer/notifications', label: 'Notifications',  icon: { kind: 'lucide', Icon: Bell          } },
   { to: '/lawyer/settings',      label: 'Settings',       icon: { kind: 'lucide', Icon: Settings       } },
   { to: '/lawyer/help',          label: 'Help & Support', icon: { kind: 'lucide', Icon: HelpCircle     } },
+  { to: '/visa-checklist',       label: 'Visa Checklist', icon: { kind: 'lucide', Icon: FileCheck2     } },
 ];
 
 // ── APP ADMIN NAV ─────────────────────────────────────────────────────────────
