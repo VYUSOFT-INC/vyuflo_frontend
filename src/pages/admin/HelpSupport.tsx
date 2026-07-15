@@ -3,6 +3,7 @@
 // Cleaned: NO lucide-react. All icons from src/assets/icons/common/
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import AdminBackButton from '../../components/admin/AdminBackButton';
 
 import { supportApi } from '../../api/admin/support.api';
 import type {
@@ -136,6 +137,9 @@ export default function HelpSupport() {
   return (
     <div className="min-h-screen bg-slate-50">
       <main className="mx-auto max-w-[1280px] space-y-6 px-4 py-6 sm:space-y-8 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
+
+        {/* Back navigation — top-left, above the hero (desktop + mobile). */}
+        <AdminBackButton className="!mb-0" />
 
         {/* ── HERO + SEARCH ─────────────────────────────────────── */}
         <section className="flex flex-col items-center text-center">

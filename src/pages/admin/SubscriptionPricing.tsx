@@ -4,6 +4,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import AdminBackButton from "../../components/admin/AdminBackButton";
 import {
   fetchPricingStats, fetchPlans, fetchActiveSubscriptions, fetchCoupons,
   createPlan, updatePlan, togglePlan, createCoupon, cancelSubscription, exportSubscriptions,
@@ -145,6 +146,9 @@ export default function SubscriptionPricing() {
 
   return (
     <main className="p-4 sm:p-8" style={{ fontFamily: "'Inter',sans-serif", minHeight: "100vh", background: "#f9fafb", overflowY: "auto", display: "flex", flexDirection: "column", gap: 32 }}>
+
+      {/* Back navigation — top-left, above the page header (desktop + mobile). */}
+      <AdminBackButton className="!mb-0" />
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>

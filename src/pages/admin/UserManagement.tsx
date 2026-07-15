@@ -1,6 +1,7 @@
 // src/pages/admin/UserManagement.tsx
 // Mobile responsive: flex-col on phones, flex-row on tablets+
 import { useState } from "react";
+import AdminBackButton from "../../components/admin/AdminBackButton";
 import { useAdminCounts, useRecentLogins } from "../../hooks/admin/useDashboard";
 import type { RecentLoginUser } from "../../types/admin/dashboard.types";
 
@@ -131,6 +132,9 @@ export default function UserManagement() {
   return (
     <div className="min-h-screen bg-[#f9fafb]" style={{ fontFamily: "'Inter', sans-serif" }}>
       <main className="max-w-[1440px] mx-auto px-4 py-6 sm:px-8 sm:py-8 flex flex-col gap-6 sm:gap-8">
+
+        {/* Back navigation — top-left, above the page header (desktop + mobile). */}
+        <AdminBackButton className="!mb-0" />
 
         {/* Page Header — STACKS on mobile, ROW on tablet+ */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

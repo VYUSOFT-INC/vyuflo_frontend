@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "react-router-dom";
+import AdminBackButton from "../../components/admin/AdminBackButton";
 import { fetchSettings, bulkUpdateSettings } from "../../api/admin/settings.api";
 import type { SettingItem } from "../../types/admin/settings.types";
 
@@ -200,6 +201,9 @@ export default function SystemSettings() {
     <div className="flex flex-col min-h-screen bg-[#f9fafb]" style={{ fontFamily: "'Inter', sans-serif" }}>
       <main className="flex-1 min-w-0 overflow-y-auto" style={{ background: "#f9fafb" }}>
         <div className="flex flex-col gap-6 max-w-[896px] mx-auto p-4 pb-[120px] sm:gap-7 sm:p-6 sm:pb-[120px] lg:p-8 lg:pb-[120px]">
+
+          {/* Back navigation — top-left, above the page header (desktop + mobile). */}
+          <AdminBackButton className="!mb-0" />
 
           <div className="flex flex-col gap-1">
             <h1 className="text-xl font-bold leading-7 sm:text-[24px] sm:leading-[32px]" style={{ color: "#111827", letterSpacing: "-0.6px" }}>

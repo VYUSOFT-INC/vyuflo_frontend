@@ -1,6 +1,7 @@
 // src/pages/admin/Roles&permissions.tsx
 // Mobile responsive: aside stacks above main on mobile, side-by-side on lg+
 import { useState, useEffect } from "react";
+import AdminBackButton from "../../components/admin/AdminBackButton";
 
 import imgShield from "../../assets/admin/shield.svg";
 import imgUsers  from "../../assets/admin/users.svg";
@@ -409,6 +410,11 @@ export default function RolesPermissionsEditor() {
   return (
     <div className="flex flex-col min-h-screen"
       style={{ fontFamily: "'Inter', -apple-system, sans-serif", background: "#F9FAFB" }}>
+
+      {/* Back navigation — top-left, above the sidebar/content split (desktop + mobile). */}
+      <div className="px-4 sm:px-6 pt-4">
+        <AdminBackButton />
+      </div>
 
       {/* ── Container: STACKS on mobile, SIDE-BY-SIDE on lg+ ── */}
       <div className="flex flex-1 flex-col lg:flex-row" style={{ overflow: "hidden" }}>

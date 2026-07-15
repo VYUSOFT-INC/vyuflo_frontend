@@ -24,6 +24,14 @@ import { useCurrentUser } from '../../../hooks/useAuth';
 
 import { documentsApi } from '../../../api/lawyer/documents.api';
 import { documentRequestsApi } from '../../../api/lawyer/documentRequests.api';
+// Backend visa catalog — used to fetch the REAL required-documents
+// list for the client's visa type (whatever admin has configured in
+// Visa Types Manager).  Falls back to an empty list on any error so
+// the review page never blocks on this.
+import { visaChecklistApi, type BackendVisaType } from '../../../api/employee/visaChecklist.api';
+// Attorney's assigned applications — used to look up the visa_type for
+// this document when doc.case_id is empty (doc-detail 403 case).
+import { intakeApi } from '../../../api/lawyer/intake.api';
 import type {
   CreateDocumentRequestPayload,
   RequestPriority,
@@ -885,10 +893,98 @@ function PendingPanel({
   const [uploadOpen,   setUploadOpen]   = useState(false);
   const [uploadDone,   setUploadDone]   = useState(false);
 
-  // Infer visa case type from the case_id label (e.g. "#VF-9586 · H-1B").
-  // Falls back to "GENERIC" which shows a small default list.
-  const caseType = inferCaseType(doc.case_id || doc.document_type || '');
-  const checklist = CHECKLIST_BY_CASE_TYPE[caseType] ?? CHECKLIST_BY_CASE_TYPE.GENERIC;
+  // ── Real checklist — fetched from backend /visa-types on mount ────
+  // Extract the visa code from case_id (format "#VF-9586 · H-1B"), look
+  // it up in the backend catalog (same one Admin manages in Visa Types
+  // Manager), and use that visa's real required_documents. Admin edits
+  // in Visa Types Manager land here automatically on next open.
+  const [visaChecklist, setVisaChecklist] = useState<string[]>([]);
+  const [visaChecklistName, setVisaChecklistName] = useState<string>('Required');
+  const [visaChecklistLoading, setVisaChecklistLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Match longest codes first so "H-1B1" beats "H-1B" and "L-1A" beats
+    // "L-1". No match → try app_id fallback below.
+    // Ordered longest-first so specific codes match before generic ones
+    // (e.g. "H-1B1" before "H-1B", "L-1A" before "L-1", "O-1A" before "O-1").
+    const CANDIDATES = [
+      'EB-2 NIW','H-1B1','L-1A','L-1B','O-1A','O-1B','EB-1','EB-2','EB-3','EB-4','EB-5',
+      'H-1B','H-2A','H-2B','H-2','H-3','H-4',
+      'L-1','L-2',
+      'O-1',
+      'E-1','E-2','E-3',
+      'F-1','F-2','M-1','J-1','J-2',
+      'B-1','B-2','TD','TN',
+      'IR-1','IR-2','IR-5','F2A','F2B','GREEN-CARD',
+    ];
+
+    setVisaChecklistLoading(true);
+    setVisaChecklist([]);
+    setVisaChecklistName('Required');
+
+    (async () => {
+      // ── Step 1: resolve a visa code we can match against ────────────
+      // First try to extract from the case_id label ("#VF-9586 · H-1B").
+      const label = (doc.case_id || doc.document_type || '').toUpperCase();
+      let matchedCode = CANDIDATES.find((c) => label.includes(c));
+
+      // Fallback: when case_id is empty (doc-detail 403 case), look up
+      // the parent application from the attorney's assigned apps list
+      // and use its visa_type field.
+      if (!matchedCode && doc.application_id) {
+        try {
+          const apps = await intakeApi.listAssignedApplications();
+          const app = apps.find((a) => a.application_id === doc.application_id);
+          const visaLabel = ((app as unknown as { visa_type?: string; visa_type_label?: string } | undefined)?.visa_type ||
+                             (app as unknown as { visa_type?: string; visa_type_label?: string } | undefined)?.visa_type_label ||
+                             '').toUpperCase();
+          if (visaLabel) {
+            matchedCode = CANDIDATES.find((c) => visaLabel.includes(c)) || visaLabel;
+          }
+        } catch { /* no fallback data — leave matchedCode undefined */ }
+      }
+
+      if (cancelled) return;
+
+      if (!matchedCode) {
+        setVisaChecklistLoading(false);
+        return;
+      }
+      setVisaChecklistName(matchedCode);
+
+      // ── Step 2: look up the visa in the backend catalog ────────────
+      try {
+        const list = await visaChecklistApi.listVisaTypes();
+        if (cancelled) return;
+        const visa: BackendVisaType | undefined =
+          list.find((v) => v.code?.toUpperCase() === matchedCode) ||
+          list.find((v) => v.code?.toUpperCase().includes(matchedCode!));
+        if (!visa) { setVisaChecklistLoading(false); return; }
+
+        setVisaChecklistName(visa.code || matchedCode);
+
+        // Try list-side docs first (backend sometimes omits them from list).
+        const listDocs = normalizeDocs(visa.required_documents);
+        if (listDocs.length > 0) {
+          setVisaChecklist(listDocs);
+          setVisaChecklistLoading(false);
+          return;
+        }
+
+        // Fall back to detail fetch.
+        const detail = await visaChecklistApi.getVisaTypeDetail(visa.id);
+        if (!cancelled) {
+          setVisaChecklist(normalizeDocs(detail?.required_documents));
+          setVisaChecklistLoading(false);
+        }
+      } catch {
+        if (!cancelled) setVisaChecklistLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [doc.case_id, doc.document_type, doc.application_id]);
 
   return (
     <aside className="space-y-4">
@@ -900,16 +996,16 @@ function PendingPanel({
           </span>
         </div>
 
-        {/* ── CASE-TYPE CHECKLIST ─────────────────────────────────────
-             Standard docs required for this visa type. Lawyer ticks them
-             off as they're uploaded — auto-tick when a sibling doc name
-             looks like a match. This is a client-side placeholder list;
-             once the project team hands over the official checklist we
-             replace CHECKLIST_BY_CASE_TYPE.  */}
+        {/* ── VISA-TYPE CHECKLIST ─────────────────────────────────────
+             Real required-documents list for this client's visa type,
+             fetched from backend /visa-types (same catalog Admin manages
+             in Visa Types Manager). Admin edits propagate here
+             automatically.  Auto-ticks when a sibling doc name matches. */}
         <CaseTypeChecklist
           documentId={doc.id}
-          caseType={caseType}
-          items={checklist}
+          visaName={visaChecklistName}
+          items={visaChecklist}
+          loading={visaChecklistLoading}
           siblings={siblings}
         />
 
@@ -1712,113 +1808,41 @@ function LawyerUploadModal({
 }
 
 /* ════════════════════════════════════════════════════════════════════
- *  CASE-TYPE CHECKLIST
- *  Placeholder set of documents required per visa type. Ticks are stored
- *  in localStorage keyed by documentId so the lawyer's progress persists
- *  across reloads. Auto-tick occurs when a sibling document name looks
- *  like a match (substring, case-insensitive). Once the project team
- *  hands over the official checklists we can replace this constant.
+ *  VISA-TYPE CHECKLIST
+ *  Renders the real required-documents list fetched from backend
+ *  /visa-types.  Ticks are stored in localStorage keyed by documentId +
+ *  visaName so the lawyer's progress persists across reloads.  Auto-tick
+ *  fires when a sibling document name looks like a match.
  * ════════════════════════════════════════════════════════════════════ */
-type CaseTypeKey = 'H-1B' | 'L-1' | 'O-1' | 'F-1' | 'TN' | 'GC' | 'GENERIC';
 
-const CHECKLIST_BY_CASE_TYPE: Record<CaseTypeKey, string[]> = {
-  'H-1B': [
-    'Passport (biographic page)',
-    'I-94 Arrival/Departure Record',
-    'Most recent I-797 Approval Notice',
-    'Educational Credentials (degree + transcripts)',
-    'Credentials Evaluation (if foreign degree)',
-    'Resume / CV',
-    'Employment Verification Letter',
-    'Recent Pay Stubs (3 months)',
-    'W-2 (prior year)',
-    'LCA (ETA Form 9035)',
-    'Employer\'s FEIN documentation',
-    'Job Description / Position Duties',
-    'Company Organizational Chart',
-    'Form I-129 (draft)',
-    'Filing Fee Payment Confirmation',
-  ],
-  'L-1': [
-    'Passport (biographic page)',
-    'I-94 Arrival/Departure Record',
-    'Employment records with parent/subsidiary abroad',
-    'Proof of qualifying relationship between entities',
-    'Job description (US and foreign role)',
-    'Organizational charts (both entities)',
-    'Financial statements of both entities',
-    'Form I-129 with L supplement',
-    'Filing Fee Payment Confirmation',
-  ],
-  'O-1': [
-    'Passport (biographic page)',
-    'I-94 Arrival/Departure Record',
-    'Evidence of extraordinary ability (awards, media)',
-    'Consultation letter from peer group',
-    'Contracts / itineraries of events',
-    'Publications / citations record',
-    'Letters of recommendation (6-8)',
-    'Form I-129 with O supplement',
-  ],
-  'F-1': [
-    'Passport (biographic page)',
-    'I-20 (SEVIS-issued)',
-    'SEVIS fee payment receipt',
-    'Financial support documentation',
-    'University acceptance letter',
-    'Academic transcripts',
-    'Standardized test scores',
-    'Visa application (DS-160)',
-  ],
-  'TN': [
-    'Passport (biographic page)',
-    'Proof of citizenship (Canada / Mexico)',
-    'Job offer letter (NAFTA/USMCA profession)',
-    'Credentials for the TN profession',
-    'Detailed job description',
-  ],
-  'GC': [
-    'Passport (biographic page)',
-    'Birth certificate',
-    'Marriage certificate (if applicable)',
-    'I-140 Approval Notice',
-    'Form I-485 (Adjustment of Status)',
-    'Medical examination (Form I-693)',
-    'Employment Verification Letter',
-    'Recent Pay Stubs (6 months)',
-    'Tax returns (last 3 years)',
-    'Two passport-style photos',
-  ],
-  GENERIC: [
-    'Government-issued photo ID',
-    'Passport (biographic page)',
-    'I-94 Arrival/Departure Record',
-    'Supporting evidence for the case',
-    'Applicable USCIS forms',
-    'Filing fee confirmation',
-  ],
-};
-
-function inferCaseType(label: string): CaseTypeKey {
-  const s = (label || '').toUpperCase();
-  if (s.includes('H-1B') || s.includes('H1B')) return 'H-1B';
-  if (s.includes('L-1')  || s.includes('L1'))  return 'L-1';
-  if (s.includes('O-1')  || s.includes('O1'))  return 'O-1';
-  if (s.includes('F-1')  || s.includes('F1'))  return 'F-1';
-  if (s.includes('TN'))                         return 'TN';
-  if (s.includes('GREEN CARD') || s.includes('I-485') || s.includes('I-140')) return 'GC';
-  return 'GENERIC';
+/** Normalize `required_documents` from backend — accepts array, JSON
+ *  string ('["A","B"]'), or comma-separated string. */
+function normalizeDocs(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw.filter((x): x is string => typeof x === 'string' && x.trim().length > 0);
+  }
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((x): x is string => typeof x === 'string' && x.trim().length > 0);
+      }
+    } catch { /* fall through */ }
+    return raw.split(',').map((s) => s.trim()).filter(Boolean);
+  }
+  return [];
 }
 
 function CaseTypeChecklist({
-  documentId, caseType, items, siblings,
+  documentId, visaName, items, loading, siblings,
 }: {
   documentId: string;
-  caseType: CaseTypeKey;
+  visaName: string;
   items: string[];
+  loading: boolean;
   siblings: Document[];
 }) {
-  const storageKey = `checklist:${documentId}:${caseType}`;
+  const storageKey = `checklist:${documentId}:${visaName}`;
   const [checked, setChecked] = useState<Record<string, boolean>>(() => {
     try {
       const raw = localStorage.getItem(storageKey);
@@ -1860,34 +1884,46 @@ function CaseTypeChecklist({
     <div className="mt-4 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
       <div className="flex items-center justify-between">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-indigo-800">
-          {caseType} Required Documents
+          {visaName} Required Documents
         </p>
-        <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-indigo-700 border border-indigo-200">
-          {doneCount} / {items.length}
-        </span>
+        {items.length > 0 && (
+          <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-indigo-700 border border-indigo-200">
+            {doneCount} / {items.length}
+          </span>
+        )}
       </div>
-      <ul className="mt-2 space-y-1.5 max-h-56 overflow-y-auto pr-1">
-        {items.map((item) => (
-          <li key={item}>
-            <label className="flex items-start gap-2 cursor-pointer group">
-              <input
-                type="checkbox"
-                checked={!!checked[item]}
-                onChange={() => toggle(item)}
-                className="mt-0.5 h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-              />
-              <span className={`text-[11px] leading-tight ${
-                checked[item] ? 'text-gray-400 line-through' : 'text-gray-700 group-hover:text-gray-900'
-              }`}>
-                {item}
-              </span>
-            </label>
-          </li>
-        ))}
-      </ul>
-      <p className="mt-2 text-[10px] text-indigo-700/70 italic">
-        Draft checklist — will be replaced with the team's official list.
-      </p>
+
+      {loading ? (
+        <div className="mt-2 flex items-center gap-2 text-[11px] text-indigo-700">
+          <span className="h-3 w-3 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+          Loading checklist…
+        </div>
+      ) : items.length === 0 ? (
+        <p className="mt-2 text-[11px] text-gray-500 italic">
+          No checklist configured for this visa type yet. Ask your admin to
+          add required documents in Visa Types Manager.
+        </p>
+      ) : (
+        <ul className="mt-2 space-y-1.5 max-h-56 overflow-y-auto pr-1">
+          {items.map((item) => (
+            <li key={item}>
+              <label className="flex items-start gap-2 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={!!checked[item]}
+                  onChange={() => toggle(item)}
+                  className="mt-0.5 h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className={`text-[11px] leading-tight ${
+                  checked[item] ? 'text-gray-400 line-through' : 'text-gray-700 group-hover:text-gray-900'
+                }`}>
+                  {item}
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
