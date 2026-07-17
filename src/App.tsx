@@ -108,7 +108,7 @@ function OnboardingRoute() {
 }
 /**
  * RoleRoute — requires auth AND a matching role.
- * Wrong-role users are redirected to their own dashboard instead of a blank/403.
+ * Wrong-role users are redirected to their own dashboard instead of a blank/403.daddasdasda
  */
 function RoleRoute({ allowedRoles }: { allowedRoles: string[] }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
