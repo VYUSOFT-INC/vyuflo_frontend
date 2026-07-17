@@ -3,7 +3,7 @@
 
 // src/pages/employee/SecureMessaging.tsx
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { Paperclip, Pencil, Search, Send, Smile, X, Download, Check, CheckCheck } from "lucide-react";
+import { Paperclip, Pencil, Search, Send, Smile, X, Download, Check, CheckCheck, ArrowLeft } from "lucide-react";
 import messageApi from "../../api/employee/message.api";
 import type { Conversation, Message } from "../../types/employee/message.types";
 import { getUiSession } from "../../utils/uiSession";
@@ -471,8 +471,16 @@ const SecureMessaging: React.FC = () => {
     <div className="h-full w-full flex overflow-hidden"
       style={{ fontFamily: "Inter, sans-serif", background: "#f8fafc" }}>
 
-      {/* ══ LEFT PANEL ══════════════════════════════════════════════════════ */}
-      <aside className="w-[340px] shrink-0 flex flex-col bg-white border-r border-slate-100">
+      {/* ══ LEFT PANEL — chat list ═════════════════════════════════════════
+           MOBILE (< md): full-width; hidden as soon as a conversation is
+             picked so the message thread takes over the whole screen.
+           DESKTOP (md+): fixed 340px column, always visible alongside the
+             thread pane. */}
+      <aside
+        className={`w-full md:w-[340px] md:shrink-0 flex-col bg-white border-r border-slate-100 ${
+          selectedConv ? 'hidden md:flex' : 'flex'
+        }`}
+      >
 
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-slate-100">
@@ -557,8 +565,17 @@ const SecureMessaging: React.FC = () => {
         </div>
       </aside>
 
-      {/* ══ RIGHT PANEL ═════════════════════════════════════════════════════ */}
-      <main className="flex-1 flex flex-col min-w-0">
+      {/* ══ RIGHT PANEL — message thread ═══════════════════════════════════
+           MOBILE (< md): hidden until a conversation is selected, then it
+             takes over the full width and the chat-header shows a Back
+             arrow that clears the selection to return to the list.
+           DESKTOP (md+): always visible.  When nothing is selected it
+             shows the "Select a conversation" empty state. */}
+      <main
+        className={`flex-1 flex-col min-w-0 ${
+          selectedConv ? 'flex' : 'hidden md:flex'
+        }`}
+      >
         {!selectedConv ? (
           <div className="flex-1 flex flex-col items-center justify-center bg-slate-50">
             <div className="w-20 h-20 rounded-full flex items-center justify-center mb-5" style={{ background: "var(--theme-light)" }}>
@@ -574,6 +591,16 @@ const SecureMessaging: React.FC = () => {
           <>
             {/* Chat header */}
             <div className="h-[60px] bg-white border-b border-slate-200 px-4 flex items-center gap-3 shrink-0">
+              {/* Mobile-only back arrow — returns the user to the chat list.
+                  Hidden on md+ where both panes render side-by-side. */}
+              <button
+                type="button"
+                onClick={() => setSelectedConv(null)}
+                aria-label="Back to chats"
+                className="md:hidden -ml-1 w-9 h-9 rounded-full flex items-center justify-center text-slate-600 hover:bg-slate-100"
+              >
+                <ArrowLeft size={20} />
+              </button>
               <Avatar
                 name={selectedConv.participant_name}
                 url={selectedConv.avatar_url}
