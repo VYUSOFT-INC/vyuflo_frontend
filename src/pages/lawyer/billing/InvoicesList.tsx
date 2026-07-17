@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 import { billingApi } from '../../../api/lawyer/billing.api';
 import type {
   InvoiceListResponse,
@@ -81,6 +82,9 @@ export default function InvoicesList() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
+      {/* Back navigation — top-left, above the page header (desktop + mobile). */}
+      <LawyerBackButton className="!mb-0" />
+
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <button

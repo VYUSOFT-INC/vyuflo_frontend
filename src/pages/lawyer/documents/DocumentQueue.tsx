@@ -20,6 +20,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 import { documentsApi } from '../../../api/lawyer/documents.api';
 import { intakeApi }    from '../../../api/lawyer/intake.api';
 import type {
@@ -424,6 +425,9 @@ export default function DocumentQueue() {
   return (
     <div className="min-h-screen bg-slate-50">
       <main className="mx-auto max-w-[1280px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
+
+        {/* Back navigation — top-left, above the page header (desktop + mobile). */}
+        <LawyerBackButton />
 
         {/* Header */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

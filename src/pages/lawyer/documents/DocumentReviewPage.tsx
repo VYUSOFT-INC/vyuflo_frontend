@@ -22,6 +22,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useCurrentUser } from '../../../hooks/useAuth';
 
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 import { documentsApi } from '../../../api/lawyer/documents.api';
 import { documentRequestsApi } from '../../../api/lawyer/documentRequests.api';
 // Backend visa catalog — used to fetch the REAL required-documents
@@ -594,6 +595,11 @@ export default function DocumentReviewPage() {
 
   return (
     <div className="bg-slate-50 pb-24" style={{ fontFamily: "'Inter', sans-serif" }}>
+      {/* Back navigation — top-left, above the sticky header (desktop + mobile). */}
+      <div className="px-4 pt-4 sm:px-6">
+        <LawyerBackButton />
+      </div>
+
       {/* Header */}
       <header className="border-b border-gray-200 bg-white px-4 py-4 sm:px-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
