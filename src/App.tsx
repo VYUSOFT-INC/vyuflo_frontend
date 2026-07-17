@@ -181,11 +181,17 @@ export default function App() {
               <Route path="/profile/devices"                  element={<ProfileSecurity />} />
               <Route path="/profile/session"                  element={<ProfileSecurity />} />
               <Route path="/profile/security-alerts"          element={<ProfileSecurity />} />
+<<<<<<< Updated upstream
+=======
+              <Route path="/profile/notifications" element={<ProfileSecurity />} />
+              <Route path="/profile/connect-employer"         element={<ConnectEmployer />} />
+>>>>>>> Stashed changes
             </Route>
           </Route>
           {/* ── HR / EMPLOYER routes ────────────────────────────────────────── */}
           <Route element={<RoleRoute allowedRoles={['hr']} />}>
             <Route element={<DashboardLayout />}>
+<<<<<<< Updated upstream
               <Route path="/employer/dashboard" element={<HRDashboard />} />
               <Route path="/employer/employees" element={<HREmployees />} />
               <Route path="/employer/invite" element={<HRInviteEmployee />} />
@@ -209,6 +215,30 @@ export default function App() {
               <Route path="/employer/profile/security-alerts" element={<ProfileSecurity />} />
               {/* Optional compatibility route */}
               <Route path="/profile" element={<ProfileSecurity />} />
+=======
+              <Route path="/employer/dashboard"                    element={<HRDashboard />} />
+              <Route path="/employer/employees"                    element={<HREmployees />} />
+              <Route path="/employer/invite"                       element={<HRInviteEmployee />} />
+              <Route path="/employer/employees/:employeeLinkId"    element={<HREmployeeDetail />} />
+              <Route path="/employer/cases"                        element={<HRCasesList />} />
+              <Route path="/employer/cases/new"                    element={<HRCreateCase />} />
+              <Route path="/employer/cases/:applicationId"         element={<HRCaseDetail />} />
+              <Route path="/employer/messages"                     element={<HRMessages />} />
+              <Route path="/employer/deadlines"                    element={<HRDeadlines />} />
+              <Route path="/employer/approvals"                    element={<HRApprovalQueue />} />
+              <Route path="/employer/documents/:applicationId"     element={<HRDocumentManagement />} />
+              <Route path="/employer/notifications"                element={<HRNotificationsCenter />} />
+              <Route path="/employer/profile"                      element={<ProfileSecurity />} />
+              <Route path="/employer/profile/authentication"       element={<ProfileSecurity />} />
+              <Route path="/employer/profile/mfa"                  element={<ProfileSecurity />} />
+              <Route path="/employer/profile/login-history"        element={<ProfileSecurity />} />
+              <Route path="/employer/profile/privacy"              element={<ProfileSecurity />} />
+              <Route path="/employer/profile/devices"              element={<ProfileSecurity />} />
+              <Route path="/employer/profile/session"              element={<ProfileSecurity />} />
+              <Route path="/employer/profile/security-alerts"      element={<ProfileSecurity />} />
+              <Route path="/employer/profile/notifications" element={<ProfileSecurity />} />
+              <Route path="/profile"                               element={<ProfileSecurity />} />
+>>>>>>> Stashed changes
             </Route>
           </Route>
           {/* ── ADMIN routes ────────────────────────────────────────────────── */}
