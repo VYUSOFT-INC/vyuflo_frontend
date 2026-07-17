@@ -74,7 +74,6 @@ import ArticleDetail      from './pages/lawyer/help/ArticleDetail';
 import MyTickets          from './pages/lawyer/help/MyTickets';
 import TicketDetail       from './pages/lawyer/help/TicketDetail';
 import HelpNotifications  from './pages/lawyer/help/HelpNotifications';
-// Lawyer messages uses the shared SecureMessaging component (role-aware).
 import LawyerMessagesPage from './pages/employee/SecureMessaging';
 import TemplateLibraryPage from './pages/lawyer/templates/TemplateLibraryPage';
 import NotificationsRemindersPage from './pages/lawyer/notifications/NotificationsRemindersPage';
@@ -82,13 +81,11 @@ import LawyerSettingsPage from './pages/lawyer/settings/LawyerSettingsPage';
 import CaseListPage       from './pages/lawyer/cases/CaseListPage';
 import CaseDetailPage     from './pages/lawyer/cases/CaseDetailPage';
 import LawyerDashboardPage from './pages/lawyer/dashboard/LawyerDashboardPage';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Guards
 // ─────────────────────────────────────────────────────────────────────────────
-/**
- * PublicRoute — blocks authenticated users from /login, /forgot-password etc.
- * Redirects them straight to their role's dashboard.
- */
+
 function PublicRoute() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   if (isAuthenticated) {
@@ -97,19 +94,13 @@ function PublicRoute() {
   }
   return <Outlet />;
 }
-/**
- * OnboardingRoute — requires access_token only (no role check).
- * Used for /signup/verify-email and /signup/profile-setup.
- */
+
 function OnboardingRoute() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   return <Outlet />;
 }
-/**
- * RoleRoute — requires auth AND a matching role.
- * Wrong-role users are redirected to their own dashboard instead of a blank/403.daddasdasda
- */
+
 function RoleRoute({ allowedRoles }: { allowedRoles: string[] }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   if (!isAuthenticated) return <Navigate to="/login" replace />;
@@ -120,44 +111,50 @@ function RoleRoute({ allowedRoles }: { allowedRoles: string[] }) {
   }
   return <Outlet />;
 }
+
 // ─────────────────────────────────────────────────────────────────────────────
 // App
 // ─────────────────────────────────────────────────────────────────────────────
 export default function App() {
-  // Pull user's theme color from session (falls back to default #4f46e5 inside
-  // ThemeProvider). Later this can be wired to org branding / user preference.
   const session    = getUiSession();
   const themeColor = (session as { theme_color?: string | null } | null)?.theme_color ?? null;
+
   return (
     <ThemeProvider color={themeColor}>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
+
           {/* ── Public (unauthenticated only) ──────────────────────────────── */}
           <Route element={<PublicRoute />}>
             <Route path="/login"           element={<Login />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
           </Route>
-          {/* ── Signup (no auth required) ───────────────────────────────────── */}
+
+          {/* ── Signup ─────────────────────────────────────────────────────── */}
           <Route path="/signup" element={<Signup />} />
+
           {/* ── Onboarding (token required, no role check) ──────────────────── */}
           <Route element={<OnboardingRoute />}>
             <Route path="/signup/verify-email"  element={<VerifyEmailPage />} />
             <Route path="/signup/profile-setup" element={<ProfileSetupPage />} />
           </Route>
-          {/* ── Password reset & OAuth callbacks (no auth needed) ───────────── */}
+
+          {/* ── Password reset & OAuth callbacks ────────────────────────────── */}
           <Route path="/forgot-password/verify-otp"   element={<ResetPasswordOTP />} />
           <Route path="/forgot-password/new-password" element={<ResetPasswordNew />} />
           <Route path="/auth/linkedin/callback"       element={<LinkedInCallback />} />
-          {/* ── Client Intake Portal (PUBLIC — token-based, NO JWT) ─────────
-              Must be BEFORE the catch-all route. */}
+
+          {/* ── Client Intake Portal (PUBLIC — token-based) ─────────────────── */}
           <Route path="/intake/:token" element={<ClientIntakePortal />} />
-          {/* ── SHARED — Visa Document Checklist (employee + hr + attorney) ── */}
+
+          {/* ── SHARED — Visa Checklist ──────────────────────────────────────── */}
           <Route element={<RoleRoute allowedRoles={['employee', 'hr', 'attorney']} />}>
             <Route element={<DashboardLayout />}>
               <Route path="/visa-checklist" element={<VisaChecklist />} />
             </Route>
           </Route>
+
           {/* ── EMPLOYEE routes ─────────────────────────────────────────────── */}
           <Route element={<RoleRoute allowedRoles={['employee']} />}>
             <Route element={<DashboardLayout />}>
@@ -181,41 +178,13 @@ export default function App() {
               <Route path="/profile/devices"                  element={<ProfileSecurity />} />
               <Route path="/profile/session"                  element={<ProfileSecurity />} />
               <Route path="/profile/security-alerts"          element={<ProfileSecurity />} />
-<<<<<<< Updated upstream
-=======
-              <Route path="/profile/notifications" element={<ProfileSecurity />} />
-              <Route path="/profile/connect-employer"         element={<ConnectEmployer />} />
->>>>>>> Stashed changes
+              <Route path="/profile/notifications"            element={<ProfileSecurity />} />
             </Route>
           </Route>
+
           {/* ── HR / EMPLOYER routes ────────────────────────────────────────── */}
           <Route element={<RoleRoute allowedRoles={['hr']} />}>
             <Route element={<DashboardLayout />}>
-<<<<<<< Updated upstream
-              <Route path="/employer/dashboard" element={<HRDashboard />} />
-              <Route path="/employer/employees" element={<HREmployees />} />
-              <Route path="/employer/invite" element={<HRInviteEmployee />} />
-              <Route path="/employer/employees/:employeeLinkId" element={<HREmployeeDetail />} />
-              <Route path="/employer/cases" element={<HRCasesList />} />
-              <Route path="/employer/cases/new" element={<HRCreateCase />} />
-              <Route path="/employer/cases/:applicationId" element={<HRCaseDetail />} />
-              <Route path="/employer/messages" element={<HRMessages />} />
-              <Route path="/employer/deadlines" element={<HRDeadlines />} />
-              <Route path="/employer/approvals" element={<HRApprovalQueue />} />
-              <Route path="/employer/documents/:applicationId" element={<HRDocumentManagement />} />
-              <Route path="/employer/notifications" element={<HRNotificationsCenter />} />
-              {/* HR Profile & Settings */}
-              <Route path="/employer/profile" element={<ProfileSecurity />} />
-              <Route path="/employer/profile/authentication" element={<ProfileSecurity />} />
-              <Route path="/employer/profile/mfa" element={<ProfileSecurity />} />
-              <Route path="/employer/profile/login-history" element={<ProfileSecurity />} />
-              <Route path="/employer/profile/privacy" element={<ProfileSecurity />} />
-              <Route path="/employer/profile/devices" element={<ProfileSecurity />} />
-              <Route path="/employer/profile/session" element={<ProfileSecurity />} />
-              <Route path="/employer/profile/security-alerts" element={<ProfileSecurity />} />
-              {/* Optional compatibility route */}
-              <Route path="/profile" element={<ProfileSecurity />} />
-=======
               <Route path="/employer/dashboard"                    element={<HRDashboard />} />
               <Route path="/employer/employees"                    element={<HREmployees />} />
               <Route path="/employer/invite"                       element={<HRInviteEmployee />} />
@@ -236,11 +205,11 @@ export default function App() {
               <Route path="/employer/profile/devices"              element={<ProfileSecurity />} />
               <Route path="/employer/profile/session"              element={<ProfileSecurity />} />
               <Route path="/employer/profile/security-alerts"      element={<ProfileSecurity />} />
-              <Route path="/employer/profile/notifications" element={<ProfileSecurity />} />
+              <Route path="/employer/profile/notifications"        element={<ProfileSecurity />} />
               <Route path="/profile"                               element={<ProfileSecurity />} />
->>>>>>> Stashed changes
             </Route>
           </Route>
+
           {/* ── ADMIN routes ────────────────────────────────────────────────── */}
           <Route element={<RoleRoute allowedRoles={['app_admin']} />}>
             <Route element={<DashboardLayout />}>
@@ -257,53 +226,39 @@ export default function App() {
               <Route path="/admin/help-support"                   element={<AdminHelpSupport />} />
             </Route>
           </Route>
+
           {/* ── ATTORNEY (LAWYER) routes ────────────────────────────────────── */}
           <Route element={<RoleRoute allowedRoles={['attorney']} />}>
-            {/* Safety redirect — bare /lawyer lands on the dashboard */}
             <Route path="/lawyer" element={<Navigate to="/lawyer/dashboard" replace />} />
-            {/* Pages WITH DashboardLayout (sidebar + topbar) */}
             <Route element={<DashboardLayout />}>
-              {/* Dashboard — Figma node 97:2 (Attorney home screen) */}
               <Route path="/lawyer/dashboard"                    element={<LawyerDashboardPage />} />
-              {/* Intake */}
               <Route path="/lawyer/intake"                       element={<IntakeLanding />} />
-              {/* Cases — list + detail (tabs URL-driven via ?tab=details|overview|comments|deadlines) */}
               <Route path="/lawyer/cases"                        element={<CaseListPage />} />
               <Route path="/lawyer/cases/:caseId"                element={<CaseDetailPage />} />
-              {/* Documents — Queue + Review */}
               <Route path="/lawyer/documents"                    element={<Navigate to="/lawyer/documents/queue" replace />} />
               <Route path="/lawyer/documents/queue"              element={<DocumentQueue />} />
               <Route path="/lawyer/documents/:documentId/review" element={<DocumentReviewPage />} />
-              {/* Calendar */}
               <Route path="/lawyer/calendar"                     element={<CalendarPage />} />
-              {/* Clients */}
               <Route path="/lawyer/clients/:clientId"            element={<ClientProfilePage />} />
-              {/* Analytics */}
               <Route path="/lawyer/analytics"                    element={<AnalyticsPage />} />
-              {/* ── BILLING routes ────────────────────────────────────────── */}
-              <Route path="/lawyer/billing"              element={<BillingDashboard />} />
-              <Route path="/lawyer/billing/invoices"     element={<InvoicesList />} />
-              <Route path="/lawyer/billing/invoices/:id" element={<InvoiceDetail />} />
-              <Route path="/lawyer/billing/clients"      element={<BillingClientsList />} />
-              {/* HELP & SUPPORT */}
-              <Route path="/lawyer/help"                  element={<HelpHome />} />
-              <Route path="/lawyer/help/articles/:id"     element={<ArticleDetail />} />
-              <Route path="/lawyer/help/tickets"          element={<MyTickets />} />
-              <Route path="/lawyer/help/tickets/:id"      element={<TicketDetail />} />
-              <Route path="/lawyer/help/notifications"    element={<HelpNotifications />} />
-              {/* MESSAGES — shared SecureMessaging (attorney branch inside) */}
-              <Route path="/lawyer/messages" element={<LawyerMessagesPage />} />
-              {/* TEMPLATE LIBRARY */}
-              <Route path="/lawyer/templates" element={<TemplateLibraryPage />} />
-              {/* NOTIFICATIONS & REMINDERS */}
-              <Route path="/lawyer/notifications" element={<NotificationsRemindersPage />} />
-              {/* PROFILE & SETTINGS — tabs URL-driven via ?tab= */}
-              <Route path="/lawyer/settings" element={<LawyerSettingsPage />} />
+              <Route path="/lawyer/billing"                      element={<BillingDashboard />} />
+              <Route path="/lawyer/billing/invoices"             element={<InvoicesList />} />
+              <Route path="/lawyer/billing/invoices/:id"         element={<InvoiceDetail />} />
+              <Route path="/lawyer/billing/clients"              element={<BillingClientsList />} />
+              <Route path="/lawyer/help"                         element={<HelpHome />} />
+              <Route path="/lawyer/help/articles/:id"            element={<ArticleDetail />} />
+              <Route path="/lawyer/help/tickets"                 element={<MyTickets />} />
+              <Route path="/lawyer/help/tickets/:id"             element={<TicketDetail />} />
+              <Route path="/lawyer/help/notifications"           element={<HelpNotifications />} />
+              <Route path="/lawyer/messages"                     element={<LawyerMessagesPage />} />
+              <Route path="/lawyer/templates"                    element={<TemplateLibraryPage />} />
+              <Route path="/lawyer/notifications"                element={<NotificationsRemindersPage />} />
+              <Route path="/lawyer/settings"                     element={<LawyerSettingsPage />} />
             </Route>
-            {/* Wizard is FULL-SCREEN (own focus-mode header — NO DashboardLayout) */}
             <Route path="/lawyer/intake/:sessionId" element={<IntakeWizard />} />
           </Route>
-          {/* ── Catch-all (MUST be LAST) ────────────────────────────────────── */}
+
+          {/* ── Catch-all ────────────────────────────────────────────────────── */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
