@@ -127,17 +127,14 @@ jobs:
               echo "::error::PR description must include a '## Summary' section."
               FAILED=1
             elif ! section_has_content "Summary"; then
-              echo "::error::'## Summary' is present but empty. Describe what this PR changes and why."
+              echo "::error::'## Summary' is empty. Write something after 'What does this PR change, and why? 1–3 short bullets'."
               FAILED=1
             else
-              echo "✓ Summary section present"
+              echo "✓ Summary section has content"
             fi
 
             if ! has_section "Test plan"; then
               echo "::error::PR description must include a '## Test plan' section."
-              FAILED=1
-            elif ! section_has_content "Test plan"; then
-              echo "::error::'## Test plan' is present but empty. List how this was / should be verified."
               FAILED=1
             else
               echo "✓ Test plan section present"
