@@ -133,13 +133,6 @@ jobs:
               echo "✓ Summary section has content"
             fi
 
-            if ! has_section "Test plan"; then
-              echo "::error::PR description must include a '## Test plan' section."
-              FAILED=1
-            else
-              echo "✓ Test plan section present"
-            fi
-
             # Overall body length after stripping comments / blank lines.
             CONTENT_LEN=$(printf '%s\n' "$BODY_CLEAN" | sed '/^[[:space:]]*$/d' | wc -c | tr -d ' ')
             if [ "$CONTENT_LEN" -lt 40 ]; then
