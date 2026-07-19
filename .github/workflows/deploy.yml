@@ -92,9 +92,7 @@ jobs:
             echo "==> Syncing frontend (${BRANCH}) in ${FRONTEND_DIR}"
             cd "${FRONTEND_DIR}"
             git remote set-url origin "${REPO_URL}"
-            git fetch origin "${BRANCH}"
-            git checkout "${BRANCH}"
-            git reset --hard "origin/${BRANCH}"
+            git pull origin "${BRANCH}"
 
             echo "==> Writing Vite build-time env (.env.production)"
             printf '%s\n' \
