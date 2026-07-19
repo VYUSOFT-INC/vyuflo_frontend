@@ -1,0 +1,112 @@
+name: Deploy
+
+# Deploys the Vite SPA to DigitalOcean Droplets via SSH + Docker Compose.
+# Branch → GitHub Environment:
+#   dev       → dev
+#   staging   → staging
+#   pre-live  → pre-live
+#   main      → production
+
+on:
+  push:
+    branches: [dev, staging, pre-live, main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        options: [dev, staging, pre-live, production]
+
+concurrency:
+  group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  resolve-env:
+    name: Resolve environment
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.map.outputs.environment }}
+      branch: ${{ steps.map.outputs.branch }}
+    steps:
+      - name: Map branch / input to GitHub Environment
+        id: map
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENV="${{ inputs.environment }}"
+            case "$ENV" in
+              production) BRANCH="main" ;;
+              *) BRANCH="$ENV" ;;
+            esac
+          else
+            BRANCH="${{ github.ref_name }}"
+            case "$BRANCH" in
+              main) ENV="production" ;;
+              *) ENV="$BRANCH" ;;
+            esac
+          fi
+          echo "environment=$ENV" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "Deploying branch=$BRANCH → environment=$ENV"
+
+  ci:
+    name: CI gate
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Deploy (${{ needs.resolve-env.outputs.environment }})
+    needs: [resolve-env, ci]
+    if: |
+      always() &&
+      needs.resolve-env.result == 'success' &&
+      (github.event_name == 'workflow_dispatch' || needs.ci.result == 'success')
+    runs-on: ubuntu-latest
+    environment: ${{ needs.resolve-env.outputs.environment }}
+
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+          VITE_MICROSOFT_CLIENT_ID: ${{ vars.VITE_MICROSOFT_CLIENT_ID }}
+          VITE_MICROSOFT_TENANT_ID: ${{ vars.VITE_MICROSOFT_TENANT_ID }}
+          VITE_LINKEDIN_CLIENT_ID: ${{ vars.VITE_LINKEDIN_CLIENT_ID }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          COMPOSE_FILE: ${{ vars.COMPOSE_FILE }}
+          BRANCH: ${{ needs.resolve-env.outputs.branch }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: VITE_API_BASE_URL,VITE_GOOGLE_CLIENT_ID,VITE_MICROSOFT_CLIENT_ID,VITE_MICROSOFT_TENANT_ID,VITE_LINKEDIN_CLIENT_ID,GH_PAT,DEPLOY_PATH,COMPOSE_FILE,BRANCH
+          script: |
+            set -euo pipefail
+
+            FRONTEND_DIR="${DEPLOY_PATH}/frontend"
+            REPO_URL="https://x-access-token:${GH_PAT}@github.com/VYUSOFT-INC/vyuflo_frontend.git"
+
+            echo "==> Syncing frontend (${BRANCH}) in ${FRONTEND_DIR}"
+            cd "${FRONTEND_DIR}"
+            git remote set-url origin "${REPO_URL}"
+            git fetch origin "${BRANCH}"
+            git checkout "${BRANCH}"
+            git reset --hard "origin/${BRANCH}"
+
+            echo "==> Writing Vite build-time env (.env.production)"
+            printf '%s\n' \
+              "VITE_API_BASE_URL=${VITE_API_BASE_URL}" \
+              "VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID}" \
+              "VITE_MICROSOFT_CLIENT_ID=${VITE_MICROSOFT_CLIENT_ID}" \
+              "VITE_MICROSOFT_TENANT_ID=${VITE_MICROSOFT_TENANT_ID}" \
+              "VITE_LINKEDIN_CLIENT_ID=${VITE_LINKEDIN_CLIENT_ID}" \
+              > .env.production
+
+            echo "==> Rebuilding frontend container"
+            cd "${DEPLOY_PATH}"
+            docker compose -f "${COMPOSE_FILE}" up -d --build frontend
+
+            echo "==> Deploy complete (${BRANCH})"
