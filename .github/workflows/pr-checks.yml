@@ -1,0 +1,161 @@
+name: PR Checks
+
+# Validates Conventional Commit PR titles and required description sections.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+    branches: [dev, staging, pre-live, main]
+
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  title-and-description:
+    name: PR title & description
+    runs-on: ubuntu-latest
+    # Skip while still drafting; runs when marked ready for review.
+    if: github.event.pull_request.draft == false
+
+    steps:
+      - name: Validate PR title and description
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+
+          FAILED=0
+
+          echo "════════════════════════════════════════"
+          echo "PR title: ${PR_TITLE}"
+          echo "════════════════════════════════════════"
+
+          # Conventional Commits:
+          #   feat: add employee filters
+          #   fix(auth): handle expired token
+          #   chore(ci): add deploy workflow
+          # Optional scope and optional breaking-change bang (!).
+          TITLE_REGEX='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?!?: .+$'
+
+          if [[ ! "$PR_TITLE" =~ $TITLE_REGEX ]]; then
+            echo "::error::PR title must follow Conventional Commits."
+            echo ""
+            echo "Expected format:"
+            echo "  <type>(optional-scope): <short summary>"
+            echo ""
+            echo "Allowed types:"
+            echo "  feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+            echo ""
+            echo "Examples:"
+            echo "  feat: add consultation booking flow"
+            echo "  fix(auth): redirect expired sessions to login"
+            echo "  ci: add PR title and description checks"
+            echo "  chore(deps): bump axios"
+            FAILED=1
+          else
+            # Subject after ": " should be meaningful (not just a type).
+            SUBJECT="${PR_TITLE#*: }"
+            SUBJECT_LEN=${#SUBJECT}
+            if [ "$SUBJECT_LEN" -lt 8 ]; then
+              echo "::error::PR title summary is too short (${SUBJECT_LEN} chars). Use at least 8 characters after the type."
+              FAILED=1
+            fi
+            if [[ "$SUBJECT" =~ \.$ ]]; then
+              echo "::error::PR title summary should not end with a period."
+              FAILED=1
+            fi
+            # Discourage ticket-only titles like "feat: JIRA-123"
+            if [[ "$SUBJECT" =~ ^[A-Z]+-[0-9]+$ ]]; then
+              echo "::error::PR title summary cannot be only a ticket id. Describe the change (you can still mention the ticket in the body)."
+              FAILED=1
+            fi
+            if [ "$FAILED" -eq 0 ]; then
+              echo "✓ Title format looks good"
+            fi
+          fi
+
+          echo ""
+          echo "════════════════════════════════════════"
+          echo "Validating PR description"
+          echo "════════════════════════════════════════"
+
+          if [ -z "${PR_BODY//[[:space:]]/}" ]; then
+            echo "::error::PR description is empty. Fill in the pull request template."
+            FAILED=1
+          else
+            # Strip HTML comments (template hints) before checking content.
+            BODY_CLEAN=$(printf '%s\n' "$PR_BODY" | sed -e '/<!--/,/-->/d')
+
+            has_section() {
+              local heading="$1"
+              printf '%s\n' "$BODY_CLEAN" | grep -qiE "^#+[[:space:]]*${heading}[[:space:]]*$"
+            }
+
+            section_has_content() {
+              local heading="$1"
+              # Take lines after the heading until the next heading; require non-placeholder text.
+              printf '%s\n' "$BODY_CLEAN" | awk -v h="$heading" '
+                BEGIN { IGNORECASE=1; grab=0 }
+                /^#+[[:space:]]/ {
+                  if (grab) exit
+                  if (tolower($0) ~ "^#+[[:space:]]*" tolower(h) "[[:space:]]*$") { grab=1; next }
+                }
+                grab {
+                  line=$0
+                  gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+                  if (line == "") next
+                  if (line ~ /^<!--/) next
+                  # Empty checklist rows: "- [ ]" / "- [x]" with no text after
+                  if (line ~ /^- \[[ xX]\][[:space:]]*$/) next
+                  if (line ~ /^-[[:space:]]*$/) next
+                  if (line ~ /^\*\*.*\*\*$/) next
+                  if (line ~ /^\[.*\]$/) next
+                  if (line ~ /^_+$/ || line ~ /^\.\.\.$/) next
+                  low=tolower(line)
+                  if (low == "todo" || low == "tbd" || low == "n/a" || low == "na" || low == "-") next
+                  # Checklist with only whitespace-ish label still counts if there is text:
+                  # e.g. "- [x] Verified locally"
+                  found=1
+                  exit
+                }
+                END { exit found ? 0 : 1 }
+              '
+            }
+
+            if ! has_section "Summary"; then
+              echo "::error::PR description must include a '## Summary' section."
+              FAILED=1
+            elif ! section_has_content "Summary"; then
+              echo "::error::'## Summary' is present but empty. Describe what this PR changes and why."
+              FAILED=1
+            else
+              echo "✓ Summary section present"
+            fi
+
+            if ! has_section "Test plan"; then
+              echo "::error::PR description must include a '## Test plan' section."
+              FAILED=1
+            elif ! section_has_content "Test plan"; then
+              echo "::error::'## Test plan' is present but empty. List how this was / should be verified."
+              FAILED=1
+            else
+              echo "✓ Test plan section present"
+            fi
+
+            # Overall body length after stripping comments / blank lines.
+            CONTENT_LEN=$(printf '%s\n' "$BODY_CLEAN" | sed '/^[[:space:]]*$/d' | wc -c | tr -d ' ')
+            if [ "$CONTENT_LEN" -lt 40 ]; then
+              echo "::error::PR description is too short (${CONTENT_LEN} chars of content). Add more detail."
+              FAILED=1
+            fi
+          fi
+
+          if [ "$FAILED" -ne 0 ]; then
+            echo ""
+            echo "PR checks failed. Update the title/description and this check will re-run."
+            exit 1
+          fi
+
+          echo ""
+          echo "All PR title & description checks passed."
