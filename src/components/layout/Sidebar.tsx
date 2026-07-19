@@ -23,19 +23,22 @@ import { getNavItems } from '../../config/navConfig';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CSS filter that recolors a flat SVG (#64748b) to the active accent.
-// Only needed for `img`-kind nav icons. lucide icons follow `currentColor`,
-// so they pick up the theme's --theme-dark automatically when active.
+// Only needed for `img`-kind nav icons. lucide icons follow `currentColor`.
 // ─────────────────────────────────────────────────────────────────────────────
 const ACTIVE_FILTER =
   'brightness(0) saturate(100%) invert(20%) sepia(96%) saturate(1500%) hue-rotate(222deg) brightness(95%) contrast(98%)';
 
-// Shared class fragments (kept here so the four nav renderers stay in sync) ──
 const NAV_BASE =
-  'flex items-center gap-3 rounded-[12px] text-[14px] font-medium tracking-[-0.5px] transition-colors duration-150';
+  'flex items-center rounded-[12px] text-[14px] font-medium tracking-[-0.5px] transition-colors duration-150';
+
 const navPad = (collapsed: boolean) =>
-  collapsed ? 'lg:justify-center lg:px-0 lg:py-[10px] px-3 py-[10px]' : 'px-3 py-[10px]';
+  collapsed
+    ? 'px-3 py-[10px] gap-3 lg:px-[10px] lg:py-[10px] lg:gap-0 lg:justify-center'
+    : 'px-3 py-[10px] gap-3';
+
 const NAV_ACTIVE = 'bg-[var(--theme-light)] text-[var(--theme-dark)]';
-const NAV_IDLE = 'text-[#64748b] hover:bg-gray-50 hover:text-gray-900';
+const NAV_IDLE   = 'text-[#64748b] hover:bg-gray-50 hover:text-gray-900';
+
 const labelSpan = (collapsed: boolean) =>
   [
     'whitespace-nowrap overflow-hidden transition-all duration-300',
@@ -43,8 +46,7 @@ const labelSpan = (collapsed: boolean) =>
   ].join(' ');
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Admin-only contextual sub-navigation (shown only on the matching /admin/* page).
-// These are lucide icons so they inherit the theme via currentColor.
+// Admin-only contextual sub-navigation
 // ─────────────────────────────────────────────────────────────────────────────
 const settingsNavItems = [
   { hash: '#general',       Icon: Settings, label: 'General Settings'  },
@@ -60,16 +62,6 @@ const subscriptionNavItems = [{ Icon: CreditCard, label: 'Subscription & Pricing
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
-function formatRole(role?: string): string {
-  if (!role) return '';
-  return role
-    .split('_')
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(' ');
-}
-
-// Section header shown above the main nav, per primary role.
-// Employee intentionally shows no header (matches the original employee layout).
 function consoleLabel(roles?: string[]): string | null {
   const r = roles ?? [];
   if (r.includes('app_admin')) return 'Admin Console';
@@ -93,7 +85,6 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
   const navigate = useNavigate();
   const location = useLocation();
 
-  // ── Read ui_session cookie — re-reads on profile update event ──────────
   const [session, setSession] = useState<UiSession | null>(null);
   useEffect(() => {
     setSession(getUiSession());
@@ -102,14 +93,11 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
     return () => window.removeEventListener('ui-session-updated', handler);
   }, []);
 
-  // ── Derived display values ─────────────────────────────────────────────
   const navItems      = getNavItems(session?.roles);
   const fullName      = session ? `${session.first_name} ${session.last_name}`.trim() || 'User' : 'User';
   const avatarUrl     = getFileUrl(session?.profile ?? null);
-  const roleLabel     = formatRole(session?.roles?.[0]);
   const sectionHeader = consoleLabel(session?.roles);
 
-  // ── Admin sub-page context (drives which contextual block renders) ──────
   const isSettingsPage            = location.pathname.startsWith('/admin/settings');
   const isVisaTypesPage           = location.pathname.startsWith('/admin/visa-types');
   const isSubscriptionPricingPage = location.pathname.startsWith('/admin/subscription-pricing');
@@ -121,7 +109,6 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
     navigate('/login');
   };
 
-  // ── Renderers ───────────────────────────────────────────────────────────
   const renderSectionHeader = (text: string) => (
     <div
       className={[
@@ -133,7 +120,6 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
     </div>
   );
 
-  // Main role-based nav item (navConfig shape: { to, icon, label }) ─────────
   const renderNavItem = ({ to, icon, label }: ReturnType<typeof getNavItems>[number]) => (
     <NavLink
       key={to}
@@ -178,8 +164,13 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
         ].join(' ')}
       >
         {/* ── Logo ─────────────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between px-6 h-[72px] border-b border-[#f1f5f9] shrink-0">
-          <div className="flex items-center gap-2 overflow-hidden">
+        <div className={['flex items-center h-[72px] border-b border-[#f1f5f9] shrink-0 transition-all duration-300', collapsed ? 'lg:justify-center lg:px-0 px-6 justify-between' : 'px-6 justify-between'].join(' ')}>
+          <div
+            className={[
+              'flex items-center overflow-hidden transition-all duration-300',
+              collapsed ? 'lg:gap-0' : 'gap-2',
+            ].join(' ')}
+          >
             <div
               className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)]"
               style={{ background: 'linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)' }}
@@ -201,8 +192,13 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
         </div>
 
         {/* ── Profile ──────────────────────────────────────────────────── */}
-        <div className="px-6 py-6 border-b border-[#f1f5f9] shrink-0">
-          <div className={['flex items-center gap-3', collapsed ? 'lg:justify-center' : ''].join(' ')}>
+        <div className={['border-b border-[#f1f5f9] shrink-0 py-6 transition-all duration-300', collapsed ? 'lg:px-0 px-6' : 'px-6'].join(' ')}>
+          <div
+            className={[
+              'flex items-center transition-all duration-300',
+              collapsed ? 'lg:justify-center lg:gap-0' : 'gap-3',
+            ].join(' ')}
+          >
             <div className="relative shrink-0">
               {avatarUrl ? (
                 <img
@@ -228,18 +224,12 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
               <p className="text-[18px] font-semibold text-[#0f172a] tracking-[-0.5px] whitespace-nowrap leading-[18px]">
                 {fullName}
               </p>
-              {roleLabel && (
-                <p className="text-[12px] text-[#64748b] tracking-[-0.5px] whitespace-nowrap leading-[16px] mt-0.5">
-                  {roleLabel}
-                </p>
-              )}
             </div>
           </div>
         </div>
 
         {/* ── Nav ──────────────────────────────────────────────────────── */}
-        <nav className="flex-1 px-4 py-6 flex flex-col gap-1 overflow-y-auto">
-          {/* Main role-based nav — hidden while on an admin sub-page */}
+        <nav className={['flex-1 py-6 flex flex-col gap-1 overflow-y-auto transition-all duration-300', collapsed ? 'lg:px-2 px-4' : 'px-4'].join(' ')}>
           {!isAdminSubPage && (
             <>
               {sectionHeader && renderSectionHeader(sectionHeader)}
@@ -247,7 +237,6 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
             </>
           )}
 
-          {/* Admin → System Settings (hash-routed sub-nav) */}
           {isSettingsPage && (
             <>
               {renderSectionHeader('System Configuration')}
@@ -269,7 +258,6 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
             </>
           )}
 
-          {/* Admin → Visa Types (display-only context) */}
           {isVisaTypesPage && (
             <>
               {renderSectionHeader('Admin Console')}
@@ -286,7 +274,6 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
             </>
           )}
 
-          {/* Admin → Subscription & Pricing (display-only context) */}
           {isSubscriptionPricingPage && (
             <>
               {renderSectionHeader('Admin Console')}
@@ -305,7 +292,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
         </nav>
 
         {/* ── Sign out ─────────────────────────────────────────────────── */}
-        <div className="px-4 py-4 border-t border-[#f1f5f9] shrink-0">
+        <div className={['py-4 border-t border-[#f1f5f9] shrink-0 transition-all duration-300', collapsed ? 'lg:px-2 px-4' : 'px-4'].join(' ')}>
           <button
             onClick={handleLogout}
             title={collapsed ? 'Sign out' : undefined}

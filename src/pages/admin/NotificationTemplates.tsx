@@ -3,6 +3,7 @@
 // Cleaned: inline SVG icons → common/ + notification-templates/ folders
 
 import { useState, useEffect, useMemo } from "react";
+import AdminBackButton from "../../components/admin/AdminBackButton";
 import { fetchTemplates, toggleTemplate, deleteTemplate, createTemplate } from "../../api/admin/notificationTemplates.api";
 import type { NotificationTemplate, CreateTemplatePayload } from "../../types/admin/notificationTemplates.types";
 
@@ -315,6 +316,9 @@ export default function NotificationTemplates() {
   return (
     <div style={{ minHeight: "100vh", background: "#f9fafb", fontFamily: "'Inter', sans-serif" }}>
       <main className="p-4 sm:p-8" style={{ maxWidth: 1440, width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: 24 }}>
+
+        {/* Back navigation — top-left, above the page header (desktop + mobile). */}
+        <AdminBackButton className="!mb-0" />
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>

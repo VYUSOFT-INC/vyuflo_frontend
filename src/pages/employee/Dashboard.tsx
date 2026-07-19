@@ -6,24 +6,20 @@ import {
   FileText, FileCheck2, Upload, Clock, Calendar, AlertTriangle, CheckCircle2,
   ChevronRight, ArrowRight, MessageSquare, Phone, Mail, CreditCard, DollarSign,
   ShieldCheck, CircleDot, Circle, X, Info, Send, Briefcase,
-  ClipboardList, CalendarClock, ExternalLink,
+  ClipboardList, CalendarClock, ExternalLink, HelpCircle,
 } from 'lucide-react';
 import { PageHeader, PageContent } from '../../components/layout/Pageheader';
 import { useCurrentUser } from '../../hooks/useAuth';
 import { useDashboard } from '../../hooks/employee/useDashboard';
+import { DashboardTour } from '../../components/tour/DashboardTour';
+import type { TourUser } from '../../hooks/useDashboardTour';
+import { ComingSoonModal } from '../../components/common/ComingSoonModal';
 import type {
- CaseStageStatus, ActionItem, ActionPriority, ActionCategory,
+  CaseStageStatus, ActionItem, ActionPriority, ActionCategory,
   DocumentSummaryItem, DocStatus, Deadline, DeadlineUrgency,
   ActivityItem, ActivityType, CaseTeamMember,
 } from '../../types/employee/dashboard.types';
 
-// ── Attorney-driven client actions ──────────────────────────────────
-//   • Requested docs — attorney asked for a NEW file
-//       (from /documents/requests/my-pending).
-//   • Rejected docs  — attorney sent a doc back for re-upload
-//       (from /documents/my-rejected).
-// Neither endpoint is folded into backend action_items, so we merge
-// them into the Action Items list ourselves — sorted newest-first.
 import { requestedDocumentsApi } from '../../api/employee/requestedDocuments.api';
 import type { RequestedDocument } from '../../types/employee/documentRequests.types';
 import { rejectedDocumentsApi } from '../../api/employee/rejectedDocuments.api';
@@ -131,9 +127,12 @@ const ownerLabel: Record<string, string> = {
 // REUSABLE UI PRIMITIVES
 // ─────────────────────────────────────────────────────────────────────────────
 
-function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
+function Card({ children, className = '', tourId }: { children: ReactNode; className?: string; tourId?: string }) {
   return (
-    <div className={`bg-white border border-[#f1f5f9] rounded-[16px] shadow-[0px_1px_2px_rgba(0,0,0,0.04)] ${className}`}>
+    <div
+      data-tour={tourId}
+      className={`bg-white border border-[#f1f5f9] rounded-[16px] shadow-[0px_1px_2px_rgba(0,0,0,0.04)] ${className}`}
+    >
       {children}
     </div>
   );
@@ -340,13 +339,10 @@ function TeamMemberCard({ m }: { m: CaseTeamMember }) {
   const initials = m.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
   const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6'];
   const color = COLORS[m.name.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length];
-
   return (
     <div className="flex items-center gap-[10px] py-[10px] border-b border-[#f1f5f9] last:border-b-0">
       <div className="size-[36px] rounded-full flex items-center justify-center text-white text-[12px] font-semibold shrink-0"
-           style={{ backgroundColor: color }}>
-        {initials}
-      </div>
+           style={{ backgroundColor: color }}>{initials}</div>
       <div className="min-w-0 flex-1">
         <p className="text-[13px] font-semibold text-[#0f172a] tracking-[-0.5px] truncate">{m.name}</p>
         <p className="text-[11px] text-[#94a3b8] tracking-[-0.5px]">
@@ -375,7 +371,7 @@ function TeamMemberCard({ m }: { m: CaseTeamMember }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// READINESS RING (SVG donut)
+// READINESS RING
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ReadinessDonut({ score }: { score: number }) {
@@ -423,9 +419,8 @@ export default function Dashboard() {
   const [docFilter, setDocFilter] = useState<DocFilter>('all');
   const [showAllActions, setShowAllActions] = useState(false);
   const [activityDrawer, setActivityDrawer] = useState(false);
+  const [showConsultation, setShowConsultation] = useState(false);
 
-  // ── Attorney-driven action lists ────────────────────────────────────
-  // Fetched separately from backend action_items and merged in below.
   const [requestedDocs, setRequestedDocs] = useState<RequestedDocument[]>([]);
   const [rejectedDocs,  setRejectedDocs]  = useState<MyRejectedDocument[]>([]);
   useEffect(() => {
@@ -439,9 +434,6 @@ export default function Dashboard() {
     return () => { cancelled = true; };
   }, []);
 
-  // Field-name safe timestamp extractor — backend fields vary
-  // (requested_at / created_at / updated_at / rejected_at, etc.).
-  // Items with no timestamp float to the top.
   const pickTs = (obj: Record<string, unknown>, keys: string[]): number => {
     for (const k of keys) {
       const v = obj[k];
@@ -455,7 +447,6 @@ export default function Dashboard() {
 
   const firstName = user?.first_name ?? 'there';
 
-  // Requested docs → "Upload <docname>" action items.
   const requestedAsActions = useMemo<Array<ActionItem & { _sortAt: number }>>(() => {
     return requestedDocs
       .map((r) => {
@@ -490,12 +481,9 @@ export default function Dashboard() {
       .sort((a, b) => b._sortAt - a._sortAt);
   }, [requestedDocs]);
 
-  // Rejected docs → "Re-upload <filename>" action items.
   const rejectedAsActions = useMemo<Array<ActionItem & { _sortAt: number }>>(() => {
     return rejectedDocs
       .map((r) => {
-        // rejection_reason is often serialized as
-        // "Category: X | Severity: Y | Due: … | Details: …"
         const rr = r.rejection_reason || '';
         const priorityMatch = rr.match(/Severity:\s*(\w+)/i);
         const dueMatch      = rr.match(/Due:\s*([\d-]+)/i);
@@ -530,10 +518,6 @@ export default function Dashboard() {
   const pendingActions = useMemo(
     () => {
       const backend = (data?.action_items ?? []).filter(a => !a.completed);
-      // Interleave attorney-driven items (requested + rejected) by
-      // timestamp — newest first — so the latest attorney action lands
-      // at the top of the list regardless of type. Backend action_items
-      // follow after. Dedupe by id.
       const seen = new Set(backend.map((a) => a.id));
       const attorneyDriven = [
         ...rejectedAsActions,
@@ -549,22 +533,19 @@ export default function Dashboard() {
     },
     [data, requestedAsActions, rejectedAsActions],
   );
+
   const completedActions = useMemo(
-    () => (data?.action_items ?? []).filter(a => a.completed),
-    [data],
+    () => (data?.action_items ?? []).filter(a => a.completed), [data],
   );
 
   const filteredDocs = useMemo(() => {
     const docs = data?.documents ?? [];
-    return docs.filter((d) => {
-      if (docFilter !== 'all' && d.status !== docFilter) return false;
-      return true;
-    });
+    return docs.filter(d => docFilter === 'all' || d.status === docFilter);
   }, [data, docFilter]);
 
   const docCounts = useMemo(() => {
     if (!data) return { verified: 0, review: 0, action: 0, missing: 0 };
-    const docs = data?.documents ?? [];
+    const docs = data.documents ?? [];
     return {
       verified: docs.filter(d => d.status === 'verified').length,
       review:   docs.filter(d => d.status === 'pending_review').length,
@@ -587,36 +568,37 @@ export default function Dashboard() {
         searchValue={search}
         searchPlaceholder="Search documents, deadlines..."
         onSearchChange={setSearch}
+        actions={
+          <button
+            onClick={() => window.dispatchEvent(new Event('visaflow:start-tour'))}
+            title="Take the tour"
+            className="size-[34px] rounded-[10px] border border-[#e2e8f0] flex items-center justify-center text-[#64748b] hover:bg-[#f8fafc] hover:text-indigo-600 transition"
+          >
+            <HelpCircle size={16} />
+          </button>
+        }
       />
 
       <PageContent>
         {isLoading && !data ? (
           <div className="flex flex-col gap-[20px]">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[16px]">
-              {[0, 1, 2, 3].map(i => <SkeletonCard key={i} h={130} />)}
+              {[0,1,2,3].map(i => <SkeletonCard key={i} h={130} />)}
             </div>
             <div className="grid grid-cols-1 xl:grid-cols-[5fr_3fr] gap-[20px]">
-              <SkeletonCard h={500} />
-              <SkeletonCard h={500} />
+              <SkeletonCard h={500} /><SkeletonCard h={500} />
             </div>
           </div>
         ) : data && (
           <div className="flex flex-col gap-[20px] sm:gap-[24px]">
 
-            {/* ════════════════════════════════════════════════════════════════
-                1. KPI ROW
-            ════════════════════════════════════════════════════════════════ */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[16px]">
-              <KpiCard
-                label="Case Progress"
-                value={`${cs?.overall_progress ?? 0}%`}
+            {/* ── 1. KPI ROW ── */}
+            <div data-tour="kpi" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[16px]">
+              <KpiCard label="Case Progress" value={`${cs?.overall_progress ?? 0}%`}
                 icon={<ShieldCheck size={17} />} iconBg="#eef2ff" iconColor={PRIMARY}
                 sub={<p className="text-[12px] text-[#64748b] tracking-[-0.5px]">{cs?.visa_label ?? 'No active case'}</p>}
-                accent={PRIMARY_GRADIENT}
-              />
-              <KpiCard
-                label="Documents"
-                value={`${s?.documents_verified ?? 0}/${s?.documents_total ?? 0}`}
+                accent={PRIMARY_GRADIENT} />
+              <KpiCard label="Documents" value={`${s?.documents_verified ?? 0}/${s?.documents_total ?? 0}`}
                 icon={<FileCheck2 size={17} />} iconBg="#f0fdf4" iconColor="#16a34a"
                 sub={
                   <div className="flex items-center gap-[8px]">
@@ -630,17 +612,12 @@ export default function Dashboard() {
                       </span>
                     )}
                   </div>
-                }
-              />
-              <KpiCard
-                label="Processing Time"
-                value={s?.processing_days_elapsed ?? 0}
+                } />
+              <KpiCard label="Processing Time" value={s?.processing_days_elapsed ?? 0}
                 suffix={`/ ${s?.processing_days_estimated ?? '—'} days`}
                 icon={<Clock size={17} />} iconBg="#fff7ed" iconColor="#ea580c"
-                sub={<p className="text-[12px] text-[#64748b] tracking-[-0.5px]">{s?.processing_type ?? 'Standard'}</p>}
-              />
-              <KpiCard
-                label="Next Deadline"
+                sub={<p className="text-[12px] text-[#64748b] tracking-[-0.5px]">{s?.processing_type ?? 'Standard'}</p>} />
+              <KpiCard label="Next Deadline"
                 value={s?.next_deadline_days !== undefined ? `${s.next_deadline_days}d` : '—'}
                 icon={<AlertTriangle size={17} />}
                 iconBg={(s?.next_deadline_days ?? 99) <= 7 ? '#fef2f2' : '#eff6ff'}
@@ -650,47 +627,32 @@ export default function Dashboard() {
                      style={{ color: (s?.next_deadline_days ?? 99) <= 7 ? '#dc2626' : '#64748b' }}>
                     {s?.next_deadline_label ?? 'No upcoming deadlines'}
                   </p>
-                }
-              />
+                } />
             </div>
 
-            {/* ════════════════════════════════════════════════════════════════
-                2. MAIN GRID
-            ════════════════════════════════════════════════════════════════ */}
+            {/* ── 2. MAIN GRID ── */}
             <div className="grid grid-cols-1 xl:grid-cols-[5fr_3fr] gap-[20px]">
 
-              {/* ── LEFT COLUMN ── */}
+              {/* LEFT COLUMN */}
               <div className="flex flex-col gap-[20px] min-w-0">
 
-                {/* ── ACTION ITEMS + CASE PIPELINE (single combined card) ── */}
+                {/* ACTION ITEMS + CASE PIPELINE */}
                 <Card>
-
-                  {/* Case Pipeline header — sits at top of card */}
                   {cs && (
-                    <div className="px-[20px] pt-[18px] pb-[16px] border-b border-[#f1f5f9]">
-
-                      {/* Visa label row */}
+                    <div data-tour="pipeline" className="px-[20px] pt-[18px] pb-[16px] border-b border-[#f1f5f9]">
                       <div className="flex items-center justify-between gap-[12px] mb-[14px]">
                         <div className="flex items-center gap-[6px] min-w-0 flex-wrap">
                           <span className="text-[13px] font-semibold text-[#0f172a] tracking-[-0.5px]">
                             {cs.visa_type} · {cs.visa_label}
                           </span>
-                          {cs.case_number && (
-                            <span className="text-[11px] text-[#94a3b8] tracking-[-0.3px]">{cs.case_number}</span>
-                          )}
-                          {cs.filed_date && (
-                            <span className="text-[11px] text-[#94a3b8] tracking-[-0.3px]">· Filed {fmtDateShort(cs.filed_date)}</span>
-                          )}
+                          {cs.case_number && <span className="text-[11px] text-[#94a3b8] tracking-[-0.3px]">{cs.case_number}</span>}
+                          {cs.filed_date && <span className="text-[11px] text-[#94a3b8] tracking-[-0.3px]">· Filed {fmtDateShort(cs.filed_date)}</span>}
                         </div>
-                        <button
-                          onClick={() => navigate(`/applications/${cs.application_id}`)}
-                          className="text-[12px] font-medium text-indigo-600 tracking-[-0.5px] hover:underline inline-flex items-center gap-[3px] shrink-0"
-                        >
+                        <button onClick={() => navigate(`/applications/${cs.application_id}`)}
+                          className="text-[12px] font-medium text-indigo-600 tracking-[-0.5px] hover:underline inline-flex items-center gap-[3px] shrink-0">
                           View Case <ExternalLink size={11} />
                         </button>
                       </div>
-
-                      {/* Step tracker — circles + connector lines + labels */}
                       <div className="flex items-start overflow-x-auto py-[4px]">
                         {cs.stages.map((st, i) => {
                           const tok = stageToken(st.status);
@@ -700,16 +662,12 @@ export default function Dashboard() {
                             st.status === 'completed' ? 'Completed' :
                             st.status === 'active'    ? 'In Progress' :
                             st.status === 'blocked'   ? 'Blocked' : 'Pending';
-
                           return (
                             <div key={st.key} className="flex items-start flex-1 min-w-0" style={{ minWidth: 72 }}>
-                              {/* Node column */}
                               <div className="flex flex-col items-center w-full">
-                                {/* Circle row (circle + connector) */}
                                 <div className="flex items-center w-full">
                                   <div className="flex flex-col items-center flex-1">
-                                    <div
-                                      className="flex items-center justify-center rounded-full shrink-0 size-[24px] transition-all"
+                                    <div className="flex items-center justify-center rounded-full shrink-0 size-[24px] transition-all"
                                       style={{
                                         backgroundColor:
                                           st.status === 'completed' ? '#22c55e' :
@@ -718,54 +676,27 @@ export default function Dashboard() {
                                         border: `2px solid ${
                                           st.status === 'completed' ? '#22c55e' :
                                           st.status === 'active'    ? 'var(--theme-primary)' :
-                                          st.status === 'blocked'   ? '#ef4444' : '#cbd5e1'
-                                        }`,
+                                          st.status === 'blocked'   ? '#ef4444' : '#cbd5e1'}`,
                                         boxShadow: isCurrent ? '0 0 0 4px #e0e7ff' : 'none',
-                                      }}
-                                    >
+                                      }}>
                                       {st.status === 'completed' && <CheckCircle2 size={12} className="text-white" />}
                                       {st.status === 'active'    && <div className="size-[6px] rounded-full bg-white" />}
                                       {st.status === 'blocked'   && <AlertTriangle size={10} className="text-white" />}
                                     </div>
                                   </div>
-
-                                  {/* Connector line */}
                                   {!isLast && (
-                                    <div
-                                      className="h-[2px] flex-1"
-                                      style={{
-                                        backgroundColor:
-                                          cs.stages[i + 1]?.status === 'completed' ||
-                                          cs.stages[i + 1]?.status === 'active'
-                                            ? '#c7d2fe' : '#e2e8f0',
-                                      }}
-                                    />
+                                    <div className="h-[2px] flex-1" style={{
+                                      backgroundColor:
+                                        cs.stages[i + 1]?.status === 'completed' || cs.stages[i + 1]?.status === 'active'
+                                          ? '#c7d2fe' : '#e2e8f0',
+                                    }} />
                                   )}
                                 </div>
-
-                                {/* Step number */}
-                                <span className="text-[9px] font-semibold uppercase tracking-[0.05em] text-[#94a3b8] mt-[5px]">
-                                  Step {i + 1}
-                                </span>
-
-                                {/* Stage label */}
-                                <span
-                                  className="text-[10px] font-semibold tracking-[-0.3px] text-center leading-[13px] mt-[2px] px-[4px]"
-                                  style={{ color: tok.text }}
-                                >
-                                  {st.label}
-                                </span>
-
-                                {/* Status */}
-                                <span
-                                  className="text-[10px] font-medium tracking-[-0.3px] mt-[2px]"
-                                  style={{
-                                    color:
-                                      st.status === 'completed' ? '#16a34a' :
-                                      st.status === 'active'    ? 'var(--theme-primary)' :
-                                      st.status === 'blocked'   ? '#dc2626' : '#94a3b8',
-                                  }}
-                                >
+                                <span className="text-[9px] font-semibold uppercase tracking-[0.05em] text-[#94a3b8] mt-[5px]">Step {i + 1}</span>
+                                <span className="text-[10px] font-semibold tracking-[-0.3px] text-center leading-[13px] mt-[2px] px-[4px]"
+                                      style={{ color: tok.text }}>{st.label}</span>
+                                <span className="text-[10px] font-medium tracking-[-0.3px] mt-[2px]"
+                                      style={{ color: st.status === 'completed' ? '#16a34a' : st.status === 'active' ? 'var(--theme-primary)' : st.status === 'blocked' ? '#dc2626' : '#94a3b8' }}>
                                   {statusLabel}
                                 </span>
                               </div>
@@ -773,8 +704,6 @@ export default function Dashboard() {
                           );
                         })}
                       </div>
-
-                      {/* Active stage note */}
                       {cs.stages.find(st => st.key === cs.current_stage)?.note && (
                         <div className="mt-[10px] bg-indigo-50 border border-indigo-200 rounded-[8px] px-[10px] py-[7px] flex items-start gap-[6px]">
                           <Info size={12} className="text-indigo-600 shrink-0 mt-[1px]" />
@@ -786,49 +715,43 @@ export default function Dashboard() {
                     </div>
                   )}
 
-                  {/* Action Items section */}
-                  <CardHeader
-                    title="Action Items"
-                    subtitle={`${pendingActions.length} pending · ${completedActions.length} completed`}
-                    action={
-                      pendingActions.length > 3 ? (
-                        <button onClick={() => setShowAllActions(!showAllActions)}
-                          className="text-[12px] font-medium text-indigo-600 tracking-[-0.5px] hover:underline inline-flex items-center gap-[3px]">
-                          {showAllActions ? 'Show less' : 'View all'} <ChevronRight size={12} />
-                        </button>
-                      ) : undefined
-                    }
-                  />
-                  <div className="mt-[8px]">
-                    {pendingActions.length === 0 ? (
-                      <EmptyBlock
-                        icon={<CheckCircle2 size={20} />}
-                        title="All caught up"
-                        desc="You have no pending action items. We'll notify you when something needs your attention."
-                      />
-                    ) : (
-                      <>
-                        {(showAllActions ? pendingActions : pendingActions.slice(0, 4)).map(item => (
-                          <ActionRow key={item.id} item={item} onNavigate={navigate} />
-                        ))}
-                        {completedActions.length > 0 && showAllActions && (
-                          <>
-                            <p className="px-[16px] pt-[12px] pb-[4px] text-[10px] font-semibold uppercase tracking-[0.08em] text-[#94a3b8]">
-                              Completed
-                            </p>
-                            {completedActions.map(item => (
-                              <ActionRow key={item.id} item={item} onNavigate={navigate} />
-                            ))}
-                          </>
-                        )}
-                      </>
-                    )}
+                  <div data-tour="actions">
+                    <CardHeader
+                      title="Action Items"
+                      subtitle={`${pendingActions.length} pending · ${completedActions.length} completed`}
+                      action={
+                        pendingActions.length > 3 ? (
+                          <button onClick={() => setShowAllActions(!showAllActions)}
+                            className="text-[12px] font-medium text-indigo-600 tracking-[-0.5px] hover:underline inline-flex items-center gap-[3px]">
+                            {showAllActions ? 'Show less' : 'View all'} <ChevronRight size={12} />
+                          </button>
+                        ) : undefined
+                      }
+                    />
+                    <div className="mt-[8px]">
+                      {pendingActions.length === 0 ? (
+                        <EmptyBlock icon={<CheckCircle2 size={20} />} title="All caught up"
+                          desc="You have no pending action items. We'll notify you when something needs your attention." />
+                      ) : (
+                        <>
+                          {(showAllActions ? pendingActions : pendingActions.slice(0, 4)).map(item => (
+                            <ActionRow key={item.id} item={item} onNavigate={navigate} />
+                          ))}
+                          {completedActions.length > 0 && showAllActions && (
+                            <>
+                              <p className="px-[16px] pt-[12px] pb-[4px] text-[10px] font-semibold uppercase tracking-[0.08em] text-[#94a3b8]">Completed</p>
+                              {completedActions.map(item => <ActionRow key={item.id} item={item} onNavigate={navigate} />)}
+                            </>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
                 </Card>
 
-                {/* DOCUMENTS OVERVIEW */}
-                <Card>
-                  <CardHeader title="Documents" subtitle={`${data?.documents?.length ?? 0} total documents across your case`} />
+                {/* DOCUMENTS */}
+                <Card tourId="documents">
+                  <CardHeader title="Documents" subtitle={`${data.documents?.length ?? 0} total documents across your case`} />
                   <div className="px-[20px] mt-[8px] flex items-center gap-[8px] flex-wrap">
                     <span className="inline-flex items-center gap-[4px] px-[8px] py-[3px] rounded-[6px] bg-[#f0fdf4] text-[11px] font-medium text-[#15803d] tracking-[-0.3px]">
                       <CheckCircle2 size={11} /> {docCounts.verified} verified
@@ -851,8 +774,7 @@ export default function Dashboard() {
                     {DOC_FILTERS.map(f => (
                       <button key={f.key} onClick={() => setDocFilter(f.key)}
                         className={`h-[26px] px-[10px] rounded-[7px] text-[11px] font-medium tracking-[-0.5px] transition ${
-                          docFilter === f.key ? 'text-white shadow-sm' : 'bg-[#f1f5f9] text-[#64748b] hover:bg-[#e2e8f0]'
-                        }`}
+                          docFilter === f.key ? 'text-white shadow-sm' : 'bg-[#f1f5f9] text-[#64748b] hover:bg-[#e2e8f0]'}`}
                         style={docFilter === f.key ? { backgroundImage: PRIMARY_GRADIENT } : undefined}>
                         {f.label}
                       </button>
@@ -862,9 +784,7 @@ export default function Dashboard() {
                     {filteredDocs.length === 0 ? (
                       <EmptyBlock icon={<FileText size={20} />} title="No documents"
                         desc={docFilter === 'all' ? 'No documents yet.' : 'No documents match this filter.'} />
-                    ) : (
-                      filteredDocs.map(doc => <DocRow key={doc.id} doc={doc} />)
-                    )}
+                    ) : filteredDocs.map(doc => <DocRow key={doc.id} doc={doc} />)}
                   </div>
                   <div className="px-[16px] py-[14px] border-t border-[#f1f5f9]">
                     <button onClick={() => navigate('/documents/upload')}
@@ -877,9 +797,7 @@ export default function Dashboard() {
 
                 {/* RECENT ACTIVITY */}
                 <Card>
-                  <CardHeader
-                    title="Recent Activity"
-                    subtitle="Latest updates on your case"
+                  <CardHeader title="Recent Activity" subtitle="Latest updates on your case"
                     action={
                       <button onClick={() => setActivityDrawer(true)}
                         className="text-[12px] font-medium text-indigo-600 tracking-[-0.5px] hover:underline inline-flex items-center gap-[3px]">
@@ -888,33 +806,40 @@ export default function Dashboard() {
                     }
                   />
                   <div className="px-[20px] pb-[16px] divide-y divide-[#f1f5f9]">
-                    {data?.activity?.length ?? 0 === 0 ? (
+                    {(data.activity?.length ?? 0) === 0 ? (
                       <p className="text-[13px] text-[#94a3b8] py-[16px] text-center">No recent activity.</p>
                     ) : (
-                      (data?.activity ?? []).slice(0, 5).map(item => <ActivityRow key={item.id} item={item} />)
+                      (data.activity ?? []).slice(0, 5).map(item => <ActivityRow key={item.id} item={item} />)
                     )}
                   </div>
                 </Card>
               </div>
 
-              {/* ── RIGHT COLUMN ── */}
+              {/* RIGHT COLUMN */}
               <div className="flex flex-col gap-[20px] min-w-0">
 
                 {/* QUICK ACTIONS */}
-                <Card className="p-[20px] flex flex-col gap-[10px]">
+                <Card tourId="quick-actions" className="p-[20px] flex flex-col gap-[10px]">
                   <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[#64748b]">Quick Actions</span>
                   <div className="grid grid-cols-2 gap-[10px]">
                     {[
-                      { label: 'Upload Docs',      icon: <Upload size={15} />,        route: '/documents/upload' },
-                      { label: 'Messages',          icon: <MessageSquare size={15} />, route: '/messages' },
-                      { label: 'My Applications',   icon: <Briefcase size={15} />,     route: '/applications/list' },
-                      { label: 'Book Consultation', icon: <CalendarClock size={15} />, route: '/consultation' },
+                      { label: 'Upload Docs',      icon: <Upload size={15} />,        route: '/documents/upload',  comingSoon: false },
+                      { label: 'Messages',          icon: <MessageSquare size={15} />, route: '/messages',          comingSoon: false },
+                      { label: 'My Applications',   icon: <Briefcase size={15} />,     route: '/applications/list', comingSoon: false },
+                      { label: 'Book Consultation', icon: <CalendarClock size={15} />, route: null,                 comingSoon: true  },
                     ].map(qa => (
-                      <button key={qa.label} onClick={() => navigate(qa.route)}
+                      <button key={qa.label}
+                        onClick={() => qa.comingSoon ? setShowConsultation(true) : qa.route && navigate(qa.route)}
                         className="h-[42px] rounded-[10px] border border-[#e2e8f0] bg-white text-[12px] font-medium text-[#334155]
                                    tracking-[-0.5px] hover:bg-[#f8fafc] hover:border-indigo-200 transition
-                                   inline-flex items-center justify-center gap-[6px] shadow-[0px_1px_1px_rgba(0,0,0,0.04)]">
+                                   inline-flex items-center justify-center gap-[6px] shadow-[0px_1px_1px_rgba(0,0,0,0.04)] relative">
                         {qa.icon} {qa.label}
+                        {qa.comingSoon && (
+                          <span className="absolute -top-[6px] -right-[6px] bg-indigo-500 text-white text-[8px] font-bold
+                                           px-[5px] py-[1px] rounded-full leading-[14px] tracking-[0.02em]">
+                            SOON
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -922,16 +847,11 @@ export default function Dashboard() {
 
                 {/* UPCOMING DEADLINES */}
                 <Card>
-                  <CardHeader
-                    title="Upcoming Deadlines"
-                    subtitle={`${deadlines.length} deadlines in the next 90 days`}
-                  />
+                  <CardHeader title="Upcoming Deadlines" subtitle={`${deadlines.length} deadlines in the next 90 days`} />
                   <div className="px-[20px] pb-[16px]">
                     {deadlines.length === 0 ? (
                       <p className="text-[13px] text-[#94a3b8] py-[16px] text-center">No upcoming deadlines.</p>
-                    ) : (
-                      deadlines.slice(0, 5).map(dl => <DeadlineRow key={dl.id} dl={dl} />)
-                    )}
+                    ) : deadlines.slice(0, 5).map(dl => <DeadlineRow key={dl.id} dl={dl} />)}
                     {deadlines.length > 5 && (
                       <button className="mt-[8px] text-[12px] font-medium text-indigo-600 tracking-[-0.5px] hover:underline inline-flex items-center gap-[3px]">
                         View all deadlines <ArrowRight size={11} />
@@ -941,14 +861,12 @@ export default function Dashboard() {
                 </Card>
 
                 {/* CASE TEAM */}
-                <Card>
+                <Card tourId="team">
                   <CardHeader title="Your Case Team" />
                   <div className="px-[20px] pb-[16px]">
                     {data.case_team.length === 0 ? (
                       <p className="text-[13px] text-[#94a3b8] py-[16px] text-center">No team assigned yet.</p>
-                    ) : (
-                      data.case_team.map(m => <TeamMemberCard key={m.id} m={m} />)
-                    )}
+                    ) : data.case_team.map(m => <TeamMemberCard key={m.id} m={m} />)}
                     <button onClick={() => navigate('/messages')}
                       className="mt-[10px] w-full h-[36px] rounded-[10px] border border-indigo-200 text-indigo-600 text-[12px]
                                  font-semibold hover:bg-indigo-50 transition inline-flex items-center justify-center gap-[6px]">
@@ -1008,11 +926,7 @@ export default function Dashboard() {
         )}
       </PageContent>
 
-      {/* Activity Drawer */}
-      <Drawer
-        open={activityDrawer}
-        title="All Activity"
-        subtitle="Complete timeline of your case"
+      <Drawer open={activityDrawer} title="All Activity" subtitle="Complete timeline of your case"
         onClose={() => setActivityDrawer(false)}>
         <div className="divide-y divide-[#f1f5f9]">
           {data?.activity.map(item => (
@@ -1020,6 +934,16 @@ export default function Dashboard() {
           ))}
         </div>
       </Drawer>
+
+      <ComingSoonModal
+        open={showConsultation}
+        onClose={() => setShowConsultation(false)}
+        feature="Book Consultation"
+        description="Schedule 1-on-1 sessions with your immigration attorney directly through VisaFlow. We're finishing the last details."
+        eta="Coming soon"
+      />
+
+      <DashboardTour role="employee" user={user as TourUser | null} />
     </div>
   );
 }

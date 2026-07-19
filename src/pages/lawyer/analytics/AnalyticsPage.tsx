@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
   LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -101,6 +102,9 @@ export default function AnalyticsPage() {
   return (
     <div className="bg-slate-50 pb-24" style={{ fontFamily: "'Inter', sans-serif" }}>
       <main className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+
+        {/* Back navigation — top-left, above the page header (desktop + mobile). */}
+        <LawyerBackButton className="!mb-0" />
 
         {/* Header */}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
