@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useAuthStore }      from './store/authStore';
 import { getUiSession }      from './utils/uiSession';
@@ -6,81 +7,83 @@ import { getDashboardRoute } from './utils/navigation';
 import { ThemeProvider } from './theme/ThemeProvider';
 // ── layouts ──────────────────────────────────────────────────────────────────
 import { DashboardLayout } from './components/layout/DashboardLayout';
-// ── public pages ─────────────────────────────────────────────────────────────
-import Login            from './pages/public/Login';
-import ForgotPassword   from './pages/public/ForgotPassword';
-import Signup           from './pages/public/Signup';
-import ResetPasswordOTP from './pages/public/Resetpasswordotp';
-import ResetPasswordNew from './pages/public/ResetPasswordNew';
-import LinkedInCallback from './pages/public/LinkedInCallback';
-import VisaChecklist    from './pages/public/VisaChecklist';
-// ── onboarding ───────────────────────────────────────────────────────────────
-import VerifyEmailPage  from './pages/signup/VerifyEmailPage';
-import ProfileSetupPage from './pages/signup/ProfileSetupPage';
-// ── employee pages ───────────────────────────────────────────────────────────
-import Dashboard             from './pages/employee/Dashboard';
-import ApplicationsList      from './pages/employee/ApplicationsList';
-import NewApplication        from './pages/employee/NewApplication';
-import ApplicationDetail     from './pages/employee/ApplicationDetail';
-import DocumentHub           from './pages/employee/DocumentHub';
-import DocumentUploadV2      from './pages/employee/DocumentUpload';
-import DocumentViewer        from './pages/employee/DocumentViewer';
-import SecureMessaging       from './pages/employee/SecureMessaging';
-import NotificationsCenterV2 from './pages/employee/NotificationsCenterV2';
-import ProfileSecurity       from './pages/employee/ProfileSecurity';
-import PaymentsScreen        from './pages/employee/PaymentsScreen';
-import SelectAttorney        from './pages/employee/SelectAttorney';
-import BookConsultation      from './pages/employee/BookConsultation';
-// ── hr pages ──────────────────────────────────────────────────────────────────
-import HRDashboard      from './pages/hr/HRDashboard';
-import HREmployees      from './pages/hr/HREmployees';
-import HRInviteEmployee from './pages/hr/HRInviteEmployees';
-import HREmployeeDetail from './pages/hr/HREmployeeDetail';
-import HRCreateCase from './pages/hr/HRCreateCase';
-import HRCasesList from './pages/hr/HRCasesList';
-import HRCaseDetail from './pages/hr/HRCaseDetail';
-import HRMessages from './pages/hr/HRMessages';
-import HRDeadlines from './pages/hr/HRDeadlines';
-import HRApprovalQueue from './pages/hr/HRApprovalQueue';
-import HRDocumentManagement from './pages/hr/HRDocumentManagement';
-import HRNotificationsCenter from './pages/hr/HRNotificationsCenter';
-// ── admin pages ──────────────────────────────────────────────────────────────
-import AdminDashboard         from './pages/admin/AdminDashboard';
-import UserManagement         from './pages/admin/UserManagement';
-import RevenueDashboard       from './pages/admin/RevenueDashboard';
-import AllTransactions        from './pages/admin/AllTransactions';
-import RolesPermissions       from './pages/admin/Roles&permissions';
-import SystemSettings         from './pages/admin/SystemSettings';
-import NotificationTemplates  from './pages/admin/NotificationTemplates';
-import VisaTypesManager       from './pages/admin/VisaTypesManager';
-import SystemAuditLogs        from './pages/admin/SystemAuditLogs';
-import SubscriptionPricing    from './pages/admin/SubscriptionPricing';
-import AdminHelpSupport       from './pages/admin/HelpSupport';
-// ── lawyer (attorney) pages ──────────────────────────────────────────────────
-import IntakeLanding      from './pages/lawyer/intake/IntakeLanding';
-import IntakeWizard       from './pages/lawyer/intake/IntakeWizard';
-import ClientIntakePortal from './pages/lawyer/intake/ClientIntakePortal';
-import DocumentQueue      from './pages/lawyer/documents/DocumentQueue';
-import DocumentReviewPage from './pages/lawyer/documents/DocumentReviewPage';
-import CalendarPage       from './pages/lawyer/calendar/CalendarPage';
-import ClientProfilePage  from './pages/lawyer/clients/ClientProfilePage';
-import AnalyticsPage      from './pages/lawyer/analytics/AnalyticsPage';
-import BillingDashboard    from './pages/lawyer/billing/BillingDashboard';
-import InvoicesList        from './pages/lawyer/billing/InvoicesList';
-import InvoiceDetail       from './pages/lawyer/billing/InvoiceDetail';
-import BillingClientsList  from './pages/lawyer/billing/BillingClientsList';
-import HelpHome           from './pages/lawyer/help/HelpHome';
-import ArticleDetail      from './pages/lawyer/help/ArticleDetail';
-import MyTickets          from './pages/lawyer/help/MyTickets';
-import TicketDetail       from './pages/lawyer/help/TicketDetail';
-import HelpNotifications  from './pages/lawyer/help/HelpNotifications';
-import LawyerMessagesPage from './pages/employee/SecureMessaging';
-import TemplateLibraryPage from './pages/lawyer/templates/TemplateLibraryPage';
-import NotificationsRemindersPage from './pages/lawyer/notifications/NotificationsRemindersPage';
-import LawyerSettingsPage from './pages/lawyer/settings/LawyerSettingsPage';
-import CaseListPage       from './pages/lawyer/cases/CaseListPage';
-import CaseDetailPage     from './pages/lawyer/cases/CaseDetailPage';
-import LawyerDashboardPage from './pages/lawyer/dashboard/LawyerDashboardPage';
+// ── ui ───────────────────────────────────────────────────────────────────────
+import { Spinner } from './components/ui/Spinner';
+// ── public pages (lazy) ──────────────────────────────────────────────────────
+const Login            = lazy(() => import('./pages/public/Login'));
+const ForgotPassword   = lazy(() => import('./pages/public/ForgotPassword'));
+const Signup           = lazy(() => import('./pages/public/Signup'));
+const ResetPasswordOTP = lazy(() => import('./pages/public/Resetpasswordotp'));
+const ResetPasswordNew = lazy(() => import('./pages/public/ResetPasswordNew'));
+const LinkedInCallback = lazy(() => import('./pages/public/LinkedInCallback'));
+const VisaChecklist    = lazy(() => import('./pages/public/VisaChecklist'));
+// ── onboarding (lazy) ────────────────────────────────────────────────────────
+const VerifyEmailPage  = lazy(() => import('./pages/signup/VerifyEmailPage'));
+const ProfileSetupPage = lazy(() => import('./pages/signup/ProfileSetupPage'));
+// ── employee pages (lazy) ────────────────────────────────────────────────────
+const Dashboard             = lazy(() => import('./pages/employee/Dashboard'));
+const ApplicationsList      = lazy(() => import('./pages/employee/ApplicationsList'));
+const NewApplication        = lazy(() => import('./pages/employee/NewApplication'));
+const ApplicationDetail     = lazy(() => import('./pages/employee/ApplicationDetail'));
+const DocumentHub           = lazy(() => import('./pages/employee/DocumentHub'));
+const DocumentUploadV2      = lazy(() => import('./pages/employee/DocumentUpload'));
+const DocumentViewer        = lazy(() => import('./pages/employee/DocumentViewer'));
+const SecureMessaging       = lazy(() => import('./pages/employee/SecureMessaging'));
+const NotificationsCenterV2 = lazy(() => import('./pages/employee/NotificationsCenterV2'));
+const ProfileSecurity       = lazy(() => import('./pages/employee/ProfileSecurity'));
+const PaymentsScreen        = lazy(() => import('./pages/employee/PaymentsScreen'));
+const SelectAttorney        = lazy(() => import('./pages/employee/SelectAttorney'));
+const BookConsultation      = lazy(() => import('./pages/employee/BookConsultation'));
+// ── hr pages (lazy) ──────────────────────────────────────────────────────────
+const HRDashboard      = lazy(() => import('./pages/hr/HRDashboard'));
+const HREmployees      = lazy(() => import('./pages/hr/HREmployees'));
+const HRInviteEmployee = lazy(() => import('./pages/hr/HRInviteEmployees'));
+const HREmployeeDetail = lazy(() => import('./pages/hr/HREmployeeDetail'));
+const HRCreateCase = lazy(() => import('./pages/hr/HRCreateCase'));
+const HRCasesList = lazy(() => import('./pages/hr/HRCasesList'));
+const HRCaseDetail = lazy(() => import('./pages/hr/HRCaseDetail'));
+const HRMessages = lazy(() => import('./pages/hr/HRMessages'));
+const HRDeadlines = lazy(() => import('./pages/hr/HRDeadlines'));
+const HRApprovalQueue = lazy(() => import('./pages/hr/HRApprovalQueue'));
+const HRDocumentManagement = lazy(() => import('./pages/hr/HRDocumentManagement'));
+const HRNotificationsCenter = lazy(() => import('./pages/hr/HRNotificationsCenter'));
+// ── admin pages (lazy) ───────────────────────────────────────────────────────
+const AdminDashboard         = lazy(() => import('./pages/admin/AdminDashboard'));
+const UserManagement         = lazy(() => import('./pages/admin/UserManagement'));
+const RevenueDashboard       = lazy(() => import('./pages/admin/RevenueDashboard'));
+const AllTransactions        = lazy(() => import('./pages/admin/AllTransactions'));
+const RolesPermissions       = lazy(() => import('./pages/admin/Roles&permissions'));
+const SystemSettings         = lazy(() => import('./pages/admin/SystemSettings'));
+const NotificationTemplates  = lazy(() => import('./pages/admin/NotificationTemplates'));
+const VisaTypesManager       = lazy(() => import('./pages/admin/VisaTypesManager'));
+const SystemAuditLogs        = lazy(() => import('./pages/admin/SystemAuditLogs'));
+const SubscriptionPricing    = lazy(() => import('./pages/admin/SubscriptionPricing'));
+const AdminHelpSupport       = lazy(() => import('./pages/admin/HelpSupport'));
+// ── lawyer (attorney) pages (lazy) ───────────────────────────────────────────
+const IntakeLanding      = lazy(() => import('./pages/lawyer/intake/IntakeLanding'));
+const IntakeWizard       = lazy(() => import('./pages/lawyer/intake/IntakeWizard'));
+const ClientIntakePortal = lazy(() => import('./pages/lawyer/intake/ClientIntakePortal'));
+const DocumentQueue      = lazy(() => import('./pages/lawyer/documents/DocumentQueue'));
+const DocumentReviewPage = lazy(() => import('./pages/lawyer/documents/DocumentReviewPage'));
+const CalendarPage       = lazy(() => import('./pages/lawyer/calendar/CalendarPage'));
+const ClientProfilePage  = lazy(() => import('./pages/lawyer/clients/ClientProfilePage'));
+const AnalyticsPage      = lazy(() => import('./pages/lawyer/analytics/AnalyticsPage'));
+const BillingDashboard    = lazy(() => import('./pages/lawyer/billing/BillingDashboard'));
+const InvoicesList        = lazy(() => import('./pages/lawyer/billing/InvoicesList'));
+const InvoiceDetail       = lazy(() => import('./pages/lawyer/billing/InvoiceDetail'));
+const BillingClientsList  = lazy(() => import('./pages/lawyer/billing/BillingClientsList'));
+const HelpHome           = lazy(() => import('./pages/lawyer/help/HelpHome'));
+const ArticleDetail      = lazy(() => import('./pages/lawyer/help/ArticleDetail'));
+const MyTickets          = lazy(() => import('./pages/lawyer/help/MyTickets'));
+const TicketDetail       = lazy(() => import('./pages/lawyer/help/TicketDetail'));
+const HelpNotifications  = lazy(() => import('./pages/lawyer/help/HelpNotifications'));
+const LawyerMessagesPage = lazy(() => import('./pages/employee/SecureMessaging'));
+const TemplateLibraryPage = lazy(() => import('./pages/lawyer/templates/TemplateLibraryPage'));
+const NotificationsRemindersPage = lazy(() => import('./pages/lawyer/notifications/NotificationsRemindersPage'));
+const LawyerSettingsPage = lazy(() => import('./pages/lawyer/settings/LawyerSettingsPage'));
+const CaseListPage       = lazy(() => import('./pages/lawyer/cases/CaseListPage'));
+const CaseDetailPage     = lazy(() => import('./pages/lawyer/cases/CaseDetailPage'));
+const LawyerDashboardPage = lazy(() => import('./pages/lawyer/dashboard/LawyerDashboardPage'));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Guards
@@ -112,6 +115,17 @@ function RoleRoute({ allowedRoles }: { allowedRoles: string[] }) {
   return <Outlet />;
 }
 
+/**
+ * PageFallback — full-screen spinner shown while a lazy route chunk loads.
+ */
+function PageFallback() {
+  return (
+    <div className="flex h-screen w-full items-center justify-center">
+      <Spinner size="lg" />
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // App
 // ─────────────────────────────────────────────────────────────────────────────
@@ -122,8 +136,9 @@ export default function App() {
   return (
     <ThemeProvider color={themeColor}>
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Navigate to="/login" replace />} />
+        <Suspense fallback={<PageFallback />}>
+          <Routes>
+            <Route path="/" element={<Navigate to="/login" replace />} />
 
           {/* ── Public (unauthenticated only) ──────────────────────────────── */}
           <Route element={<PublicRoute />}>
@@ -260,7 +275,8 @@ export default function App() {
 
           {/* ── Catch-all ────────────────────────────────────────────────────── */}
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </ThemeProvider>
   );
