@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 
 import { useAuthStore }      from './store/authStore';
@@ -10,89 +11,89 @@ import { ThemeProvider } from './theme/ThemeProvider';
 // ── layouts ──────────────────────────────────────────────────────────────────
 import { DashboardLayout } from './components/layout/DashboardLayout';
 
+// ── loading fallback ─────────────────────────────────────────────────────────
+import { Spinner } from './components/ui/Spinner';
+
 // ── public pages ─────────────────────────────────────────────────────────────
-import Login            from './pages/public/Login';
-import ForgotPassword   from './pages/public/ForgotPassword';
-import Signup           from './pages/public/Signup';
-import ResetPasswordOTP from './pages/public/Resetpasswordotp';
-import ResetPasswordNew from './pages/public/ResetPasswordNew';
-import LinkedInCallback from './pages/public/LinkedInCallback';
+const Login            = lazy(() => import('./pages/public/Login'));
+const ForgotPassword   = lazy(() => import('./pages/public/ForgotPassword'));
+const Signup           = lazy(() => import('./pages/public/Signup'));
+const ResetPasswordOTP = lazy(() => import('./pages/public/Resetpasswordotp'));
+const ResetPasswordNew = lazy(() => import('./pages/public/ResetPasswordNew'));
+const LinkedInCallback = lazy(() => import('./pages/public/LinkedInCallback'));
 
 // ── onboarding ───────────────────────────────────────────────────────────────
-import VerifyEmailPage  from './pages/signup/VerifyEmailPage';
-import ProfileSetupPage from './pages/signup/ProfileSetupPage';
+const VerifyEmailPage  = lazy(() => import('./pages/signup/VerifyEmailPage'));
+const ProfileSetupPage = lazy(() => import('./pages/signup/ProfileSetupPage'));
 
 // ── employee pages ───────────────────────────────────────────────────────────
-import Dashboard             from './pages/employee/Dashboard';
-import ApplicationsList      from './pages/employee/ApplicationsList';
-import NewApplication        from './pages/employee/NewApplication';
-import ApplicationDetail     from './pages/employee/ApplicationDetail';
-import DocumentHub           from './pages/employee/DocumentHub';
-import DocumentUploadV2      from './pages/employee/DocumentUpload';
-import DocumentViewer        from './pages/employee/DocumentViewer';
-import SecureMessaging       from './pages/employee/SecureMessaging';
-import NotificationsCenterV2 from './pages/employee/NotificationsCenterV2';
-import ProfileSecurity       from './pages/employee/ProfileSecurity';
-import PaymentsScreen        from './pages/employee/PaymentsScreen';
-import SelectAttorney        from './pages/employee/SelectAttorney';
-import BookConsultation      from './pages/employee/BookConsultation';
-
-
+const Dashboard             = lazy(() => import('./pages/employee/Dashboard'));
+const ApplicationsList      = lazy(() => import('./pages/employee/ApplicationsList'));
+const NewApplication        = lazy(() => import('./pages/employee/NewApplication'));
+const ApplicationDetail     = lazy(() => import('./pages/employee/ApplicationDetail'));
+const DocumentHub           = lazy(() => import('./pages/employee/DocumentHub'));
+const DocumentUploadV2      = lazy(() => import('./pages/employee/DocumentUpload'));
+const DocumentViewer        = lazy(() => import('./pages/employee/DocumentViewer'));
+const SecureMessaging       = lazy(() => import('./pages/employee/SecureMessaging'));
+const NotificationsCenterV2 = lazy(() => import('./pages/employee/NotificationsCenterV2'));
+const ProfileSecurity       = lazy(() => import('./pages/employee/ProfileSecurity'));
+const PaymentsScreen        = lazy(() => import('./pages/employee/PaymentsScreen'));
+const SelectAttorney        = lazy(() => import('./pages/employee/SelectAttorney'));
+const BookConsultation      = lazy(() => import('./pages/employee/BookConsultation'));
 
 // ── hr pages ──────────────────────────────────────────────────────────────────
-import HRDashboard      from './pages/hr/HRDashboard';
-import HREmployees      from './pages/hr/HREmployees';
-import HRInviteEmployee from './pages/hr/HRInviteEmployees';
-
-import HREmployeeDetail from './pages/hr/HREmployeeDetail';
-import HRCreateCase from './pages/hr/HRCreateCase';
-import HRCasesList from './pages/hr/HRCasesList';
-import HRCaseDetail from './pages/hr/HRCaseDetail';
-import HRMessages from './pages/hr/HRMessages';
-import HRDeadlines from './pages/hr/HRDeadlines';
-import HRApprovalQueue from './pages/hr/HRApprovalQueue';
-import HRDocumentManagement from './pages/hr/HRDocumentManagement';
-import HRNotificationsCenter from './pages/hr/HRNotificationsCenter';
+const HRDashboard      = lazy(() => import('./pages/hr/HRDashboard'));
+const HREmployees      = lazy(() => import('./pages/hr/HREmployees'));
+const HRInviteEmployee = lazy(() => import('./pages/hr/HRInviteEmployees'));
+const HREmployeeDetail = lazy(() => import('./pages/hr/HREmployeeDetail'));
+const HRCreateCase = lazy(() => import('./pages/hr/HRCreateCase'));
+const HRCasesList = lazy(() => import('./pages/hr/HRCasesList'));
+const HRCaseDetail = lazy(() => import('./pages/hr/HRCaseDetail'));
+const HRMessages = lazy(() => import('./pages/hr/HRMessages'));
+const HRDeadlines = lazy(() => import('./pages/hr/HRDeadlines'));
+const HRApprovalQueue = lazy(() => import('./pages/hr/HRApprovalQueue'));
+const HRDocumentManagement = lazy(() => import('./pages/hr/HRDocumentManagement'));
+const HRNotificationsCenter = lazy(() => import('./pages/hr/HRNotificationsCenter'));
 
 // ── admin pages ──────────────────────────────────────────────────────────────
-import AdminDashboard         from './pages/admin/AdminDashboard';
-import UserManagement         from './pages/admin/UserManagement';
-import RevenueDashboard       from './pages/admin/RevenueDashboard';
-import AllTransactions        from './pages/admin/AllTransactions';
-import RolesPermissions       from './pages/admin/Roles&permissions';
-import SystemSettings         from './pages/admin/SystemSettings';
-import NotificationTemplates  from './pages/admin/NotificationTemplates';
-import VisaTypesManager       from './pages/admin/VisaTypesManager';
-import SystemAuditLogs        from './pages/admin/SystemAuditLogs';
-import SubscriptionPricing    from './pages/admin/SubscriptionPricing';
-import AdminHelpSupport       from './pages/admin/HelpSupport';
+const AdminDashboard         = lazy(() => import('./pages/admin/AdminDashboard'));
+const UserManagement         = lazy(() => import('./pages/admin/UserManagement'));
+const RevenueDashboard       = lazy(() => import('./pages/admin/RevenueDashboard'));
+const AllTransactions        = lazy(() => import('./pages/admin/AllTransactions'));
+const RolesPermissions       = lazy(() => import('./pages/admin/Roles&permissions'));
+const SystemSettings         = lazy(() => import('./pages/admin/SystemSettings'));
+const NotificationTemplates  = lazy(() => import('./pages/admin/NotificationTemplates'));
+const VisaTypesManager       = lazy(() => import('./pages/admin/VisaTypesManager'));
+const SystemAuditLogs        = lazy(() => import('./pages/admin/SystemAuditLogs'));
+const SubscriptionPricing    = lazy(() => import('./pages/admin/SubscriptionPricing'));
+const AdminHelpSupport       = lazy(() => import('./pages/admin/HelpSupport'));
 
 // ── lawyer (attorney) pages ──────────────────────────────────────────────────
-import IntakeLanding      from './pages/lawyer/intake/IntakeLanding';
-import IntakeWizard       from './pages/lawyer/intake/IntakeWizard';
-import ClientIntakePortal from './pages/lawyer/intake/ClientIntakePortal';
-import DocumentQueue      from './pages/lawyer/documents/DocumentQueue';
-import DocumentReviewPage from './pages/lawyer/documents/DocumentReviewPage';
-import CalendarPage       from './pages/lawyer/calendar/CalendarPage';
-import ClientProfilePage  from './pages/lawyer/clients/ClientProfilePage';
-import AnalyticsPage      from './pages/lawyer/analytics/AnalyticsPage';
-import BillingDashboard    from './pages/lawyer/billing/BillingDashboard';
-import InvoicesList        from './pages/lawyer/billing/InvoicesList';
-import InvoiceDetail       from './pages/lawyer/billing/InvoiceDetail';
-import BillingClientsList  from './pages/lawyer/billing/BillingClientsList';
-import HelpHome           from './pages/lawyer/help/HelpHome';
-import ArticleDetail      from './pages/lawyer/help/ArticleDetail';
-import MyTickets          from './pages/lawyer/help/MyTickets';
-import TicketDetail       from './pages/lawyer/help/TicketDetail';
-import HelpNotifications  from './pages/lawyer/help/HelpNotifications';
+const IntakeLanding      = lazy(() => import('./pages/lawyer/intake/IntakeLanding'));
+const IntakeWizard       = lazy(() => import('./pages/lawyer/intake/IntakeWizard'));
+const ClientIntakePortal = lazy(() => import('./pages/lawyer/intake/ClientIntakePortal'));
+const DocumentQueue      = lazy(() => import('./pages/lawyer/documents/DocumentQueue'));
+const DocumentReviewPage = lazy(() => import('./pages/lawyer/documents/DocumentReviewPage'));
+const CalendarPage       = lazy(() => import('./pages/lawyer/calendar/CalendarPage'));
+const ClientProfilePage  = lazy(() => import('./pages/lawyer/clients/ClientProfilePage'));
+const AnalyticsPage      = lazy(() => import('./pages/lawyer/analytics/AnalyticsPage'));
+const BillingDashboard    = lazy(() => import('./pages/lawyer/billing/BillingDashboard'));
+const InvoicesList        = lazy(() => import('./pages/lawyer/billing/InvoicesList'));
+const InvoiceDetail       = lazy(() => import('./pages/lawyer/billing/InvoiceDetail'));
+const BillingClientsList  = lazy(() => import('./pages/lawyer/billing/BillingClientsList'));
+const HelpHome           = lazy(() => import('./pages/lawyer/help/HelpHome'));
+const ArticleDetail      = lazy(() => import('./pages/lawyer/help/ArticleDetail'));
+const MyTickets          = lazy(() => import('./pages/lawyer/help/MyTickets'));
+const TicketDetail       = lazy(() => import('./pages/lawyer/help/TicketDetail'));
+const HelpNotifications  = lazy(() => import('./pages/lawyer/help/HelpNotifications'));
 // Lawyer messages uses the shared SecureMessaging component (role-aware).
-import LawyerMessagesPage from './pages/employee/SecureMessaging';
-import TemplateLibraryPage from './pages/lawyer/templates/TemplateLibraryPage';
-import NotificationsRemindersPage from './pages/lawyer/notifications/NotificationsRemindersPage';
-import LawyerSettingsPage from './pages/lawyer/settings/LawyerSettingsPage';
-import CaseListPage       from './pages/lawyer/cases/CaseListPage';
-import CaseDetailPage     from './pages/lawyer/cases/CaseDetailPage';
-import LawyerDashboardPage from './pages/lawyer/dashboard/LawyerDashboardPage';
+const LawyerMessagesPage = lazy(() => import('./pages/employee/SecureMessaging'));
+const TemplateLibraryPage = lazy(() => import('./pages/lawyer/templates/TemplateLibraryPage'));
+const NotificationsRemindersPage = lazy(() => import('./pages/lawyer/notifications/NotificationsRemindersPage'));
+const LawyerSettingsPage = lazy(() => import('./pages/lawyer/settings/LawyerSettingsPage'));
+const CaseListPage       = lazy(() => import('./pages/lawyer/cases/CaseListPage'));
+const CaseDetailPage     = lazy(() => import('./pages/lawyer/cases/CaseDetailPage'));
+const LawyerDashboardPage = lazy(() => import('./pages/lawyer/dashboard/LawyerDashboardPage'));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Guards
@@ -137,6 +138,17 @@ function RoleRoute({ allowedRoles }: { allowedRoles: string[] }) {
   return <Outlet />;
 }
 
+/**
+ * PageFallback — full-screen spinner shown while a lazy route chunk loads.
+ */
+function PageFallback() {
+  return (
+    <div className="flex h-screen w-full items-center justify-center">
+      <Spinner size="lg" />
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // App
 // ─────────────────────────────────────────────────────────────────────────────
@@ -149,170 +161,172 @@ export default function App() {
   return (
     <ThemeProvider color={themeColor}>
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Navigate to="/login" replace />} />
+        <Suspense fallback={<PageFallback />}>
+          <Routes>
+            <Route path="/" element={<Navigate to="/login" replace />} />
 
-          {/* ── Public (unauthenticated only) ──────────────────────────────── */}
-          <Route element={<PublicRoute />}>
-            <Route path="/login"           element={<Login />} />
-            <Route path="/forgot-password" element={<ForgotPassword />} />
-          </Route>
-
-          {/* ── Signup (no auth required) ───────────────────────────────────── */}
-          <Route path="/signup" element={<Signup />} />
-
-          {/* ── Onboarding (token required, no role check) ──────────────────── */}
-          <Route element={<OnboardingRoute />}>
-            <Route path="/signup/verify-email"  element={<VerifyEmailPage />} />
-            <Route path="/signup/profile-setup" element={<ProfileSetupPage />} />
-          </Route>
-
-          {/* ── Password reset & OAuth callbacks (no auth needed) ───────────── */}
-          <Route path="/forgot-password/verify-otp"   element={<ResetPasswordOTP />} />
-          <Route path="/forgot-password/new-password" element={<ResetPasswordNew />} />
-          <Route path="/auth/linkedin/callback"       element={<LinkedInCallback />} />
-
-          {/* ── Client Intake Portal (PUBLIC — token-based, NO JWT) ─────────
-              Must be BEFORE the catch-all route. */}
-          <Route path="/intake/:token" element={<ClientIntakePortal />} />
-
-          {/* ── EMPLOYEE routes ─────────────────────────────────────────────── */}
-          <Route element={<RoleRoute allowedRoles={['employee']} />}>
-            <Route element={<DashboardLayout />}>
-              <Route path="/dashboard"                        element={<Dashboard />} />
-              <Route path="/applications/list"                element={<ApplicationsList />} />
-              <Route path="/applications/new"                 element={<NewApplication />} />
-              <Route path="/applications/:id"                 element={<ApplicationDetail />} />
-              <Route path="/documents"                        element={<DocumentHub />} />
-              <Route path="/documents/upload"                 element={<DocumentUploadV2 />} />
-              <Route path="/documents/viewer"                 element={<DocumentViewer />} />
-              <Route path="/messages"                         element={<SecureMessaging />} />
-              <Route path="/notifications"                    element={<NotificationsCenterV2 />} />
-              <Route path="/payments"                         element={<PaymentsScreen />} />
-              <Route path="/consultations"                    element={<SelectAttorney />} />
-              <Route path="/consultations/book/:attorneyId"   element={<BookConsultation />} />
-              <Route path="/profile"                          element={<ProfileSecurity />} />
-              <Route path="/profile/authentication"           element={<ProfileSecurity />} />
-              <Route path="/profile/mfa"                      element={<ProfileSecurity />} />
-              <Route path="/profile/login-history"            element={<ProfileSecurity />} />
-              <Route path="/profile/privacy"                  element={<ProfileSecurity />} />
-              <Route path="/profile/devices"                  element={<ProfileSecurity />} />
-              <Route path="/profile/session"                  element={<ProfileSecurity />} />
-              <Route path="/profile/security-alerts"          element={<ProfileSecurity />} />
-            </Route>
-          </Route>
-
-          {/* ── HR / EMPLOYER routes ────────────────────────────────────────── */}
-          <Route element={<RoleRoute allowedRoles={['hr']} />}>
-            <Route element={<DashboardLayout />}>
-              <Route path="/employer/dashboard" element={<HRDashboard />} />
-              <Route path="/employer/employees" element={<HREmployees />} />
-              <Route path="/employer/invite" element={<HRInviteEmployee />} />
-              <Route path="/employer/employees/:employeeLinkId" element={<HREmployeeDetail />} />
-              <Route path="/employer/cases" element={<HRCasesList />} />
-              <Route path="/employer/cases/new" element={<HRCreateCase />} />
-              <Route path="/employer/cases/:applicationId" element={<HRCaseDetail />} />
-              <Route path="/employer/messages" element={<HRMessages />} />
-              <Route path="/employer/deadlines" element={<HRDeadlines />} />
-              <Route path="/employer/approvals" element={<HRApprovalQueue />} />
-              <Route path="/employer/documents/:applicationId" element={<HRDocumentManagement />} />
-              <Route path="/employer/notifications" element={<HRNotificationsCenter />} />
-
-              {/* HR Profile & Settings */}
-              <Route path="/employer/profile" element={<ProfileSecurity />} />
-              <Route path="/employer/profile/authentication" element={<ProfileSecurity />} />
-              <Route path="/employer/profile/mfa" element={<ProfileSecurity />} />
-              <Route path="/employer/profile/login-history" element={<ProfileSecurity />} />
-              <Route path="/employer/profile/privacy" element={<ProfileSecurity />} />
-              <Route path="/employer/profile/devices" element={<ProfileSecurity />} />
-              <Route path="/employer/profile/session" element={<ProfileSecurity />} />
-              <Route path="/employer/profile/security-alerts" element={<ProfileSecurity />} />
-              {/* Optional compatibility route */}
-              <Route path="/profile" element={<ProfileSecurity />} />
-            </Route>
-          </Route>
-
-          {/* ── ADMIN routes ────────────────────────────────────────────────── */}
-          <Route element={<RoleRoute allowedRoles={['app_admin']} />}>
-            <Route element={<DashboardLayout />}>
-              <Route path="/admin/dashboard"                      element={<AdminDashboard />} />
-              <Route path="/admin/users"                          element={<UserManagement />} />
-              <Route path="/admin/revenue-dashboard"              element={<RevenueDashboard />} />
-              <Route path="/admin/revenue-dashboard/transactions" element={<AllTransactions />} />
-              <Route path="/admin/roles-permissions"              element={<RolesPermissions />} />
-              <Route path="/admin/settings"                       element={<SystemSettings />} />
-              <Route path="/admin/notification-templates"         element={<NotificationTemplates />} />
-              <Route path="/admin/visa-types"                     element={<VisaTypesManager />} />
-              <Route path="/admin/system-audit-logs"              element={<SystemAuditLogs />} />
-              <Route path="/admin/subscription-pricing"           element={<SubscriptionPricing />} />
-              <Route path="/admin/help-support"                   element={<AdminHelpSupport />} />
-            </Route>
-          </Route>
-
-          {/* ── ATTORNEY (LAWYER) routes ────────────────────────────────────── */}
-          <Route element={<RoleRoute allowedRoles={['attorney']} />}>
-            {/* Safety redirect — bare /lawyer lands on the dashboard */}
-            <Route path="/lawyer" element={<Navigate to="/lawyer/dashboard" replace />} />
-
-            {/* Pages WITH DashboardLayout (sidebar + topbar) */}
-            <Route element={<DashboardLayout />}>
-              {/* Dashboard — Figma node 97:2 (Attorney home screen) */}
-              <Route path="/lawyer/dashboard"                    element={<LawyerDashboardPage />} />
-
-              {/* Intake */}
-              <Route path="/lawyer/intake"                       element={<IntakeLanding />} />
-
-              {/* Cases — list + detail (tabs URL-driven via ?tab=details|overview|comments|deadlines) */}
-              <Route path="/lawyer/cases"                        element={<CaseListPage />} />
-              <Route path="/lawyer/cases/:caseId"                element={<CaseDetailPage />} />
-
-              {/* Documents — Queue + Review */}
-              <Route path="/lawyer/documents"                    element={<Navigate to="/lawyer/documents/queue" replace />} />
-              <Route path="/lawyer/documents/queue"              element={<DocumentQueue />} />
-              <Route path="/lawyer/documents/:documentId/review" element={<DocumentReviewPage />} />
-
-              {/* Calendar */}
-              <Route path="/lawyer/calendar"                     element={<CalendarPage />} />
-
-              {/* Clients */}
-              <Route path="/lawyer/clients/:clientId"            element={<ClientProfilePage />} />
-
-              {/* Analytics */}
-              <Route path="/lawyer/analytics"                    element={<AnalyticsPage />} />
-
-              {/* ── BILLING routes ────────────────────────────────────────── */}
-              <Route path="/lawyer/billing"              element={<BillingDashboard />} />
-              <Route path="/lawyer/billing/invoices"     element={<InvoicesList />} />
-              <Route path="/lawyer/billing/invoices/:id" element={<InvoiceDetail />} />
-              <Route path="/lawyer/billing/clients"      element={<BillingClientsList />} />
-
-              {/* HELP & SUPPORT */}
-              <Route path="/lawyer/help"                  element={<HelpHome />} />
-              <Route path="/lawyer/help/articles/:id"     element={<ArticleDetail />} />
-              <Route path="/lawyer/help/tickets"          element={<MyTickets />} />
-              <Route path="/lawyer/help/tickets/:id"      element={<TicketDetail />} />
-              <Route path="/lawyer/help/notifications"    element={<HelpNotifications />} />
-
-              {/* MESSAGES — shared SecureMessaging (attorney branch inside) */}
-              <Route path="/lawyer/messages" element={<LawyerMessagesPage />} />
-
-              {/* TEMPLATE LIBRARY */}
-              <Route path="/lawyer/templates" element={<TemplateLibraryPage />} />
-
-              {/* NOTIFICATIONS & REMINDERS */}
-              <Route path="/lawyer/notifications" element={<NotificationsRemindersPage />} />
-
-              {/* PROFILE & SETTINGS — tabs URL-driven via ?tab= */}
-              <Route path="/lawyer/settings" element={<LawyerSettingsPage />} />
+            {/* ── Public (unauthenticated only) ──────────────────────────────── */}
+            <Route element={<PublicRoute />}>
+              <Route path="/login"           element={<Login />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
             </Route>
 
-            {/* Wizard is FULL-SCREEN (own focus-mode header — NO DashboardLayout) */}
-            <Route path="/lawyer/intake/:sessionId" element={<IntakeWizard />} />
-          </Route>
+            {/* ── Signup (no auth required) ───────────────────────────────────── */}
+            <Route path="/signup" element={<Signup />} />
 
-          {/* ── Catch-all (MUST be LAST) ────────────────────────────────────── */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+            {/* ── Onboarding (token required, no role check) ──────────────────── */}
+            <Route element={<OnboardingRoute />}>
+              <Route path="/signup/verify-email"  element={<VerifyEmailPage />} />
+              <Route path="/signup/profile-setup" element={<ProfileSetupPage />} />
+            </Route>
+
+            {/* ── Password reset & OAuth callbacks (no auth needed) ───────────── */}
+            <Route path="/forgot-password/verify-otp"   element={<ResetPasswordOTP />} />
+            <Route path="/forgot-password/new-password" element={<ResetPasswordNew />} />
+            <Route path="/auth/linkedin/callback"       element={<LinkedInCallback />} />
+
+            {/* ── Client Intake Portal (PUBLIC — token-based, NO JWT) ─────────
+                Must be BEFORE the catch-all route. */}
+            <Route path="/intake/:token" element={<ClientIntakePortal />} />
+
+            {/* ── EMPLOYEE routes ─────────────────────────────────────────────── */}
+            <Route element={<RoleRoute allowedRoles={['employee']} />}>
+              <Route element={<DashboardLayout />}>
+                <Route path="/dashboard"                        element={<Dashboard />} />
+                <Route path="/applications/list"                element={<ApplicationsList />} />
+                <Route path="/applications/new"                 element={<NewApplication />} />
+                <Route path="/applications/:id"                 element={<ApplicationDetail />} />
+                <Route path="/documents"                        element={<DocumentHub />} />
+                <Route path="/documents/upload"                 element={<DocumentUploadV2 />} />
+                <Route path="/documents/viewer"                 element={<DocumentViewer />} />
+                <Route path="/messages"                         element={<SecureMessaging />} />
+                <Route path="/notifications"                    element={<NotificationsCenterV2 />} />
+                <Route path="/payments"                         element={<PaymentsScreen />} />
+                <Route path="/consultations"                    element={<SelectAttorney />} />
+                <Route path="/consultations/book/:attorneyId"   element={<BookConsultation />} />
+                <Route path="/profile"                          element={<ProfileSecurity />} />
+                <Route path="/profile/authentication"           element={<ProfileSecurity />} />
+                <Route path="/profile/mfa"                      element={<ProfileSecurity />} />
+                <Route path="/profile/login-history"            element={<ProfileSecurity />} />
+                <Route path="/profile/privacy"                  element={<ProfileSecurity />} />
+                <Route path="/profile/devices"                  element={<ProfileSecurity />} />
+                <Route path="/profile/session"                  element={<ProfileSecurity />} />
+                <Route path="/profile/security-alerts"          element={<ProfileSecurity />} />
+              </Route>
+            </Route>
+
+            {/* ── HR / EMPLOYER routes ────────────────────────────────────────── */}
+            <Route element={<RoleRoute allowedRoles={['hr']} />}>
+              <Route element={<DashboardLayout />}>
+                <Route path="/employer/dashboard" element={<HRDashboard />} />
+                <Route path="/employer/employees" element={<HREmployees />} />
+                <Route path="/employer/invite" element={<HRInviteEmployee />} />
+                <Route path="/employer/employees/:employeeLinkId" element={<HREmployeeDetail />} />
+                <Route path="/employer/cases" element={<HRCasesList />} />
+                <Route path="/employer/cases/new" element={<HRCreateCase />} />
+                <Route path="/employer/cases/:applicationId" element={<HRCaseDetail />} />
+                <Route path="/employer/messages" element={<HRMessages />} />
+                <Route path="/employer/deadlines" element={<HRDeadlines />} />
+                <Route path="/employer/approvals" element={<HRApprovalQueue />} />
+                <Route path="/employer/documents/:applicationId" element={<HRDocumentManagement />} />
+                <Route path="/employer/notifications" element={<HRNotificationsCenter />} />
+
+                {/* HR Profile & Settings */}
+                <Route path="/employer/profile" element={<ProfileSecurity />} />
+                <Route path="/employer/profile/authentication" element={<ProfileSecurity />} />
+                <Route path="/employer/profile/mfa" element={<ProfileSecurity />} />
+                <Route path="/employer/profile/login-history" element={<ProfileSecurity />} />
+                <Route path="/employer/profile/privacy" element={<ProfileSecurity />} />
+                <Route path="/employer/profile/devices" element={<ProfileSecurity />} />
+                <Route path="/employer/profile/session" element={<ProfileSecurity />} />
+                <Route path="/employer/profile/security-alerts" element={<ProfileSecurity />} />
+                {/* Optional compatibility route */}
+                <Route path="/profile" element={<ProfileSecurity />} />
+              </Route>
+            </Route>
+
+            {/* ── ADMIN routes ────────────────────────────────────────────────── */}
+            <Route element={<RoleRoute allowedRoles={['app_admin']} />}>
+              <Route element={<DashboardLayout />}>
+                <Route path="/admin/dashboard"                      element={<AdminDashboard />} />
+                <Route path="/admin/users"                          element={<UserManagement />} />
+                <Route path="/admin/revenue-dashboard"              element={<RevenueDashboard />} />
+                <Route path="/admin/revenue-dashboard/transactions" element={<AllTransactions />} />
+                <Route path="/admin/roles-permissions"              element={<RolesPermissions />} />
+                <Route path="/admin/settings"                       element={<SystemSettings />} />
+                <Route path="/admin/notification-templates"         element={<NotificationTemplates />} />
+                <Route path="/admin/visa-types"                     element={<VisaTypesManager />} />
+                <Route path="/admin/system-audit-logs"              element={<SystemAuditLogs />} />
+                <Route path="/admin/subscription-pricing"           element={<SubscriptionPricing />} />
+                <Route path="/admin/help-support"                   element={<AdminHelpSupport />} />
+              </Route>
+            </Route>
+
+            {/* ── ATTORNEY (LAWYER) routes ────────────────────────────────────── */}
+            <Route element={<RoleRoute allowedRoles={['attorney']} />}>
+              {/* Safety redirect — bare /lawyer lands on the dashboard */}
+              <Route path="/lawyer" element={<Navigate to="/lawyer/dashboard" replace />} />
+
+              {/* Pages WITH DashboardLayout (sidebar + topbar) */}
+              <Route element={<DashboardLayout />}>
+                {/* Dashboard — Figma node 97:2 (Attorney home screen) */}
+                <Route path="/lawyer/dashboard"                    element={<LawyerDashboardPage />} />
+
+                {/* Intake */}
+                <Route path="/lawyer/intake"                       element={<IntakeLanding />} />
+
+                {/* Cases — list + detail (tabs URL-driven via ?tab=details|overview|comments|deadlines) */}
+                <Route path="/lawyer/cases"                        element={<CaseListPage />} />
+                <Route path="/lawyer/cases/:caseId"                element={<CaseDetailPage />} />
+
+                {/* Documents — Queue + Review */}
+                <Route path="/lawyer/documents"                    element={<Navigate to="/lawyer/documents/queue" replace />} />
+                <Route path="/lawyer/documents/queue"              element={<DocumentQueue />} />
+                <Route path="/lawyer/documents/:documentId/review" element={<DocumentReviewPage />} />
+
+                {/* Calendar */}
+                <Route path="/lawyer/calendar"                     element={<CalendarPage />} />
+
+                {/* Clients */}
+                <Route path="/lawyer/clients/:clientId"            element={<ClientProfilePage />} />
+
+                {/* Analytics */}
+                <Route path="/lawyer/analytics"                    element={<AnalyticsPage />} />
+
+                {/* ── BILLING routes ────────────────────────────────────────── */}
+                <Route path="/lawyer/billing"              element={<BillingDashboard />} />
+                <Route path="/lawyer/billing/invoices"     element={<InvoicesList />} />
+                <Route path="/lawyer/billing/invoices/:id" element={<InvoiceDetail />} />
+                <Route path="/lawyer/billing/clients"      element={<BillingClientsList />} />
+
+                {/* HELP & SUPPORT */}
+                <Route path="/lawyer/help"                  element={<HelpHome />} />
+                <Route path="/lawyer/help/articles/:id"     element={<ArticleDetail />} />
+                <Route path="/lawyer/help/tickets"          element={<MyTickets />} />
+                <Route path="/lawyer/help/tickets/:id"      element={<TicketDetail />} />
+                <Route path="/lawyer/help/notifications"    element={<HelpNotifications />} />
+
+                {/* MESSAGES — shared SecureMessaging (attorney branch inside) */}
+                <Route path="/lawyer/messages" element={<LawyerMessagesPage />} />
+
+                {/* TEMPLATE LIBRARY */}
+                <Route path="/lawyer/templates" element={<TemplateLibraryPage />} />
+
+                {/* NOTIFICATIONS & REMINDERS */}
+                <Route path="/lawyer/notifications" element={<NotificationsRemindersPage />} />
+
+                {/* PROFILE & SETTINGS — tabs URL-driven via ?tab= */}
+                <Route path="/lawyer/settings" element={<LawyerSettingsPage />} />
+              </Route>
+
+              {/* Wizard is FULL-SCREEN (own focus-mode header — NO DashboardLayout) */}
+              <Route path="/lawyer/intake/:sessionId" element={<IntakeWizard />} />
+            </Route>
+
+            {/* ── Catch-all (MUST be LAST) ────────────────────────────────────── */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </ThemeProvider>
   );
