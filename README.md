@@ -78,3 +78,4 @@ export default defineConfig(\[
 
 Testing staging auto deployment
 
+staging process
