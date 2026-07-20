@@ -39,6 +39,10 @@ export interface TokenPayload {
   profile:         string | null;
   theme_color: string | null;
   user:User
+  tour_employee_seen: boolean;
+  tour_hr_seen:       boolean;
+  tour_attorney_seen: boolean;
+  tour_admin_seen:    boolean;
   // onboarding_step:number
 }
 

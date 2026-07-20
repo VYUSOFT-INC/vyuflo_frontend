@@ -11,7 +11,7 @@ import {
 import { PageHeader, PageContent } from '../../components/layout/Pageheader';
 import { useCurrentUser } from '../../hooks/useAuth';
 import { useDashboard } from '../../hooks/employee/useDashboard';
-// import { DashboardTour } from '../../components/tour/DashboardTour';
+import { DashboardTour } from '../../components/tour/DashboardTour';
 import { ComingSoonModal } from '../../components/common/ComingSoonModal';
 import type {
   CaseStageStatus, ActionItem, ActionPriority, ActionCategory,
@@ -831,7 +831,8 @@ export default function Dashboard() {
       />
 
       {/* ── TOUR — auto-starts for first-time users, DB-backed ── */}
-      {/* <DashboardTour role="employee" user={user as TourUser | null} /> */}
+      {/* ── TOUR — auto-starts for first-time users, reads from ui_session cookie ── */}
+      <DashboardTour role="employee" />
     </div>
   );
 }
