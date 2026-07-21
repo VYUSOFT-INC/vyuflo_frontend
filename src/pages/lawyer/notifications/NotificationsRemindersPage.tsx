@@ -22,12 +22,87 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 import { notifRemindersApi } from '../../../api/lawyer/notifReminders.api';
 import { listLocalReminders } from '../../../utils/localReminders';
+import {
+  listLawyerNotifications,
+  markLawyerNotificationRead,
+  markAllLawyerNotificationsRead,
+  unreadLawyerNotificationCount,
+  LAWYER_NOTIFICATIONS_EVENT,
+  type LawyerNotification,
+  type LawyerNotificationType,
+} from '../../../utils/lawyerNotifications';
 import type {
   NotificationUpdate,
+  NotificationCategory,
+  NotificationPriority,
   ReminderCounts,
   ReminderItem,
   RemindersTab,
 } from '../../../types/lawyer/notifReminders.types';
+
+/* ════════════════════════════════════════════════════════════════════
+   LOCAL-NOTIFICATION ADAPTER
+   ─────────────────────────────────────────────────────────────────────
+   The Notifications & Reminders page speaks `NotificationUpdate` (the
+   shape /notifications-reminders returns).  Local synthesized events
+   speak `LawyerNotification` (from lawyerNotifications.ts).  We adapt
+   between the two so both sources can flow into the same "All Updates"
+   list, and we keep a per-render map of local ids → link so clicking
+   a local row still routes to the right screen.
+   ════════════════════════════════════════════════════════════════════ */
+const LOCAL_ID_PREFIX = 'local:';
+
+const LOCAL_TYPE_TO_CATEGORY: Record<LawyerNotificationType, NotificationCategory> = {
+  doc_upload:            'document',
+  doc_reupload:          'document',
+  doc_requested_reply:   'document',
+  chat_message:          'case_update',
+  new_case:              'case_update',
+  deadline_approaching:  'deadline',
+  deadline_passed:       'deadline',
+  calendar_fire:         'deadline',
+};
+
+const LOCAL_TYPE_TO_BADGE: Record<LawyerNotificationType, string> = {
+  doc_upload:            'Document Added',
+  doc_reupload:          'Document Re-uploaded',
+  doc_requested_reply:   'Requested Doc Received',
+  chat_message:          'New Message',
+  new_case:              'New Case Assigned',
+  deadline_approaching:  'Deadline',
+  deadline_passed:       'Urgent Deadline',
+  calendar_fire:         'Reminder',
+};
+
+const LOCAL_TYPE_TO_PRIORITY: Record<LawyerNotificationType, NotificationPriority> = {
+  doc_upload:            'normal',
+  doc_reupload:          'normal',
+  doc_requested_reply:   'normal',
+  chat_message:          'normal',
+  new_case:              'high',
+  deadline_approaching:  'high',
+  deadline_passed:       'urgent',
+  calendar_fire:         'normal',
+};
+
+function localToUpdate(n: LawyerNotification): NotificationUpdate {
+  return {
+    id:               `${LOCAL_ID_PREFIX}${n.id}`,
+    notification_type: n.type,
+    badge_label:      LOCAL_TYPE_TO_BADGE[n.type] || 'Update',
+    category:         LOCAL_TYPE_TO_CATEGORY[n.type] || 'case_update',
+    priority:         LOCAL_TYPE_TO_PRIORITY[n.type] || 'normal',
+    title:            n.title,
+    body:             n.body,
+    client_name:      null,
+    visa_type_code:   null,
+    case_reference:   null,
+    created_at:       n.timestamp,
+    is_read:          n.read,
+    is_dismissed:     false,
+    show_unread_dot:  !n.read,
+  };
+}
 
 /* ════════════════════════════════════════════════════════════════════
    MOCK FALLBACK (same shape as backend) — kept inline like other modules.
@@ -190,6 +265,22 @@ function mergeReminders(primary: ReminderItem[], secondary: ReminderItem[]): Rem
   });
 }
 
+/**
+ * Merge backend + local synthesized updates into a single feed.
+ * De-duped by id (local ids are already namespaced with LOCAL_ID_PREFIX)
+ * and sorted newest-first so client actions surface immediately.
+ */
+function mergeUpdates(backend: NotificationUpdate[], local: NotificationUpdate[]): NotificationUpdate[] {
+  const map = new Map<string, NotificationUpdate>();
+  for (const u of backend) if (u && u.id) map.set(u.id, u);
+  for (const u of local)   if (u && u.id) map.set(u.id, u);
+  return Array.from(map.values()).sort((a, b) => {
+    const ta = Date.parse(a.created_at || '');
+    const tb = Date.parse(b.created_at || '');
+    return (Number.isNaN(tb) ? 0 : tb) - (Number.isNaN(ta) ? 0 : ta);
+  });
+}
+
 const TABS: { id: RemindersTab; label: string }[] = [
   { id: 'all_updates', label: 'All Updates' },
   { id: 'reminders',   label: 'Reminders' },
@@ -235,18 +326,27 @@ export default function NotificationsRemindersPage() {
       const base = c || MOCK_COUNTS;
       const backend = r?.items?.length ? r.items : MOCK_REMINDERS;
       const merged = mergeReminders(backend, local);
+      /* Include the local synthesized notifications' unread count in the
+         All Updates pill so the sidebar bell and this tab match. */
+      const localUnread = unreadLawyerNotificationCount();
       setCounts({
         ...base,
-        reminders_total: merged.length,
+        all_updates_unread: (base.all_updates_unread || 0) + localUnread,
+        reminders_total:    merged.length,
       });
     });
   };
   useEffect(() => {
     refetchCounts();
-    /* Refresh count when the calendar bridge adds/removes a local reminder. */
+    /* Refresh count when the calendar bridge adds/removes a local reminder,
+       AND when the local notification watcher pushes a new synthesized entry. */
     const onChanged = () => refetchCounts();
     window.addEventListener('Vyuflo:local-reminders-changed', onChanged);
-    return () => window.removeEventListener('Vyuflo:local-reminders-changed', onChanged);
+    window.addEventListener(LAWYER_NOTIFICATIONS_EVENT, onChanged);
+    return () => {
+      window.removeEventListener('Vyuflo:local-reminders-changed', onChanged);
+      window.removeEventListener(LAWYER_NOTIFICATIONS_EVENT, onChanged);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -278,12 +378,37 @@ export default function NotificationsRemindersPage() {
         .catch(() => setDeadlines(MOCK_DEADLINES))
         .finally(() => setLoading(false));
     } else {
+      /* All Updates tab merges 3 sources:
+           1. Backend /notifications-reminders/updates
+           2. MOCK_UPDATES fallback when backend is empty
+           3. Local synthesized notifications (uploads, chats, new cases…)
+         Local entries are prepended (newest first) and de-duped by id.
+         Sorted by created_at DESC after merge so ordering stays honest. */
+      const localAsUpdates = listLawyerNotifications().map(localToUpdate);
       notifRemindersApi.listUpdates({ limit: 30 })
-        .then((r) => setUpdates(r.items?.length ? r.items : MOCK_UPDATES))
-        .catch(() => setUpdates(MOCK_UPDATES))
+        .then((r) => {
+          const backend = r.items?.length ? r.items : MOCK_UPDATES;
+          setUpdates(mergeUpdates(backend, localAsUpdates));
+        })
+        .catch(() => setUpdates(mergeUpdates(MOCK_UPDATES, localAsUpdates)))
         .finally(() => setLoading(false));
     }
   }, [activeTab, includePast]);
+
+  /* Refresh the All Updates list whenever the local store changes. */
+  useEffect(() => {
+    if (activeTab !== 'all_updates') return;
+    const onChanged = () => {
+      const localAsUpdates = listLawyerNotifications().map(localToUpdate);
+      /* Preserve any backend items already present; add/remove locals. */
+      setUpdates((prev) => {
+        const backend = prev.filter((u) => !u.id.startsWith(LOCAL_ID_PREFIX));
+        return mergeUpdates(backend, localAsUpdates);
+      });
+    };
+    window.addEventListener(LAWYER_NOTIFICATIONS_EVENT, onChanged);
+    return () => window.removeEventListener(LAWYER_NOTIFICATIONS_EVENT, onChanged);
+  }, [activeTab]);
 
   const setTab = (id: RemindersTab) => {
     const next = new URLSearchParams(searchParams);
@@ -303,6 +428,12 @@ export default function NotificationsRemindersPage() {
       setUpdates((u) => u.map((x) => ({ ...x, is_read: true, show_unread_dot: false })));
       setCounts((c) => ({ ...c, all_updates_unread: 0 }));
     }
+    /* Local synthesized notifications (only relevant to the All Updates tab)
+       need their read-flag flipped too so the bell count zeroes out. */
+    if (activeTab === 'all_updates') {
+      markAllLawyerNotificationsRead();
+    }
+
     try {
       await notifRemindersApi.markAllRead(category);
       setBanner({ type: 'success', text: 'All marked as read.' });
@@ -310,6 +441,7 @@ export default function NotificationsRemindersPage() {
     } catch {
       /* Already optimistic — keep UI as-is, surface a soft error. */
       setBanner({ type: 'error', text: 'Could not sync read status with server.' });
+      refetchCounts();
     }
   };
 
@@ -321,6 +453,12 @@ export default function NotificationsRemindersPage() {
     } else {
       setUpdates((u) => u.map((x) => (x.id === n.id ? { ...x, is_read: true, show_unread_dot: false } : x)));
     }
+    /* Also flip the underlying local-store entry so the toaster + bell
+       count reflect the read state and don't re-fire. */
+    if (n.id.startsWith(LOCAL_ID_PREFIX)) {
+      markLawyerNotificationRead(n.id.slice(LOCAL_ID_PREFIX.length));
+      refetchCounts();
+    }
   };
 
   /** Explicit "View case" click — fired ONLY when user clicks the inline button,
@@ -330,6 +468,18 @@ export default function NotificationsRemindersPage() {
       where supported. Once backend adds application_id, switch to /lawyer/cases/{id}. */
   const navigateToTarget = (n: NotificationUpdate) => {
     markSingleRead(n);
+
+    /* Local synthesized notifications carry an exact link in the store —
+       use it verbatim instead of guessing from the category. */
+    if (n.id.startsWith(LOCAL_ID_PREFIX)) {
+      const rawId = n.id.slice(LOCAL_ID_PREFIX.length);
+      const local = listLawyerNotifications().find((x) => x.id === rawId);
+      if (local?.link) {
+        navigate(local.link);
+        return;
+      }
+    }
+
     /* Use case_reference as a search hint so the target page can filter to
        this case if it supports the `q` query param. */
     const searchHint = n.case_reference ? `?q=${encodeURIComponent(n.case_reference)}` : '';
