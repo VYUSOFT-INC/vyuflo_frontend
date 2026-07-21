@@ -1,8 +1,11 @@
 // src/components/layout/DashboardLayout.tsx
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { SettingsSidebar } from './SettingsSidebar';
+import { getUiSession, type UiSession } from '../../utils/uiSession';
+import useLawyerNotificationWatcher from '../../hooks/lawyer/useLawyerNotificationWatcher';
+import NotificationToaster from '../lawyer/NotificationToaster';
 
 function VyufloLogo({ size = 18 }: { size?: number }) {
   return (
@@ -71,12 +74,34 @@ function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void 
   );
 }
 
+// ── Attorney-only notification harness ──────────────────────────────────────
+// Wrapped in its own component so the polling hook + toaster stay OUT of
+// the shell for every other role.  We only render it when the ui_session
+// cookie's roles include "attorney".
+function LawyerNotifications() {
+  useLawyerNotificationWatcher();
+  return <NotificationToaster />;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 export function DashboardLayout() {
   const [sidebarOpen,  setSidebarOpen]  = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [collapsed,    setCollapsed]    = useState(false);
   const location = useLocation();
+
+  // ── Role gating for attorney-only side-effects (notifications) ────────
+  // Mirrors the Sidebar's approach: read the ui_session cookie once, then
+  // re-read on the same 'ui-session-updated' event fired after login /
+  // profile updates.
+  const [session, setSession] = useState<UiSession | null>(null);
+  useEffect(() => {
+    const handler = () => setSession(getUiSession());
+    handler();
+    window.addEventListener('ui-session-updated', handler);
+    return () => window.removeEventListener('ui-session-updated', handler);
+  }, []);
+  const isAttorney = session?.roles?.includes('attorney') ?? false;
 
   const isSettingsPage = location.pathname.startsWith('/profile') ||
                          location.pathname.startsWith('/settings');
@@ -136,6 +161,9 @@ export function DashboardLayout() {
           <Outlet />
         )}
       </div>
+
+      {/* Attorney-only: background notification watcher + top-right toaster. */}
+      {isAttorney && <LawyerNotifications />}
     </div>
   );
 }
