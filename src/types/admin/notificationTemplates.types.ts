@@ -41,3 +41,17 @@ export interface CreateTemplatePayload {
   category?:              string;
   is_active:              boolean;
 }
+
+/** PATCH /notification-templates/{id} — Update payload.
+ *  Backend note: event_key and channel are IMMUTABLE after creation, so
+ *  they are intentionally omitted here.  Category also not editable in
+ *  the backend's update route.  Only content + toggle fields. */
+export interface UpdateTemplatePayload {
+  name?:                   string;
+  description?:            string | null;
+  subject?:                string | null;
+  body_html?:              string | null;
+  body_text?:              string;
+  available_placeholders?: string | null;
+  is_active?:              boolean;
+}
