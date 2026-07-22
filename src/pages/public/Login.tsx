@@ -423,7 +423,10 @@ import imgGdprIcon     from "../../assets/icons/gdpr-icon.svg";
 import type { AxiosError } from 'axios';
 import { ErrorAlert } from '../../components/ui/Alert';
 
+
+
 export default function Login() {
+  console.log("LOGIN COMPONENT RENDERED", window.location.pathname);
   const navigate = useNavigate();
   const { instance: msalInstance } = useMsal();
 

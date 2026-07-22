@@ -111,6 +111,7 @@ const COUNTRIES = [
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function Signup() {
+  console.log("SIGNUP COMPONENT RENDERED", window.location.pathname);
   const navigate = useNavigate();
   const { instance: msalInstance } = useMsal();
 

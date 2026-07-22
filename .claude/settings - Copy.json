@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "WebFetch(domain:www.figma.com)",
+      "Read(//Users/triplenin/Library/Application Support/**)",
+      "Read(//Users/triplenin/Library/Application Support/Claude/**)",
+      "Read(//Users/triplenin/**)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d.get\\('name',''\\), d.get\\('version',''\\)\\)\")",
+      "WebFetch(domain:api.figma.com)",
+      "Bash(npm run *)"
+    ]
+  }
+}
