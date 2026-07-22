@@ -1,4 +1,3 @@
-
 // src/pages/employee/SecureMessaging.tsx
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Paperclip, Pencil, Search, Send, Smile, X, Download, Check, CheckCheck, ArrowLeft } from "lucide-react";
@@ -8,9 +7,7 @@ import { getUiSession } from "../../utils/uiSession";
 import { getFileUrl } from "../../utils/fileUrl";
 
 // ── Message sound + browser popup ────────────────────────────────────────────
-
 let _audioCtx: AudioContext | null = null;
-
 function getAudioContext(): AudioContext | null {
   try {
     if (!_audioCtx) {
@@ -21,14 +18,12 @@ function getAudioContext(): AudioContext | null {
     return null;
   }
 }
-
 function unlockAudio() {
   const ctx = getAudioContext();
   if (ctx && ctx.state === "suspended") {
     ctx.resume().catch(() => {});
   }
 }
-
 function playMessageSound() {
   const ctx = getAudioContext();
   if (!ctx || ctx.state === "suspended") return;
@@ -46,7 +41,6 @@ function playMessageSound() {
     osc.stop(ctx.currentTime + 0.35);
   } catch { /* silent */ }
 }
-
 function showMessagePopup(senderName: string, content: string, convId: string) {
   if (Notification.permission !== "granted") return;
   if (document.hasFocus()) return;
@@ -168,6 +162,7 @@ function ProtectedImage({ documentId, name, onClick }: {
       <Paperclip size={14} /><span className="truncate max-w-[160px]">{name ?? "Image"}</span>
     </div>
   );
+
   return (
     <img src={blobUrl} alt={name ?? ""}
       className="max-w-[260px] max-h-[260px] rounded-2xl object-cover cursor-pointer shadow-sm hover:opacity-95 transition"
@@ -189,6 +184,7 @@ function FileCard({ documentId, name, size, isMine }: {
       setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch { /* silent */ } finally { setLoading(false); }
   };
+
   return (
     <button type="button" onClick={handleClick} disabled={loading}
       className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-sm transition disabled:opacity-60 max-w-[260px] w-full ${
@@ -213,6 +209,7 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
     document.addEventListener("keydown", h);
     return () => document.removeEventListener("keydown", h);
   }, [onClose]);
+
   return (
     <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={onClose}>
       <button type="button" className="absolute top-4 right-5 text-white/80 hover:text-white" onClick={onClose}>
@@ -235,7 +232,6 @@ const EMOJI_CATEGORIES: { label: string; emojis: string[] }[] = [
 function EmojiPicker({ onPick, onClose }: { onPick: (e: string) => void; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState(0);
-
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
@@ -416,7 +412,6 @@ const SecureMessaging: React.FC = () => {
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const isGroup = (selectedConv as any)?.thread_type === "group";
-
   const filteredConvs = useMemo(() => conversations.filter(c => {
     const m = c.participant_name?.toLowerCase().includes(search.toLowerCase())
            || c.last_message?.toLowerCase().includes(search.toLowerCase());
@@ -425,7 +420,6 @@ const SecureMessaging: React.FC = () => {
     if (filter === "archived") return c.is_archived;
     return !c.is_archived;
   }), [conversations, search, filter]);
-
   const totalUnread = conversations.reduce((s, c) => s + (c.unread_count ?? 0), 0);
 
   // ── Data fetching ─────────────────────────────────────────────────────────
@@ -444,7 +438,6 @@ const SecureMessaging: React.FC = () => {
         const prevIds  = new Set(prev.map(m => m.id));
         const newMsgs  = d.filter(m => !prevIds.has(m.id));
         const incoming = newMsgs.filter(m => m.sender_id !== currentUserId);
-
         if (incoming.length > 0) {
           playMessageSound();
           const latest     = incoming[incoming.length - 1];
@@ -571,7 +564,6 @@ const SecureMessaging: React.FC = () => {
         </button>
       </div>
 
-<<<<<<< Updated upstream
       {/* Search */}
       <div className="px-3 py-2 bg-white">
         <div className="relative">
@@ -581,18 +573,6 @@ const SecureMessaging: React.FC = () => {
             className="w-full h-9 bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 text-[13px] text-slate-700 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-[var(--theme-light)] transition" />
         </div>
       </div>
-=======
-      {/* ══ LEFT PANEL — chat list ═════════════════════════════════════════
-           MOBILE (< md): full-width; hidden as soon as a conversation is
-             picked so the message thread takes over the whole screen.
-           DESKTOP (md+): fixed 340px column, always visible alongside the
-             thread pane. */}
-      <aside
-        className={`w-full md:w-[340px] md:shrink-0 flex-col bg-white border-r border-slate-100 ${
-          selectedConv ? 'hidden md:flex' : 'flex'
-        }`}
-      >
->>>>>>> Stashed changes
 
       {/* Filter tabs */}
       <div className="flex border-b border-slate-100">
@@ -689,7 +669,6 @@ const SecureMessaging: React.FC = () => {
               online={selectedConv.is_online}
               size={40}
             />
-<<<<<<< Updated upstream
             <div className="flex-1 min-w-0">
               <p className="text-[15px] font-semibold text-slate-900 leading-tight truncate">
                 {selectedConv.participant_name}
@@ -700,272 +679,6 @@ const SecureMessaging: React.FC = () => {
                   : (selectedConv as any).last_seen_at
                     ? <span className="text-slate-400">last seen {fmtLastSeen((selectedConv as any).last_seen_at)}</span>
                     : <span className="text-slate-400 capitalize">{selectedConv.participant_role ?? "offline"}</span>
-=======
-            <span className="font-semibold text-[15px] text-slate-800">Chats</span>
-          </div>
-          <button type="button" onClick={() => setShowNewConv(true)}
-            className="w-9 h-9 rounded-full flex items-center justify-center transition hover:bg-[var(--theme-light)] text-[var(--theme-dark)]"
-            title="New chat">
-            <Pencil size={18} />
-          </button>
-        </div>
-
-        {/* Search */}
-        <div className="px-3 py-2 bg-white">
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search or start new chat"
-              className="w-full h-9 bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 text-[13px] text-slate-700 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-[var(--theme-light)] transition" />
-          </div>
-        </div>
-
-        {/* Filter tabs */}
-        <div className="flex border-b border-slate-100">
-          {(["all", "unread", "archived"] as const).map(tab => (
-            <button key={tab} type="button" onClick={() => setFilter(tab)}
-              className={`flex-1 py-2 text-xs font-medium capitalize transition flex items-center justify-center gap-1.5 ${
-                filter === tab
-                  ? "border-b-2 border-[var(--theme-primary)] text-[var(--theme-dark)]"
-                  : "text-slate-500 hover:text-slate-700"
-              }`}>
-              {tab}
-              {tab === "unread" && totalUnread > 0 && (
-                <span className="text-white text-[9px] font-bold rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-1" style={{ background: "var(--theme-primary)" }}>
-                  {totalUnread}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-
-        {/* Conversation list */}
-        <div className="flex-1 overflow-y-auto">
-          {loadingConvs && (
-            <p className="text-xs text-slate-400 text-center py-8">Loading…</p>
-          )}
-          {!loadingConvs && filteredConvs.length === 0 && (
-            <p className="text-xs text-slate-400 text-center py-8">No conversations</p>
-          )}
-          {filteredConvs.map(conv => (
-            <button key={conv.id} type="button" onClick={() => selectConv(conv)}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition border-b border-slate-50 ${
-                selectedConv?.id === conv.id ? "bg-[var(--theme-light)] text-[var(--theme-dark)]" : "hover:bg-slate-50"
-              }`}>
-              <Avatar name={conv.participant_name} url={conv.avatar_url} online={conv.is_online} size={48} />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <p className="text-[15px] font-medium text-slate-900 truncate">{conv.participant_name}</p>
-                  <span className={`text-[11px] shrink-0 ml-2 ${conv.unread_count > 0 ? "font-semibold text-[var(--theme-dark)]" : "text-slate-400"}`}>
-                    {fmtConvTime(conv.last_message_at)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between mt-0.5">
-                  <p className={`text-[13px] truncate ${conv.unread_count > 0 ? "text-slate-700 font-medium" : "text-slate-400"}`}>
-                    {conv.last_message ?? "No messages yet"}
-                  </p>
-                  {conv.unread_count > 0 && (
-                    <span className="text-white text-[11px] font-bold rounded-full min-w-[20px] h-[20px] flex items-center justify-center px-1 shrink-0 ml-2" style={{ background: "var(--theme-primary)" }}>
-                      {conv.unread_count}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      </aside>
-
-      {/* ══ RIGHT PANEL — message thread ═══════════════════════════════════
-           MOBILE (< md): hidden until a conversation is selected, then it
-             takes over the full width and the chat-header shows a Back
-             arrow that clears the selection to return to the list.
-           DESKTOP (md+): always visible.  When nothing is selected it
-             shows the "Select a conversation" empty state. */}
-      <main
-        className={`flex-1 flex-col min-w-0 ${
-          selectedConv ? 'flex' : 'hidden md:flex'
-        }`}
-      >
-        {!selectedConv ? (
-          <div className="flex-1 flex flex-col items-center justify-center bg-slate-50">
-            <div className="w-20 h-20 rounded-full flex items-center justify-center mb-5" style={{ background: "var(--theme-light)" }}>
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
-                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"
-                  stroke="#6366f1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
-            <h3 className="text-[18px] font-semibold text-slate-700">VisaFlow Messaging</h3>
-            <p className="text-slate-400 text-[13px] mt-2">Select a conversation to start chatting</p>
-          </div>
-        ) : (
-          <>
-            {/* Chat header */}
-            <div className="h-[60px] bg-white border-b border-slate-200 px-4 flex items-center gap-3 shrink-0">
-              {/* Mobile-only back arrow — returns the user to the chat list.
-                  Hidden on md+ where both panes render side-by-side. */}
-              <button
-                type="button"
-                onClick={() => setSelectedConv(null)}
-                aria-label="Back to chats"
-                className="md:hidden -ml-1 w-9 h-9 rounded-full flex items-center justify-center text-slate-600 hover:bg-slate-100"
-              >
-                <ArrowLeft size={20} />
-              </button>
-              <Avatar
-                name={selectedConv.participant_name}
-                url={selectedConv.avatar_url}
-                online={selectedConv.is_online}
-                size={40}
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-[15px] font-semibold text-slate-900 leading-tight">
-                  {selectedConv.participant_name}
-                </p>
-                <p className="text-[12px] leading-tight mt-0.5">
-                  {selectedConv.is_online
-                    ? <span className="font-medium" style={{ color: "var(--theme-primary)" }}>online</span>
-                    : (selectedConv as any).last_seen_at
-                      ? <span className="text-slate-400">last seen {fmtLastSeen((selectedConv as any).last_seen_at)}</span>
-                      : <span className="text-slate-400 capitalize">{selectedConv.participant_role ?? "offline"}</span>
-                  }
-                </p>
-              </div>
-            </div>
-
-            {/* Messages area */}
-            <div className="flex-1 overflow-y-auto px-4 py-4"
-              style={{
-                background: "#f8fafc",
-              }}>
-              {loadingMsgs && (
-                <p className="text-xs text-slate-500 text-center py-4">Loading messages…</p>
-              )}
-
-              <div className="flex flex-col gap-1 max-w-[800px] mx-auto">
-                {messages.map((msg, idx) => {
-                  const isMine         = msg.sender_id === currentUserId;
-                  const prev           = messages[idx - 1];
-                  const showDate       = idx === 0 || !isSameDay(prev?.created_at, msg.created_at);
-                  const isLastFromSender = !messages[idx + 1] || messages[idx + 1].sender_id !== msg.sender_id;
-                  const hasImage       = msg.message_type === "file_attachment" && msg.document_id
-                                         && ((msg as any).is_image || isImageFile(msg.attachment_name));
-                  const hasFile        = msg.message_type === "file_attachment" && msg.document_id && !hasImage;
-
-                  return (
-                    <React.Fragment key={msg.id}>
-                      {/* Date divider */}
-                      {showDate && (
-                        <div className="flex items-center justify-center my-3">
-                          <span className="bg-white border border-slate-200 text-slate-400 text-[11px] font-medium px-4 py-1 rounded-full shadow-sm">
-                            {formatDateDivider(msg.created_at)}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* System notification */}
-                      {msg.message_type === "system_notification" && (
-                        <div className="flex justify-center my-2">
-                          <div className="bg-[#fff3cd] text-[#856404] text-[11px] px-4 py-1.5 rounded-full max-w-[80%] text-center shadow-sm">
-                            {msg.content}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Regular message */}
-                      {msg.message_type !== "system_notification" && (
-                        <div
-                          className={`flex items-end gap-2 ${isMine ? "justify-end" : "justify-start"}`}
-                          style={{ marginBottom: isLastFromSender ? "6px" : "1px" }}>
-
-                          {/* Receiver avatar — only on last message in a group */}
-                          {!isMine && (
-                            <div className="shrink-0 mb-1">
-                              {isLastFromSender
-                                ? <Avatar name={selectedConv.participant_name} url={selectedConv.avatar_url} size={28} />
-                                : <div style={{ width: 28 }} />
-                              }
-                            </div>
-                          )}
-
-                          {/* Bubble */}
-                          <div className={`flex flex-col max-w-[65%] ${isMine ? "items-end" : "items-start"}`}>
-                            <div
-                              className={`px-3 pt-2 pb-1.5 rounded-2xl shadow-sm ${
-                                isMine
-                                  ? "rounded-tr-sm border border-[var(--theme-border,#e0e7ff)]"
-                                  : "bg-white rounded-tl-sm border border-slate-100"
-                              }`}
-                              style={isMine ? {
-                                background: "#ffffff",
-                              } : undefined}>
-
-                              {/* Text */}
-                              {msg.content && (
-                                <p className={`text-[14px] leading-[1.5] whitespace-pre-wrap break-words ${
-                                  "text-slate-900"
-                                }`}>
-                                  {msg.content}
-                                </p>
-                              )}
-
-                              {/* Image attachment */}
-                              {hasImage && (
-                                <div className={msg.content ? "mt-1.5" : ""}>
-                                  <ProtectedImage
-                                    documentId={msg.document_id!}
-                                    name={msg.attachment_name ?? undefined}
-                                    onClick={setLightboxSrc}
-                                  />
-                                </div>
-                              )}
-
-                              {/* File attachment */}
-                              {hasFile && (
-                                <div className={msg.content ? "mt-1.5" : ""}>
-                                  <FileCard
-                                    documentId={msg.document_id!}
-                                    name={msg.attachment_name ?? undefined}
-                                    size={msg.attachment_size ?? undefined}
-                                    isMine={isMine}
-                                  />
-                                </div>
-                              )}
-
-                              {/* Timestamp + ticks — always on its own line below content */}
-                              <div className={`flex items-center gap-1 mt-0.5 ${isMine ? "justify-end" : "justify-end"}`}>
-                                <span className={`text-[10px] whitespace-nowrap ${
-                                  "text-slate-400"
-                                }`}>
-                                  {formatTime(msg.created_at)}
-                                </span>
-                                {isMine && <Ticks isRead={msg.is_read} />}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Spacer on sender side */}
-                          {isMine && <div style={{ width: 0 }} className="shrink-0" />}
-                        </div>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-                <div ref={bottomRef} />
-              </div>
-            </div>
-
-            {/* File preview strip */}
-            {selectedFile && (
-              <div className="bg-white border-t border-slate-100 px-4 py-2 flex items-center gap-3">
-                {filePreviewUrl
-                  ? <img src={filePreviewUrl} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0 border border-slate-200" />
-                  : (
-                    <div className="w-12 h-12 rounded-lg flex items-center justify-center shrink-0" style={{ background: "var(--theme-light)" }}>
-                      <Paperclip size={16} style={{ color: "var(--theme-primary)" }} />
-                    </div>
-                  )
->>>>>>> Stashed changes
                 }
               </p>
             </div>
@@ -976,7 +689,6 @@ const SecureMessaging: React.FC = () => {
             {loadingMsgs && (
               <p className="text-xs text-slate-500 text-center py-4">Loading messages…</p>
             )}
-
             <div className="flex flex-col gap-1 max-w-[800px] mx-auto">
               {messages.map((msg, idx) => {
                 const isMine             = msg.sender_id === currentUserId;
@@ -1016,7 +728,6 @@ const SecureMessaging: React.FC = () => {
                       <div
                         className={`flex items-end gap-2 ${isMine ? "justify-end" : "justify-start"}`}
                         style={{ marginBottom: isLastFromSender ? "6px" : "1px" }}>
-
                         {/* Receiver avatar — only on last message in a run */}
                         {!isMine && (
                           <div className="shrink-0 mb-1">
@@ -1036,21 +747,18 @@ const SecureMessaging: React.FC = () => {
                                 : "bg-white rounded-tl-sm border border-slate-100"
                             }`}
                             style={isMine ? { background: "#ffffff" } : undefined}>
-
                             {/* Sender name inside bubble — group threads only */}
                             {showSenderName && senderName && (
                               <p className="text-[11px] font-semibold leading-tight mb-1" style={{ color: "var(--theme-primary)" }}>
                                 {senderName}
                               </p>
                             )}
-
                             {/* Text */}
                             {msg.content && (
                               <p className="text-[14px] leading-[1.5] whitespace-pre-wrap break-words text-slate-900">
                                 {msg.content}
                               </p>
                             )}
-
                             {/* Image attachment */}
                             {hasImage && (
                               <div className={msg.content ? "mt-1.5" : ""}>
@@ -1061,7 +769,6 @@ const SecureMessaging: React.FC = () => {
                                 />
                               </div>
                             )}
-
                             {/* File attachment */}
                             {hasFile && (
                               <div className={msg.content ? "mt-1.5" : ""}>
@@ -1073,7 +780,6 @@ const SecureMessaging: React.FC = () => {
                                 />
                               </div>
                             )}
-
                             {/* Timestamp + ticks */}
                             <div className="flex items-center gap-1 mt-0.5 justify-end">
                               <span className="text-[10px] whitespace-nowrap text-slate-400">
@@ -1143,7 +849,6 @@ const SecureMessaging: React.FC = () => {
                 />
               )}
             </div>
-
             {/* Attach file */}
             <button type="button" onClick={() => fileInputRef.current?.click()}
               className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-200 transition">
@@ -1152,7 +857,6 @@ const SecureMessaging: React.FC = () => {
             <input ref={fileInputRef} type="file" className="hidden"
               accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
               onChange={e => handleFileChange(e.target.files?.[0] ?? null)} />
-
             {/* Text input */}
             <div className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-3 sm:px-4 py-2.5 focus-within:bg-white focus-within:border-[var(--theme-primary)] focus-within:ring-2 focus-within:ring-[var(--theme-light)] transition">
               <textarea ref={textareaRef} rows={1} value={text}
@@ -1164,7 +868,6 @@ const SecureMessaging: React.FC = () => {
                 placeholder="Type a message"
                 className="w-full bg-transparent text-[14px] text-slate-800 placeholder:text-slate-400 focus:outline-none resize-none leading-[22px] max-h-[100px] overflow-y-auto" />
             </div>
-
             {/* Send */}
             <button type="button" onClick={handleSend}
               disabled={sending || (!text.trim() && !selectedFile)}
