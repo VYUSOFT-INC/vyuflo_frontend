@@ -7,14 +7,13 @@
 // ── LAWYER USE CASE ─────────────────────────────────────────────────
 //   This is where the attorney spends ~70% of their time. Everything about
 //   one case lives here:
-//     Details      — client info, employer, beneficiary, document counts
-//     Overview     — status-history timeline (audit log) for legal compliance
-//     Comments     — internal notes between attorney/HR/paralegal (pinned float)
-//     Deadlines    — USCIS dates, RFE responses, biometrics, court dates
-//     Requirements — live required-documents list from admin Visa Types Manager
+//     Details   — client info, employer, beneficiary, document counts
+//     Overview  — status-history timeline (audit log) for legal compliance
+//     Comments  — internal notes between attorney/HR/paralegal (pinned float)
+//     Deadlines — USCIS dates, RFE responses, biometrics, court dates
 //
 // ── CAUTIONS ────────────────────────────────────────────────────────
-//   1. Active tab is URL-driven: ?tab=details|overview|comments|deadlines|requirements.
+//   1. Active tab is URL-driven: ?tab=details|overview|comments|deadlines.
 //      Survives reload + back button + share link.
 //   2. UUID short-circuit — mock IDs ("case-001") skip the API and use
 //      mock data so the screen demos before any real case is filed.
@@ -23,17 +22,10 @@
 //   5. Defensive renders — every label has `|| '—'` to survive null fields.
 //   6. Mobile responsive: header stacks, tabs scroll horizontally on sub-md.
 //   7. No hardcoded routes — all nav uses `navigate()` with relative paths.
-//   8. Requirements tab reads from backend /visa-types — same catalog admin
-//      manages, so edits propagate automatically. Zero hardcoded doc lists.
-//      Match logic is defensive: the case field can carry either the CODE
-//      ("H-1B") or the full NAME ("H-1B Specialty Occupation"), so we try
-//      several strategies before giving up.
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { FileCheck2 } from 'lucide-react';
 import { casesApi, isLikelyUuid } from '../../../api/lawyer/cases.api';
-import { visaChecklistApi } from '../../../api/employee/visaChecklist.api';
 import type {
   CaseComment,
   CaseDeadline,
@@ -275,22 +267,6 @@ const VISIBILITY_LABEL: Record<string, string> = {
   private:         'Private',
 };
 
-/* Known visa codes for RequirementsTab lookup — ordered LONGEST-FIRST so
- * "H-1B1" matches before "H-1B", "L-1A" before "L-1", "EB-2 NIW" before
- * "EB-2", etc. Used to extract a code from a label like
- * "H-1B Specialty Occupation". */
-const VISA_CODE_CANDIDATES = [
-  'EB-2 NIW','H-1B1','L-1A','L-1B','O-1A','O-1B',
-  'EB-1','EB-2','EB-3','EB-4','EB-5',
-  'H-1B','H-2A','H-2B','H-2','H-3','H-4',
-  'L-1','L-2',
-  'O-1',
-  'E-1','E-2','E-3',
-  'F-1','F-2','M-1','J-1','J-2',
-  'B-1','B-2','TD','TN',
-  'IR-1','IR-2','IR-5','F2A','F2B','GREEN-CARD',
-];
-
 /* ═══════════════════════════════════════════════════════════════════════
    Helpers
    ═══════════════════════════════════════════════════════════════════════ */
@@ -328,11 +304,10 @@ function timeAgo(iso?: string | null): string {
 }
 
 const TABS: { id: CaseDetailTab; label: string }[] = [
-  { id: 'details',      label: 'Details'      },
-  { id: 'overview',     label: 'Overview'     },
-  { id: 'comments',     label: 'Comments'     },
-  { id: 'deadlines',    label: 'Deadlines'    },
-  { id: 'requirements', label: 'Requirements' },
+  { id: 'details',   label: 'Details'   },
+  { id: 'overview',  label: 'Overview'  },
+  { id: 'comments',  label: 'Comments'  },
+  { id: 'deadlines', label: 'Deadlines' },
 ];
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -486,16 +461,9 @@ export default function CaseDetailPage() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  // Same deep-link contract as Client Profile → Send Message.
-                  // SecureMessaging reads userId (with clientId as fallback)
-                  // and name (last-resort match if participant_id is missing).
-                  const params = new URLSearchParams({
-                    userId: detail.client_id,
-                    name:   detail.client_name || '',
-                  });
-                  navigate(`/lawyer/messages?${params.toString()}`);
-                }}
+                onClick={() =>
+                  navigate(`/lawyer/messages?clientId=${detail.client_id}`)
+                }
                 className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
               >
                 Message client
@@ -543,11 +511,10 @@ export default function CaseDetailPage() {
 
         {/* Tab body */}
         <div className="mt-5">
-          {activeTab === 'details'      && <DetailsTab      detail={detail} />}
-          {activeTab === 'overview'     && <OverviewTab     caseId={caseId} />}
-          {activeTab === 'comments'     && <CommentsTab     caseId={caseId} />}
-          {activeTab === 'deadlines'    && <DeadlinesTab    caseId={caseId} />}
-          {activeTab === 'requirements' && <RequirementsTab visaCode={detail.visa_type_code || ''} />}
+          {activeTab === 'details'   && <DetailsTab   detail={detail} />}
+          {activeTab === 'overview'  && <OverviewTab  caseId={caseId} />}
+          {activeTab === 'comments'  && <CommentsTab  caseId={caseId} />}
+          {activeTab === 'deadlines' && <DeadlinesTab caseId={caseId} />}
         </div>
       </div>
     </div>
@@ -1005,7 +972,7 @@ function NewDeadlineForm({
           <label className="text-xs font-medium text-slate-600">Urgency</label>
           <select
             value={urgency}
-            onChange={(e) => setUrgency(e.target.value as CaseDeadline['urgency'])}
+            onChange={(e) => setUrgency(e.target.value)}
             className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
           >
             <option value="low">Low</option>
@@ -1018,7 +985,7 @@ function NewDeadlineForm({
           <label className="text-xs font-medium text-slate-600">Type</label>
           <select
             value={type}
-            onChange={(e) => setType(e.target.value as CaseDeadline['deadline_type'])}
+            onChange={(e) => setType(e.target.value)}
             className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
           >
             <option value="document_submission">Document submission</option>
@@ -1050,174 +1017,6 @@ function NewDeadlineForm({
           {saving ? 'Saving…' : 'Save deadline'}
         </button>
       </div>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
-   Tab: Requirements — live required-documents list from backend catalog
-   (same one Admin manages in Visa Types Manager). Admin edits propagate
-   here automatically on next tab open. No hardcoded doc lists.
-
-   Match strategy is defensive because the case's `visa_type_code` field
-   can be either the CODE ("H-1B") or the full NAME ("H-1B Specialty
-   Occupation"). We try, in order:
-     1. Exact code match             — "H-1B" === "H-1B"
-     2. Extracted-code match         — pull "H-1B" out of "H-1B Specialty
-                                        Occupation" via VISA_CODE_CANDIDATES
-                                        (longest-first) and match on that
-     3. Catalog name contains target — "F-1 Student".includes("F-1")
-     4. Target contains catalog code — "H-1B SPECIALTY OCCUPATION"
-                                        .includes("H-1B") = true
-   ═══════════════════════════════════════════════════════════════════════ */
-function RequirementsTab({ visaCode }: { visaCode: string }) {
-  const [docs, setDocs]           = useState<string[]>([]);
-  const [visaName, setVisaName]   = useState<string>(visaCode || 'this visa');
-  const [visaTitle, setVisaTitle] = useState<string>('');
-  const [loading, setLoading]     = useState<boolean>(true);
-  const [error, setError]         = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setDocs([]);
-    setVisaName(visaCode || 'this visa');
-    setVisaTitle('');
-
-    if (!visaCode) {
-      setLoading(false);
-      setError('No visa type on this case yet. Set the visa type from the Details tab.');
-      return;
-    }
-
-    /** Normalize backend `required_documents` — accepts array, JSON-string,
-     *  or comma-separated string.  Keeps this component tolerant regardless
-     *  of what shape the backend actually returns. */
-    const norm = (raw: unknown): string[] => {
-      if (Array.isArray(raw)) {
-        return raw.filter((x): x is string => typeof x === 'string' && x.trim().length > 0);
-      }
-      if (typeof raw === 'string' && raw.trim().length > 0) {
-        try {
-          const p = JSON.parse(raw);
-          if (Array.isArray(p)) {
-            return p.filter((x): x is string => typeof x === 'string' && x.trim().length > 0);
-          }
-        } catch { /* not JSON — fall through */ }
-        return raw.split(',').map((s) => s.trim()).filter(Boolean);
-      }
-      return [];
-    };
-
-    (async () => {
-      try {
-        const list = await visaChecklistApi.listVisaTypes();
-        if (cancelled) return;
-        const target = visaCode.toUpperCase();
-
-        // 1. Exact code match.
-        // 2. Extract known visa code substring from target, match on that.
-        // 3. Catalog name contains target substring.
-        // 4. Target contains catalog code substring — handles case where
-        //    visa_type_code carries the FULL NAME instead of the code.
-        const extractedCode = VISA_CODE_CANDIDATES.find((c) => target.includes(c));
-
-        const visa =
-          list.find((v) => v.code?.toUpperCase() === target) ||
-          (extractedCode
-            ? list.find((v) => v.code?.toUpperCase() === extractedCode)
-            : undefined) ||
-          list.find((v) => v.name?.toUpperCase().includes(target)) ||
-          list.find((v) => {
-            const code = v.code?.toUpperCase();
-            return code ? target.includes(code) : false;
-          });
-
-        if (!visa) {
-          setError(`No visa type "${visaCode}" found in the catalog. Ask your admin to add it in Visa Types Manager.`);
-          setLoading(false);
-          return;
-        }
-        setVisaName(visa.code || visaCode);
-        setVisaTitle(visa.name || '');
-
-        // Try list-side docs first (backend sometimes omits them from list).
-        const listDocs = norm(visa.required_documents);
-        if (listDocs.length > 0) {
-          setDocs(listDocs);
-          setLoading(false);
-          return;
-        }
-
-        // Fall back to per-visa detail for the full docs list.
-        const detail = await visaChecklistApi.getVisaTypeDetail(visa.id);
-        if (cancelled) return;
-        const detailDocs = norm(detail?.required_documents);
-        setDocs(detailDocs);
-        if (detailDocs.length === 0) {
-          setError(`No documents configured for ${visa.code} yet. Ask your admin to add required documents in Visa Types Manager.`);
-        }
-        setLoading(false);
-      } catch {
-        if (!cancelled) {
-          setError('Could not load requirements. Please try again.');
-          setLoading(false);
-        }
-      }
-    })();
-
-    return () => { cancelled = true; };
-  }, [visaCode]);
-
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex items-start gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600 shrink-0">
-          <FileCheck2 size={20} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-600">
-            {visaName} · Required Documents
-          </p>
-          <h3 className="mt-0.5 text-lg font-bold text-slate-900">
-            {visaTitle || 'Requirements'}
-          </h3>
-          <p className="mt-0.5 text-xs text-slate-500">
-            Sourced live from the admin Visa Types Manager. Any change made there appears here automatically.
-          </p>
-        </div>
-        {!loading && docs.length > 0 && (
-          <span className="shrink-0 rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 border border-indigo-200">
-            {docs.length} {docs.length === 1 ? 'document' : 'documents'}
-          </span>
-        )}
-      </div>
-
-      {loading ? (
-        <div className="mt-6 flex items-center gap-2 text-sm text-slate-500">
-          <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
-          Loading requirements…
-        </div>
-      ) : error ? (
-        <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          {error}
-        </div>
-      ) : (
-        <ul className="mt-6 grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {docs.map((doc, i) => (
-            <li
-              key={doc}
-              className="flex items-start gap-3 rounded-lg border border-emerald-100 bg-emerald-50/40 px-4 py-3"
-            >
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white text-[11px] font-bold text-emerald-700 border border-emerald-200">
-                {i + 1}
-              </span>
-              <span className="text-sm font-medium text-slate-900 leading-tight">{doc}</span>
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 }

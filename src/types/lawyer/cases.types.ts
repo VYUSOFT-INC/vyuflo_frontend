@@ -226,4 +226,4 @@ export interface CaseStatusHistoryResponse {
 /* ─── UI helpers ────────────────────────────────────────────────────── */
 
 /** Tab identifier on the detail page — URL-driven via ?tab=. */
-export type CaseDetailTab = 'details' | 'overview' | 'comments' | 'deadlines' | 'requirements';
+export type CaseDetailTab = 'details' | 'overview' | 'comments' | 'deadlines';

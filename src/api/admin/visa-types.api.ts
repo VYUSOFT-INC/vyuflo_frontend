@@ -38,15 +38,3 @@ export const createVisaType = async (
   const res = await axios.post("/admin/visa-types", payload);
   return res.data;
 };
-
-/** PATCH /admin/visa-types/{id} — update an existing visa type.
- *  Same payload shape as create; every field is optional so callers can
- *  send only the fields they're changing. required_documents (when sent)
- *  must be a JSON array STRING to match the CreateVisaTypePayload contract. */
-export const updateVisaType = async (
-  id: string,
-  payload: Partial<CreateVisaTypePayload>
-): Promise<VisaTypeItem> => {
-  const res = await axios.patch(`/admin/visa-types/${id}`, payload);
-  return res.data;
-};

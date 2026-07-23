@@ -1627,6 +1627,8 @@
 //   );
 // }
 
+
+
 // src/pages/hr/HRDashboard.tsx
 // CHANGES vs original:
 //   + import useCurrentUser
@@ -1656,10 +1658,8 @@ import GridLayout from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { PageHeader, PageContent } from '../../components/layout/Pageheader';
-import { useCurrentUser } from '../../hooks/useAuth';
 import { useHRDashboard } from '../../hooks/hr/useDashboard';
 import { DashboardTour } from '../../components/tour/DashboardTour';
-import type { TourUser } from '../../hooks/useDashboardTour';
 import type {
   HRDashboardData, ExpiringVisa, ExpiryUrgency, RenewalStatus,
   ActivityItem, ActivityType, VisaDistribution, DepartmentCompliance, DocumentCompletion,
@@ -2115,7 +2115,6 @@ function SkeletonCard({ height }: { height: number }) {
 
 export default function HRDashboard() {
   const navigate = useNavigate();
-  const { data: user } = useCurrentUser();                   // ← NEW
   const { data, isLoading, error, refetch } = useHRDashboard();
 
   const [filter, setFilter] = useState<'all' | ExpiryUrgency>('all');
@@ -2354,7 +2353,8 @@ export default function HRDashboard() {
       </PageContent>
 
       {/* ── TOUR — auto-starts for first-time HR users ── */}
-      <DashboardTour role="hr" user={user as TourUser | null} />
+      {/* ── TOUR — auto-starts for first-time HR users ── */}
+      <DashboardTour role="hr" />
     </div>
   );
 }

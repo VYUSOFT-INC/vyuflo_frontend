@@ -864,7 +864,6 @@
 //   );
 // }
 
-
 // src/pages/employee/DocumentHub.tsx
 //
 // CHANGED: handleDrop() and handleFileChange() now navigate to DocumentViewer
@@ -875,13 +874,6 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { CheckCircle2, XCircle, AlertTriangle, Info, X } from "lucide-react";
 import { useDocumentHub }   from "../../hooks/employee/useDocumentHub";
 import type { HubDocument, RequirementItem } from "../../types/employee/documentHub.types";
-
-// ── Attorney-driven action banners ─────────────────────────────────
-// RejectedDocsWidget    → docs the attorney sent back for re-upload.
-// RequestedDocsWidget   → docs the attorney has asked the client for.
-// Both auto-hide when empty (hideWhenEmpty prop).
-import RejectedDocsWidget  from "../../components/employee/RejectedDocsWidget";
-import RequestedDocsWidget from "../../components/employee/RequestedDocsWidget";
 
 import imgUpload      from "../../assets/icons/appdetail-upload-cloud.svg";
 import imgPdf         from "../../assets/icons/docup-pdf-icon.svg";
@@ -1192,17 +1184,6 @@ export default function DocumentHub() {
 
           {/* LEFT — Upload + Docs */}
           <div className="flex flex-col gap-[24px] flex-1 min-w-0">
-
-            {/* ── ATTORNEY REJECTED-DOCS BANNER ─────────────────────
-                 Sits above the upload zone so the client sees the
-                 rejection reason immediately and can act on it.
-                 Auto-hides when empty. */}
-            <RejectedDocsWidget hideWhenEmpty />
-
-            {/* ── ATTORNEY REQUESTED-DOCS BANNER ────────────────────
-                 Attorney asked for a NEW document. Client can upload
-                 directly from this card. Auto-hides when empty. */}
-            <RequestedDocsWidget hideWhenEmpty />
 
             {/* Upload zone */}
             <div className="bg-white border border-[#f1f5f9] rounded-[16px] shadow-[0px_1px_4px_rgba(0,0,0,0.04)] p-[24px]">

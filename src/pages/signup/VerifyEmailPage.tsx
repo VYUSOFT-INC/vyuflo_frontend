@@ -1,3 +1,4 @@
+
 // src/pages/signup/VerifyEmailPage.tsx
 import { useState, useRef, useEffect } from "react";
 import type { KeyboardEvent, ClipboardEvent } from "react";
@@ -10,7 +11,7 @@ import { onboardingApi } from "../../api/onboarding.api";
 import { StepBar } from "../public/Signup";
 
 const OTP_LENGTH      = 6;
-const OTP_EXPIRY_SECS = 60;
+const OTP_EXPIRY_SECS = 60;   // must match backend OTP_EXPIRE_SECONDS
 
 interface AccountVerificationProps {
   email?:     string;
@@ -29,6 +30,10 @@ export default function AccountVerification({
   const [success,     setSuccess]     = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
   const [resendMsg,   setResendMsg]   = useState<string | null>(null);
+
+  // ── OTP expiry countdown ──────────────────────────────────────────────────
+  // Counts down from 60 after each send/resend.
+  // When it hits 0 the inputs are disabled and user must resend.
   const [otpTimer,    setOtpTimer]    = useState(OTP_EXPIRY_SECS);
   const [otpExpired,  setOtpExpired]  = useState(false);
 
@@ -36,12 +41,14 @@ export default function AccountVerification({
 
   useEffect(() => { inputRefs.current[0]?.focus(); }, []);
 
+  // Resend cooldown (60s between resends)
   useEffect(() => {
     if (resendTimer <= 0) return;
     const id = setTimeout(() => setResendTimer(t => t - 1), 1000);
     return () => clearTimeout(id);
   }, [resendTimer]);
 
+  // OTP expiry countdown
   useEffect(() => {
     if (otpTimer <= 0) { setOtpExpired(true); return; }
     if (success) return;
@@ -112,6 +119,7 @@ export default function AccountVerification({
     setError(null);
     try {
       await onboardingApi.resendOtp();
+      // Reset both timers
       setResendTimer(OTP_EXPIRY_SECS);
       setOtpTimer(OTP_EXPIRY_SECS);
       setOtpExpired(false);
@@ -156,7 +164,7 @@ export default function AccountVerification({
       </div>
 
       {/* ── RIGHT PANEL ── */}
-      <div className="flex flex-1 flex-col min-h-screen bg-white relative">
+      <div className="flex flex-1 flex-col min-h-screen bg-white">
 
         <StepBar current={2} />
 
@@ -174,15 +182,18 @@ export default function AccountVerification({
             <p className="text-[#111827] text-[15px] sm:text-[16px] font-medium leading-6 break-all">
               {email}
             </p>
+            {/* SMS hint — shown always; user may or may not have a phone */}
             <p className="text-[#6b7280] text-[13px] mt-[6px] leading-5">
               If you added a phone number during signup, the same code was also sent via SMS.
               Enter whichever arrives first.
             </p>
           </div>
 
-          {/* ── OTP countdown bar ── */}
+          {/* ── Slim plane countdown bar — like the step bar at the top ── */}
           {!success && (
             <div className="w-full max-w-[320px] sm:max-w-sm mb-5">
+
+              {/* Label row */}
               <div className="flex items-center justify-between mb-[8px]">
                 <span className="text-[12px] font-medium text-[#6b7280]">
                   {otpExpired ? "Code expired" : "Code expires in"}
@@ -198,7 +209,10 @@ export default function AccountVerification({
                 </span>
               </div>
 
+              {/* Track + icon */}
               <div className="relative w-full">
+
+                {/* Icon sitting on top of the fill edge — no bounce, no rotation */}
                 {!otpExpired && (
                   <div
                     className="absolute z-10 transition-all duration-1000 ease-linear"
@@ -206,16 +220,25 @@ export default function AccountVerification({
                       left: `calc(${(otpTimer / OTP_EXPIRY_SECS) * 100}% - 10px)`,
                       top: -22,
                     }}>
-                    <svg width="20" height="20" viewBox="0 0 17.5 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <svg
+                      width="20" height="20" viewBox="0 0 17.5 20"
+                      fill="none" xmlns="http://www.w3.org/2000/svg">
                       <rect width="17.5" height="20" rx="3"
-                        fill={otpTimer > 30 ? "#4f46e5" : otpTimer > 10 ? "#f59e0b" : "#ef4444"}
-                        style={{ transition: "fill 0.5s" }} />
+                        fill={
+                          otpTimer > 30 ? "#4f46e5" :
+                          otpTimer > 10 ? "#f59e0b" : "#ef4444"
+                        }
+                        style={{ transition: "fill 0.5s" }}
+                      />
                       <path
                         d="M0 2.5C0 1.12109 1.12109 0 2.5 0H15C16.3789 0 17.5 1.12109 17.5 2.5V17.5C17.5 18.8789 16.3789 20 15 20H2.5C1.12109 20 0 18.8789 0 17.5V2.5V2.5M7.14844 10.8906C6.05859 10.375 5.25781 9.35156 5.05078 8.125H6.57812C6.64062 9.3125 6.87891 10.2266 7.14844 10.8906V10.8906M8.76172 11.25H8.75H8.73828C8.64453 11.1133 8.51562 10.9023 8.38281 10.6055C8.14844 10.0742 7.89844 9.26562 7.82812 8.125H9.66797C9.59766 9.26562 9.35156 10.0742 9.11328 10.6055C8.98047 10.9023 8.85156 11.1133 8.75781 11.25H8.76172M10.3516 10.8906C10.6172 10.2227 10.8555 9.3125 10.9219 8.125H12.4492C12.2422 9.35156 11.4414 10.375 10.3516 10.8906V10.8906M10.9219 6.875C10.8594 5.6875 10.6211 4.77344 10.3516 4.10938C11.4414 4.625 12.2422 5.64844 12.4492 6.875H10.9219V6.875M8.73828 3.75H8.75H8.76172C8.85547 3.88672 8.98438 4.09766 9.11719 4.39453C9.35156 4.92578 9.60156 5.73438 9.67188 6.875H7.83203C7.90234 5.73438 8.14844 4.92578 8.38672 4.39453C8.51953 4.09766 8.64844 3.88672 8.74219 3.75H8.73828M7.14844 4.10938C6.88281 4.77734 6.64453 5.6875 6.57812 6.875H5.05078C5.25781 5.64844 6.05859 4.625 7.14844 4.10938V4.10938M13.75 7.5C13.75 4.74042 11.5096 2.5 8.75 2.5C5.99042 2.5 3.75 4.74042 3.75 7.5C3.75 10.2596 5.99042 12.5 8.75 12.5C11.5096 12.5 13.75 10.2596 13.75 7.5V7.5M4.375 15C4.03125 15 3.75 15.2812 3.75 15.625C3.75 15.9688 4.03125 16.25 4.375 16.25H13.125C13.4688 16.25 13.75 15.9688 13.75 15.625C13.75 15.2812 13.4688 15 13.125 15H4.375V15"
-                        fill="white" fillOpacity="0.9" />
+                        fill="white" fillOpacity="0.9"
+                      />
                     </svg>
                   </div>
                 )}
+
+                {/* Slim track — same style as the StepBar at the top */}
                 <div className="w-full h-[4px] rounded-full bg-[#e5e7eb]">
                   <div
                     className="h-full rounded-full transition-all duration-1000 ease-linear"
@@ -278,6 +301,7 @@ export default function AccountVerification({
             ))}
           </div>
 
+          {/* Error / success messages */}
           {error    && <p className="text-red-500 text-sm mb-4">{error}</p>}
           {resendMsg && !error && <p className="text-green-600 text-sm mb-4">{resendMsg}</p>}
 
@@ -336,7 +360,7 @@ export default function AccountVerification({
         </div>
 
         {/* Footer note */}
-        <div className="absolute bottom-0 left-0 right-0 px-6 sm:px-12 lg:px-24 xl:px-32 pb-6 sm:pb-8">
+        <div className="px-6 sm:px-12 lg:px-24 xl:px-32 pb-6 sm:pb-8">
           <div className="border-t border-[#f3f4f6] pt-5 flex items-start gap-2">
             <img src={imgLockIcon} alt="" className="w-[13px] h-[13px] mt-[3px] shrink-0" />
             <p className="text-[#9ca3af] text-[13px] leading-[19px]">
@@ -344,6 +368,7 @@ export default function AccountVerification({
             </p>
           </div>
         </div>
+
       </div>
     </div>
   );

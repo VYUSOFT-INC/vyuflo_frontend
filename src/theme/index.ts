@@ -1,7 +1,8 @@
 // src/theme/index.ts
-export { generatePalette, isValidHex, type ThemePalette } from "./colors";
-export { ThemeProvider, useTheme } from "./ThemeProvider";
-export { ThemeColorPicker } from "./ThemeColorPicker";
+
+export { generatePalette, applyPaletteToRoot, isValidHex, type ThemePalette } from './colors';
+export { ThemeProvider, useTheme, bootTheme } from './ThemeProvider';
+export { ThemeColorPicker } from './ThemeColorPicker';
 export {
   ThemedButton,
   ThemedChip,
@@ -13,4 +14,4 @@ export {
   ThemedSidebarIcon,
   ThemedLogoBox,
   THEMED_FOCUS,
-} from "./ThemedComponents";
+} from './ThemedComponents';

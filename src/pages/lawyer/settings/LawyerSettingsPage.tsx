@@ -28,7 +28,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from '../../../api/axios';
-import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 import { lawyerProfileApi } from '../../../api/lawyer/lawyerProfile.api';
 import { getUiSession } from '../../../utils/uiSession';
 import {
@@ -235,9 +234,6 @@ export default function LawyerSettingsPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-5xl px-4 py-6 md:px-8 md:py-8">
-
-        {/* Back navigation — top-left, above the page header (desktop + mobile). */}
-        <LawyerBackButton />
 
         <div>
           <h1 className="text-2xl font-semibold text-slate-900 md:text-3xl">Settings</h1>
