@@ -13,12 +13,12 @@ import {
   Lock, Globe, Bell,
 } from "lucide-react";
 
-import { useMyProfile, useLoginHistory } from "../../hooks/employee/useProfile";
-import { updateMyProfile, signOutAllDevices, uploadProfilePicture } from "../../api/employee/profile.api";
+import { useMyProfile, useLoginHistory,notifyProfileUpdated } from "../../hooks/employee/useProfile";
+import { updateMyProfile, signOutAllDevices, uploadProfilePicture, removeProfilePicture } from "../../api/employee/profile.api";
 import { useAuthStore } from "../../store/authStore";
 import imgUserAvatar from "../../assets/icons/user-avatar.jpg";
 import { getFileUrl } from "../../utils/fileUrl";
-import { updateUiSessionProfile, getUiSession } from "../../utils/uiSession";
+import {  getUiSession } from "../../utils/uiSession";
 import { PageHeader, PageContent } from "../../components/layout/Pageheader";
 import { ThemeColorStrip } from "../settings/ThemeColorStrip";
 import {
@@ -97,6 +97,7 @@ const PersonalInfoSection = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate     = useNavigate();
   const [searchParams] = useSearchParams();
+  const [removing, setRemoving] = useState(false);
 
   const [editing,         setEditing]         = useState(false);
   const [saving,          setSaving]          = useState(false);
@@ -136,11 +137,22 @@ const PersonalInfoSection = () => {
     if (file.size > 5 * 1024 * 1024) { setAvatarError("File must be under 5 MB."); return; }
     setAvatarUploading(true); setAvatarError(null);
     try {
-      const result = await uploadProfilePicture(file);
+      await uploadProfilePicture(file);
       await refetch();
-      if (result?.profile_picture_url) updateUiSessionProfile(result.profile_picture_url);
+      notifyProfileUpdated();   // ← tells Sidebar/SettingsSidebar to refetch too
     } catch { setAvatarError("Failed to upload photo."); }
     finally { setAvatarUploading(false); e.target.value = ""; }
+  };
+
+  const handleRemoveAvatar = async () => {
+    if (!profile?.profile_picture_url) return;
+    setRemoving(true); setAvatarError(null);
+    try {
+      await removeProfilePicture();
+      await refetch();
+      notifyProfileUpdated();   // ← same here
+    } catch { setAvatarError("Failed to remove photo."); }
+    finally { setRemoving(false); }
   };
 
   if (isLoading) return <SectionCard><div className="flex items-center justify-center py-[64px]"><Spinner size={28} className="text-indigo-600" /></div></SectionCard>;
@@ -181,8 +193,9 @@ const PersonalInfoSection = () => {
                 style={{ background: "linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)" }}>
                 {avatarUploading ? <><Spinner size={13} /> Uploading…</> : <><Upload size={13} /> Upload New</>}
               </button>
-              <button className="flex items-center gap-[6px] px-[12px] sm:px-[14px] h-[34px] sm:h-[36px] border border-[#e5e7eb] text-[#6b7280] text-[12px] sm:text-[13px] font-medium rounded-[8px] hover:bg-[#f9fafb] transition">
-                <Trash2 size={13} /> Remove
+              <button onClick={handleRemoveAvatar} disabled={removing || !profile?.profile_picture_url}
+                className="flex items-center gap-[6px] px-[12px] sm:px-[14px] h-[34px] sm:h-[36px] border border-[#e5e7eb] text-[#6b7280] text-[12px] sm:text-[13px] font-medium rounded-[8px] hover:bg-[#f9fafb] transition disabled:opacity-60">
+                {removing ? <><Spinner size={13} className="text-[#6b7280]" /> Removing…</> : <><Trash2 size={13} /> Remove</>}
               </button>
             </div>
             {avatarError ? <p className="text-[12px] text-[#ef4444]">{avatarError}</p>

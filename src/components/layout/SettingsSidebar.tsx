@@ -5,6 +5,7 @@ import { useAuthStore } from "../../store/authStore";
 import { Avatar } from "../ui/Avatar";
 import { getUiSession, type UiSession } from "../../utils/uiSession";
 import { getFileUrl } from "../../utils/fileUrl";
+import { useMyProfile } from "../../hooks/employee/useProfile";
 import {
   ChevronLeft, X, User, Settings,
   Shield, Activity, Download, HelpCircle,
@@ -46,6 +47,7 @@ export function SettingsSidebar({ onClose }: Props = {}) {
   const location = useLocation();
   const { clearAuth: logout } = useAuthStore();
   const [session, setSession] = useState<UiSession | null>(null);
+  const { data: profile } = useMyProfile();
 
   useEffect(() => {
     setSession(getUiSession());
@@ -56,7 +58,7 @@ export function SettingsSidebar({ onClose }: Props = {}) {
 
   const isHR      = session?.roles?.includes("hr") ?? false;
   const fullName  = session ? `${session.first_name} ${session.last_name}`.trim() : "User";
-  const avatarUrl = getFileUrl(session?.profile ?? null);
+  const avatarUrl = getFileUrl(profile?.profile_picture_url ?? null);
   const backPath  = isHR ? "/employer/dashboard" : "/dashboard";
 
   const personalItems = isHR ? HR_PERSONAL : EMP_PERSONAL;

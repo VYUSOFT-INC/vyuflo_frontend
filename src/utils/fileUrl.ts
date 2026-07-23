@@ -1,18 +1,12 @@
-// // src/utils/fileUrl.ts
-// export const getFileUrl = (path: string | null | undefined): string | null => {
-//   if (!path) return null;
+// src/utils/fileUrl.ts
 
-//   // Already a full URL (S3, CDN, http) — return as-is
-//   if (path.startsWith("http://") || path.startsWith("https://")) return path;
-
-//   // Strip /api/v1 from base — static files are mounted at root /static, not under /api/v1
-//   const base = (import.meta.env.VITE_API_BASE_URL as string ?? '').replace('/api/v1', '');
-
-//   return `${base}/static/${path.replace(/^uploads\//, '')}`;
-// };  
-
+// Backend always returns a fully-resolved URL (presigned or public) directly.
+// No local storage fallback — STORAGE_BACKEND=s3 only.
 export const getFileUrl = (path: string | null | undefined): string | null => {
   if (!path) return null;
   if (path.startsWith("http://") || path.startsWith("https://")) return path;
-  return `/static/${path.replace(/^uploads\//, '')}`;
+
+  // Shouldn't happen anymore — surfaces as a visible bug instead of a silent 404.
+  console.warn("getFileUrl received a non-URL path — backend should resolve this:", path);
+  return null;
 };

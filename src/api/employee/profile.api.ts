@@ -28,6 +28,11 @@ export const profileApi = {
     return res.data;
   },
 
+  removeProfilePicture: async () => {
+    const res = await axios.delete("/users/me/profile-picture");
+    return res.data;
+  },
+
   // PATCH /users/me/login-history/:id/suspicious
   markSuspicious: async (historyId: string) => {
     const res = await axios.patch(`/users/me/login-history/${historyId}/suspicious`);
@@ -36,7 +41,7 @@ export const profileApi = {
 
   // POST /users/me/sign-out-all
   signOutAllDevices: async () => {
-    const res = await axios.post("/users/me/sign-out-all");
+    const res = await axios.post("/auth/logout-all");
     return res.data;
   },
 
@@ -95,3 +100,4 @@ export const markSuspicious       = (historyId: string)                         
 export const signOutAllDevices    = ()                                                          => profileApi.signOutAllDevices();
 export const uploadProfilePicture = (file: File)                                                => profileApi.uploadProfilePicture(file);
 export const markTourSeen         = (role: TourRole)                                            => profileApi.markTourSeen(role);
+export const removeProfilePicture = () => profileApi.removeProfilePicture();
