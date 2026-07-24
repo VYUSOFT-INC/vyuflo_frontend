@@ -118,6 +118,7 @@ function RoleRoute({ allowedRoles }: { allowedRoles: string[] }) {
 export default function App() {
   const session    = getUiSession();
   const themeColor = (session as { theme_color?: string | null } | null)?.theme_color ?? null;
+  console.log('session', session);
 
   return (
     <ThemeProvider color={themeColor}>
