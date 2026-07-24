@@ -44,6 +44,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import NotificationBellDropdown from '../../../components/lawyer/NotificationBellDropdown';
 import {
   Briefcase, Clock, AlertTriangle, UserPlus, Calendar, ArrowRight,
   ChevronRight, Search, TrendingUp, TrendingDown, DollarSign, CheckCircle2,
@@ -445,19 +446,25 @@ export default function LawyerDashboardPage() {
             </p>
           </div>
 
-          <div className="relative w-full sm:w-[320px]">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && search.trim()) {
-                  navigate(`/lawyer/cases?q=${encodeURIComponent(search.trim())}`);
-                }
-              }}
-              placeholder="Search cases, clients…"
-              className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 text-[13px] text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--theme-light,#eef2ff)] focus:border-[var(--theme-primary,#4f46e5)] transition"
-            />
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="relative flex-1 sm:flex-initial sm:w-[320px]">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && search.trim()) {
+                    navigate(`/lawyer/cases?q=${encodeURIComponent(search.trim())}`);
+                  }
+                }}
+                placeholder="Search cases, clients…"
+                className="w-full h-10 bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 text-[13px] text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[var(--theme-light,#eef2ff)] focus:border-[var(--theme-primary,#4f46e5)] transition"
+              />
+            </div>
+            {/* Notification bell — mirrors the sidebar Notifications item.
+                Reads from the same local store as the toaster, so the badge
+                stays in sync in real time. */}
+            <NotificationBellDropdown />
           </div>
         </div>
       </header>
