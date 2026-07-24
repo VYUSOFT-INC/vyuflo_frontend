@@ -28,4 +28,12 @@ jobs:
             git pull origin ${{ github.ref_name }}
 
             cd /opt/vyuflo-${{ github.event.inputs.environment }}
-            docker compose -f docker-compose.${{ github.event.inputs.environment }}.yml up -d --build frontend
+
+            if [ "${{ github.event.inputs.environment }}" = "dev" ]; then
+              export PORT=3000
+            else
+              export PORT=80
+            fi
+
+            docker compose -f docker-compose.${{ github.event.inputs.environment }}.yml build --build-arg PORT=$PORT frontend
+            docker compose -f docker-compose.${{ github.event.inputs.environment }}.yml up -d frontend
