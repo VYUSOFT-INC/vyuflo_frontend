@@ -6,6 +6,7 @@ import { useMsal } from "@azure/msal-react";
 import { authApi } from "../../api/auth.api";
 import { callSSOEndpoint } from "../../lib/sso";
 import { useAuthStore } from '../../store/authStore';
+import { getDashboardRoute } from '../../utils/navigation';
 import imgLogoIcon     from "../../assets/icons/plane-icon.svg";
 import imgShieldIcon   from "../../assets/icons/shield-icon.svg";
 import imgBellIcon     from "../../assets/icons/bell-icon.svg";
@@ -54,8 +55,12 @@ export default function Login() {
     setApiError(null);
     try {
       const data = await authApi.login({ email: email.trim().toLowerCase(), password });
-      useAuthStore.getState().setAuth({ access_token: data.access_token });
-      navigate('/dashboard');
+      useAuthStore.getState().setAuth({
+        access_token: data.access_token,
+        user:         data.user,
+        roles:        data.roles,
+      });
+      navigate(getDashboardRoute(data.roles?.[0] ?? ''), { replace: true });
     } catch (e: unknown) {
       const err = e as AxiosError<{ detail: string }>;
       setApiError(err.response?.data?.detail ?? (e instanceof Error ? e.message : 'Invalid email or password.'));
@@ -72,8 +77,12 @@ export default function Login() {
     setSsoError(null);
     try {
       const data = await callSSOEndpoint(provider, token);
-      useAuthStore.getState().setAuth({ access_token: data.access_token });
-      navigate('/dashboard');
+      useAuthStore.getState().setAuth({
+        access_token: data.access_token,
+        user:         data.user,
+        roles:        data.roles,
+      });
+      navigate(getDashboardRoute(data.roles?.[0] ?? ''), { replace: true });
     } catch (e: unknown) {
       setSsoError(e instanceof Error ? e.message : 'SSO sign-in failed. Please try again.');
     } finally {

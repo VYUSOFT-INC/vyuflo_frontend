@@ -6,6 +6,7 @@ import { getDashboardRoute } from './utils/navigation';
 import { ThemeProvider } from './theme/ThemeProvider';
 // ── layouts ──────────────────────────────────────────────────────────────────
 import { DashboardLayout } from './components/layout/DashboardLayout';
+import { InstallAppBanner } from './components/layout/InstallAppBanner';
 // ── public pages ─────────────────────────────────────────────────────────────
 import Login            from './pages/public/Login';
 import ForgotPassword   from './pages/public/ForgotPassword';
@@ -86,11 +87,19 @@ import LawyerDashboardPage from './pages/lawyer/dashboard/LawyerDashboardPage';
 // Guards
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Role comes from the token stored in the auth store; the ui_session cookie is
+// the fallback for sessions created before roles were kept in the store.
+function useActiveRole(): string {
+  const storeRoles = useAuthStore((state) => state.roles);
+  if (storeRoles.length > 0) return storeRoles[0];
+  return getUiSession()?.roles?.[0] ?? '';
+}
+
 function PublicRoute() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  if (isAuthenticated) {
-    const session = getUiSession();
-    return <Navigate to={getDashboardRoute(session?.roles?.[0] ?? '')} replace />;
+  const userRole        = useActiveRole();
+  if (isAuthenticated && userRole) {
+    return <Navigate to={getDashboardRoute(userRole)} replace />;
   }
   return <Outlet />;
 }
@@ -103,9 +112,11 @@ function OnboardingRoute() {
 
 function RoleRoute({ allowedRoles }: { allowedRoles: string[] }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const userRole        = useActiveRole();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  const session  = getUiSession();
-  const userRole = session?.roles?.[0] ?? '';
+  // Authenticated but no resolvable role — redirecting to a dashboard would
+  // bounce back here forever, so send the user to login instead.
+  if (!userRole) return <Navigate to="/login" replace />;
   if (!allowedRoles.includes(userRole)) {
     return <Navigate to={getDashboardRoute(userRole)} replace />;
   }
@@ -122,6 +133,7 @@ export default function App() {
   return (
     <ThemeProvider color={themeColor}>
       <BrowserRouter>
+        <InstallAppBanner />
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
 

@@ -4,10 +4,13 @@ import { createRoot } from 'react-dom/client'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import { MsalProvider } from '@azure/msal-react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { registerSW } from 'virtual:pwa-register'
 import { msalInstance } from './lib/sso'
 import './index.css'
 
 import App from './App.tsx'
+
+registerSW({ immediate: true })
 
 // ─────────────────────────────────────────────────────────────────────────────
 // React Query client — singleton for the entire app

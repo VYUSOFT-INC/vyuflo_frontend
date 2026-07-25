@@ -1,0 +1,74 @@
+/// <reference lib="webworker" />
+import { clientsClaim } from "workbox-core";
+import {
+  cleanupOutdatedCaches,
+  createHandlerBoundToURL,
+  precacheAndRoute,
+} from "workbox-precaching";
+import { NavigationRoute, registerRoute } from "workbox-routing";
+
+declare let self: ServiceWorkerGlobalScope;
+
+precacheAndRoute(self.__WB_MANIFEST);
+cleanupOutdatedCaches();
+
+self.skipWaiting();
+clientsClaim();
+
+// SPA shell: serve index.html for navigations (not API / static proxies)
+registerRoute(
+  new NavigationRoute(createHandlerBoundToURL("index.html"), {
+    denylist: [/^\/api\//, /^\/static\//],
+  })
+);
+
+const APP_NAME = "Vyuflo";
+const DEFAULT_ICON = "/pwa/icon-192.png";
+
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+
+  let payload: { title?: string; body?: string; icon?: string; url?: string };
+  try {
+    payload = event.data.json();
+  } catch {
+    payload = { title: APP_NAME, body: event.data.text(), url: "/" };
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title || APP_NAME, {
+      body: payload.body || "",
+      icon: payload.icon || DEFAULT_ICON,
+      badge: DEFAULT_ICON,
+      data: { url: payload.url || "/" },
+      vibrate: [200, 100, 200],
+      requireInteraction: false,
+      tag: "vyuflo-notif",
+      renotify: true,
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+
+  const targetUrl =
+    (event.notification.data && event.notification.data.url) || "/";
+
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((windowClients) => {
+        for (const client of windowClients) {
+          if ("focus" in client) {
+            void client.focus();
+            client.postMessage({ type: "PUSH_NAV", url: targetUrl });
+            return;
+          }
+        }
+        if (self.clients.openWindow) {
+          return self.clients.openWindow(self.location.origin + targetUrl);
+        }
+      })
+  );
+});

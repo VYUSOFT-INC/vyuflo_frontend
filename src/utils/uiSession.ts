@@ -53,6 +53,13 @@ function writeCookie(session: UiSession): void {
   window.dispatchEvent(new Event('ui-session-updated'));
 }
 
+// ── Clear (logout) ──────────────────────────────────────────────────────────
+
+export function clearUiSession(): void {
+  document.cookie = 'ui_session=; path=/; max-age=0; samesite=lax';
+  window.dispatchEvent(new Event('ui-session-updated'));
+}
+
 // ── Partial update (merge any fields) ───────────────────────────────────────
 // Used by useUpdateTheme, profile save, login, etc.
 //

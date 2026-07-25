@@ -26,8 +26,9 @@ export async function initPushNotifications(
     return;
   }
   try {
-    _swReg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
-    console.info("[Push] Service worker registered.");
+    // PWA registers the SW via virtual:pwa-register in main.tsx
+    _swReg = await navigator.serviceWorker.ready;
+    console.info("[Push] Service worker ready.");
     if (navigateFn) _navCallback = navigateFn;
     navigator.serviceWorker.addEventListener("message", (event) => {
       if (event.data?.type === "PUSH_NAV" && _navCallback) {
@@ -112,8 +113,8 @@ export function showLocalNotification(
   try {
     const n = new Notification(title, {
       body,
-      icon: "/logo192.png",
-      tag:  "visaflow-msg",
+      icon: "/pwa/icon-192.png",
+      tag:  "vyuflo-msg",
     });
     n.onclick = () => {
       window.focus();
@@ -123,7 +124,7 @@ export function showLocalNotification(
   } catch {
     _swReg?.showNotification(title, {
       body,
-      icon: "/logo192.png",
+      icon: "/pwa/icon-192.png",
       data: { url },
     });
   }
