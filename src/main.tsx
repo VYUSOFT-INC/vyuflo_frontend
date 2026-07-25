@@ -10,7 +10,13 @@ import './index.css'
 
 import App from './App.tsx'
 
-registerSW({ immediate: true })
+registerSW({
+  immediate: true,
+  onRegisteredSW(_swUrl, registration) {
+    // Ensure the SW takes control so Chrome can fire beforeinstallprompt
+    void registration?.update();
+  },
+})
 
 
 // ─────────────────────────────────────────────────────────────────────────────

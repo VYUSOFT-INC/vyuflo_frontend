@@ -14,9 +14,12 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-// Chrome requires a fetch handler for installability. No caching — network only.
-self.addEventListener("fetch", () => {
-  // leave request to the browser
+// Chrome requires a fetch handler for installability.
+// Only handle navigations so we don't add latency to every asset request.
+self.addEventListener("fetch", (event) => {
+  if (event.request.mode === "navigate") {
+    event.respondWith(fetch(event.request));
+  }
 });
 
 const APP_NAME = "Vyuflo";

@@ -20,18 +20,11 @@ function isIos(): boolean {
   return /iphone|ipad|ipod/i.test(navigator.userAgent);
 }
 
-function isChromium(): boolean {
-  if (typeof navigator === "undefined") return false;
-  // Chrome / Edge / Brave — the ones that fire beforeinstallprompt
-  return /Chrome|Edg|CriOS/i.test(navigator.userAgent) && !/Firefox/i.test(navigator.userAgent);
-}
-
 export function usePwaInstall() {
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(() => isStandalone());
   const [isIosDevice] = useState(() => isIos());
-  const [chromium] = useState(() => isChromium());
 
   useEffect(() => {
     if (isStandalone()) {
@@ -40,6 +33,8 @@ export function usePwaInstall() {
     }
 
     const onBeforeInstall = (event: Event) => {
+      // Capture the event so our Install button can open Chrome's install dialog.
+      // (The address-bar icon is unreliable and often missing.)
       event.preventDefault();
       setDeferredPrompt(event as BeforeInstallPromptEvent);
     };
@@ -60,8 +55,6 @@ export function usePwaInstall() {
 
   const canPrompt = Boolean(deferredPrompt) && !installed;
   const showIosHint = isIosDevice && !installed;
-  // Show banner on Chromium even before the event fires (dev won't fire; production will)
-  const showChromeHint = chromium && !isIosDevice && !installed && !canPrompt;
 
   const promptInstall = useCallback(async (): Promise<"accepted" | "dismissed" | "unavailable"> => {
     if (!deferredPrompt) return "unavailable";
@@ -80,7 +73,6 @@ export function usePwaInstall() {
   return {
     canPrompt,
     showIosHint,
-    showChromeHint,
     installed,
     promptInstall,
   };

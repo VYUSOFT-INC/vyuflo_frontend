@@ -66,10 +66,10 @@ export default defineConfig(({ mode }) => {
           globPatterns: ['**/*.{html,ico,png,svg,webmanifest}'],
           maximumFileSizeToCacheInBytes: 512 * 1024,
         },
-        // Do not enable in `npm run dev` — Workbox/SW in Vite freezes the tab.
-        // Test install with: npm run build && npm run preview
+        // Lightweight SW (no big cache) — safe to enable so install works on localhost
         devOptions: {
-          enabled: false,
+          enabled: true,
+          type: 'module',
         },
       }),
     ],
