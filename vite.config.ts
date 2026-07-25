@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
         strategies: 'injectManifest',
         srcDir: 'src',
         filename: 'sw.ts',
-        registerType: 'autoUpdate',
+        registerType: 'prompt',
         injectRegister: false,
         includeAssets: [
           'favicon.svg',
@@ -30,20 +30,23 @@ export default defineConfig(({ mode }) => {
           theme_color: '#2563eb',
           background_color: '#ffffff',
           display: 'standalone',
-          orientation: 'portrait-primary',
+          orientation: 'any',
           scope: '/',
           start_url: '/',
+          id: '/',
           categories: ['business', 'productivity'],
           icons: [
             {
               src: '/pwa/icon-192.png',
               sizes: '192x192',
               type: 'image/png',
+              purpose: 'any',
             },
             {
               src: '/pwa/icon-512.png',
               sizes: '512x512',
               type: 'image/png',
+              purpose: 'any',
             },
             {
               src: '/pwa/icon-192-maskable.png',
@@ -60,15 +63,13 @@ export default defineConfig(({ mode }) => {
           ],
         },
         injectManifest: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,webmanifest}'],
-          // Main app chunk is currently ~2.8MB; raise so it can be precached offline.
-          maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+          globPatterns: ['**/*.{html,ico,png,svg,webmanifest}'],
+          maximumFileSizeToCacheInBytes: 512 * 1024,
         },
-        // Needed so beforeinstallprompt can fire during local testing
+        // Do not enable in `npm run dev` — Workbox/SW in Vite freezes the tab.
+        // Test install with: npm run build && npm run preview
         devOptions: {
-          enabled: true,
-          type: 'module',
-          navigateFallback: 'index.html',
+          enabled: false,
         },
       }),
     ],

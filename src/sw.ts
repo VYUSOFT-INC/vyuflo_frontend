@@ -1,26 +1,23 @@
 /// <reference lib="webworker" />
-import { clientsClaim } from "workbox-core";
-import {
-  cleanupOutdatedCaches,
-  createHandlerBoundToURL,
-  precacheAndRoute,
-} from "workbox-precaching";
-import { NavigationRoute, registerRoute } from "workbox-routing";
 
 declare let self: ServiceWorkerGlobalScope;
 
-precacheAndRoute(self.__WB_MANIFEST);
-cleanupOutdatedCaches();
+// injectManifest injects this; we intentionally do not precache the app
+// (precaching the ~3MB bundle was freezing the browser).
+void self.__WB_MANIFEST;
 
-self.skipWaiting();
-clientsClaim();
+self.addEventListener("install", () => {
+  void self.skipWaiting();
+});
 
-// SPA shell: serve index.html for navigations (not API / static proxies)
-registerRoute(
-  new NavigationRoute(createHandlerBoundToURL("index.html"), {
-    denylist: [/^\/api\//, /^\/static\//],
-  })
-);
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
+// Chrome requires a fetch handler for installability. No caching — network only.
+self.addEventListener("fetch", () => {
+  // leave request to the browser
+});
 
 const APP_NAME = "Vyuflo";
 const DEFAULT_ICON = "/pwa/icon-192.png";

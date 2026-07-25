@@ -1,7 +1,8 @@
 // src/components/tour/DashboardTour.tsx
 //
 // Role-aware spotlight tour used by all 4 dashboards.
-// Tour state is stored in the DB (user_profiles.tour_*_seen) — not localStorage.
+// Closing / skipping / finishing stores a per-role flag in localStorage
+// so the tour does not auto-start again on the next dashboard visit.
 //
 // Usage in each dashboard:
 //   const { data: user } = useCurrentUser();

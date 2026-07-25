@@ -12,6 +12,7 @@ import App from './App.tsx'
 
 registerSW({ immediate: true })
 
+
 // ─────────────────────────────────────────────────────────────────────────────
 // React Query client — singleton for the entire app
 // ─────────────────────────────────────────────────────────────────────────────
