@@ -463,7 +463,7 @@ export default function Login() {
       // Build ui_session cookie from scratch — no race condition
       writeUiSessionFromLogin({
         user:               data.user,
-        profile:            data.profile,
+        // profile:            data.profile,
         roles:              data.roles ?? [],
         theme_color:        data.theme_color,
         tour_employee_seen: data.tour_employee_seen ?? false,
@@ -509,7 +509,7 @@ export default function Login() {
 
       writeUiSessionFromLogin({
         user:               data.user,
-        profile:            data.profile,
+        // profile:            data.profile,
         roles:              data.roles ?? [],
         theme_color:        data.theme_color,
         tour_employee_seen: data.tour_employee_seen ?? false,

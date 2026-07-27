@@ -34,6 +34,7 @@ import { pushLawyerNotification } from '../../utils/lawyerNotifications';
 import { listLocalReminders, LOCAL_REMINDERS_EVENT } from '../../utils/localReminders';
 import type { Document } from '../../types/lawyer/documents.types';
 import type { AssignedApplication } from '../../types/lawyer/intake.types';
+import { getLocallyDeletedDocumentIds } from '../../utils/locallyDeletedDocuments';
 
 const POLL_MS = 30_000;
 
@@ -112,7 +113,7 @@ export default function useLawyerNotificationWatcher(): void {
       try {
         const res = await documentsApi.filterDocuments({});
         const items = res.items || [];
-        const deleted = documentsApi.getLocallyDeletedIds();
+        const deleted = getLocallyDeletedDocumentIds();
         const live = items.filter((d) => !deleted.has(d.id));
 
         // Build the current snapshot

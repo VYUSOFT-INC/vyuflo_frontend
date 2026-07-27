@@ -5,6 +5,8 @@ import messageApi from "../../api/employee/message.api";
 import type { Conversation, Message } from "../../types/employee/message.types";
 import { getUiSession } from "../../utils/uiSession";
 import { getFileUrl } from "../../utils/fileUrl";
+import { useMyProfile } from "../../hooks/employee/useProfile"; // ← ADDED: adjust path if useProfile.ts lives elsewhere
+
 
 // ── Message sound + browser popup ────────────────────────────────────────────
 
@@ -384,6 +386,7 @@ function NewConvModal({ onClose, onCreate, isHR }: {
 const SecureMessaging: React.FC = () => {
   const session = getUiSession();
   const isHR    = session?.roles?.includes("hr") ?? false;
+  const { data: profile } = useMyProfile(); // ← ADDED: resolves current user's avatar live (not stored in ui_session)
 
   const currentUserId = useMemo((): string => {
     if (session?.user_id) return session.user_id;
@@ -581,7 +584,7 @@ const SecureMessaging: React.FC = () => {
         <div className="flex items-center gap-3">
           <Avatar
             name={`${session?.first_name ?? ""} ${session?.last_name ?? ""}`}
-            url={session?.profile}
+            url={profile?.profile_picture_url}
             size={40}
           />
           <span className="font-semibold text-[15px] text-slate-800">Chats</span>
