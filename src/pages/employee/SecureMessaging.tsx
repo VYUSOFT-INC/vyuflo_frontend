@@ -1,4 +1,3 @@
-
 // src/pages/employee/SecureMessaging.tsx
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Paperclip, Pencil, Search, Send, Smile, X, Download, Check, CheckCheck, ArrowLeft } from "lucide-react";
@@ -8,9 +7,7 @@ import { getUiSession } from "../../utils/uiSession";
 import { getFileUrl } from "../../utils/fileUrl";
 
 // ── Message sound + browser popup ────────────────────────────────────────────
-
 let _audioCtx: AudioContext | null = null;
-
 function getAudioContext(): AudioContext | null {
   try {
     if (!_audioCtx) {
@@ -21,14 +18,12 @@ function getAudioContext(): AudioContext | null {
     return null;
   }
 }
-
 function unlockAudio() {
   const ctx = getAudioContext();
   if (ctx && ctx.state === "suspended") {
     ctx.resume().catch(() => {});
   }
 }
-
 function playMessageSound() {
   const ctx = getAudioContext();
   if (!ctx || ctx.state === "suspended") return;
@@ -46,7 +41,6 @@ function playMessageSound() {
     osc.stop(ctx.currentTime + 0.35);
   } catch { /* silent */ }
 }
-
 function showMessagePopup(senderName: string, content: string, convId: string) {
   if (Notification.permission !== "granted") return;
   if (document.hasFocus()) return;
@@ -168,6 +162,7 @@ function ProtectedImage({ documentId, name, onClick }: {
       <Paperclip size={14} /><span className="truncate max-w-[160px]">{name ?? "Image"}</span>
     </div>
   );
+
   return (
     <img src={blobUrl} alt={name ?? ""}
       className="max-w-[260px] max-h-[260px] rounded-2xl object-cover cursor-pointer shadow-sm hover:opacity-95 transition"
@@ -189,6 +184,7 @@ function FileCard({ documentId, name, size, isMine }: {
       setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch { /* silent */ } finally { setLoading(false); }
   };
+
   return (
     <button type="button" onClick={handleClick} disabled={loading}
       className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-sm transition disabled:opacity-60 max-w-[260px] w-full ${
@@ -213,6 +209,7 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
     document.addEventListener("keydown", h);
     return () => document.removeEventListener("keydown", h);
   }, [onClose]);
+
   return (
     <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={onClose}>
       <button type="button" className="absolute top-4 right-5 text-white/80 hover:text-white" onClick={onClose}>
@@ -235,7 +232,6 @@ const EMOJI_CATEGORIES: { label: string; emojis: string[] }[] = [
 function EmojiPicker({ onPick, onClose }: { onPick: (e: string) => void; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState(0);
-
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
@@ -416,7 +412,6 @@ const SecureMessaging: React.FC = () => {
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const isGroup = (selectedConv as any)?.thread_type === "group";
-
   const filteredConvs = useMemo(() => conversations.filter(c => {
     const m = c.participant_name?.toLowerCase().includes(search.toLowerCase())
            || c.last_message?.toLowerCase().includes(search.toLowerCase());
@@ -425,7 +420,6 @@ const SecureMessaging: React.FC = () => {
     if (filter === "archived") return c.is_archived;
     return !c.is_archived;
   }), [conversations, search, filter]);
-
   const totalUnread = conversations.reduce((s, c) => s + (c.unread_count ?? 0), 0);
 
   // ── Data fetching ─────────────────────────────────────────────────────────
@@ -444,7 +438,6 @@ const SecureMessaging: React.FC = () => {
         const prevIds  = new Set(prev.map(m => m.id));
         const newMsgs  = d.filter(m => !prevIds.has(m.id));
         const incoming = newMsgs.filter(m => m.sender_id !== currentUserId);
-
         if (incoming.length > 0) {
           playMessageSound();
           const latest     = incoming[incoming.length - 1];
@@ -696,7 +689,6 @@ const SecureMessaging: React.FC = () => {
             {loadingMsgs && (
               <p className="text-xs text-slate-500 text-center py-4">Loading messages…</p>
             )}
-
             <div className="flex flex-col gap-1 max-w-[800px] mx-auto">
               {messages.map((msg, idx) => {
                 const isMine             = msg.sender_id === currentUserId;
@@ -736,7 +728,6 @@ const SecureMessaging: React.FC = () => {
                       <div
                         className={`flex items-end gap-2 ${isMine ? "justify-end" : "justify-start"}`}
                         style={{ marginBottom: isLastFromSender ? "6px" : "1px" }}>
-
                         {/* Receiver avatar — only on last message in a run */}
                         {!isMine && (
                           <div className="shrink-0 mb-1">
@@ -756,21 +747,18 @@ const SecureMessaging: React.FC = () => {
                                 : "bg-white rounded-tl-sm border border-slate-100"
                             }`}
                             style={isMine ? { background: "#ffffff" } : undefined}>
-
                             {/* Sender name inside bubble — group threads only */}
                             {showSenderName && senderName && (
                               <p className="text-[11px] font-semibold leading-tight mb-1" style={{ color: "var(--theme-primary)" }}>
                                 {senderName}
                               </p>
                             )}
-
                             {/* Text */}
                             {msg.content && (
                               <p className="text-[14px] leading-[1.5] whitespace-pre-wrap break-words text-slate-900">
                                 {msg.content}
                               </p>
                             )}
-
                             {/* Image attachment */}
                             {hasImage && (
                               <div className={msg.content ? "mt-1.5" : ""}>
@@ -781,7 +769,6 @@ const SecureMessaging: React.FC = () => {
                                 />
                               </div>
                             )}
-
                             {/* File attachment */}
                             {hasFile && (
                               <div className={msg.content ? "mt-1.5" : ""}>
@@ -793,7 +780,6 @@ const SecureMessaging: React.FC = () => {
                                 />
                               </div>
                             )}
-
                             {/* Timestamp + ticks */}
                             <div className="flex items-center gap-1 mt-0.5 justify-end">
                               <span className="text-[10px] whitespace-nowrap text-slate-400">
@@ -863,7 +849,6 @@ const SecureMessaging: React.FC = () => {
                 />
               )}
             </div>
-
             {/* Attach file */}
             <button type="button" onClick={() => fileInputRef.current?.click()}
               className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-200 transition">
@@ -872,7 +857,6 @@ const SecureMessaging: React.FC = () => {
             <input ref={fileInputRef} type="file" className="hidden"
               accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
               onChange={e => handleFileChange(e.target.files?.[0] ?? null)} />
-
             {/* Text input */}
             <div className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-3 sm:px-4 py-2.5 focus-within:bg-white focus-within:border-[var(--theme-primary)] focus-within:ring-2 focus-within:ring-[var(--theme-light)] transition">
               <textarea ref={textareaRef} rows={1} value={text}
@@ -884,7 +868,6 @@ const SecureMessaging: React.FC = () => {
                 placeholder="Type a message"
                 className="w-full bg-transparent text-[14px] text-slate-800 placeholder:text-slate-400 focus:outline-none resize-none leading-[22px] max-h-[100px] overflow-y-auto" />
             </div>
-
             {/* Send */}
             <button type="button" onClick={handleSend}
               disabled={sending || (!text.trim() && !selectedFile)}

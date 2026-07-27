@@ -4,8 +4,8 @@
 
 import { useState, useEffect, useMemo } from "react";
 import AdminBackButton from "../../components/admin/AdminBackButton";
-import { fetchTemplates, toggleTemplate, deleteTemplate, createTemplate } from "../../api/admin/notificationTemplates.api";
-import type { NotificationTemplate, CreateTemplatePayload } from "../../types/admin/notificationTemplates.types";
+import { fetchTemplates, toggleTemplate, deleteTemplate, createTemplate, updateTemplate } from "../../api/admin/notificationTemplates.api";
+import type { NotificationTemplate, CreateTemplatePayload, UpdateTemplatePayload } from "../../types/admin/notificationTemplates.types";
 
 /* ── Icon imports ─────────────────────────────────────────────────── */
 // Common
@@ -245,6 +245,169 @@ function CreateTemplateModal({
   );
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   EDIT TEMPLATE MODAL — mirrors CreateTemplateModal's layout but:
+     • Pre-filled from the row the admin clicked on.
+     • Event Key + Channel + Category are LOCKED (backend PATCH rejects
+       changes to these — they're immutable identity fields).  We show
+       them read-only so the admin knows why they can't edit those.
+     • On save calls PATCH /notification-templates/{id}, then hands the
+       updated row back to the parent so the list re-renders in place.
+   ═══════════════════════════════════════════════════════════════════════ */
+function EditTemplateModal({
+  template,
+  onClose,
+  onUpdated,
+}: {
+  template: NotificationTemplate;
+  onClose: () => void;
+  onUpdated: (t: NotificationTemplate) => void;
+}) {
+  const [form, setForm] = useState({
+    name:                   template.name || "",
+    description:            template.description || "",
+    subject:                template.subject || "",
+    body_text:              template.body_text || "",
+    body_html:              template.body_html || "",
+    available_placeholders: template.available_placeholders || "",
+    is_active:              template.is_active,
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const set = <K extends keyof typeof form>(k: K) => (v: (typeof form)[K]) =>
+    setForm((p) => ({ ...p, [k]: v }));
+
+  const isEmail = template.channel === "email";
+  const canSave = form.name.trim() && (form.body_text || "").trim() && !saving;
+
+  const handleSave = async () => {
+    if (!canSave) return;
+    setErr(null);
+
+    // Placeholders can be empty OR valid JSON — match CreateTemplateModal's rule.
+    let placeholders: string | null = (form.available_placeholders || "").trim();
+    if (placeholders === "") {
+      placeholders = null;
+    } else {
+      try {
+        JSON.parse(placeholders);
+      } catch {
+        setErr('Available Placeholders must be valid JSON, e.g. ["{{user_name}}","{{due_date}}"]');
+        return;
+      }
+    }
+
+    setSaving(true);
+    try {
+      const payload: UpdateTemplatePayload = {
+        name:                   form.name,
+        description:            form.description || null,
+        subject:                form.subject || null,
+        body_text:              form.body_text,
+        body_html:              form.body_html || form.body_text || null,
+        available_placeholders: placeholders,
+        is_active:              form.is_active,
+      };
+      const updated = await updateTemplate(template.id, payload);
+      onUpdated(updated);
+      onClose();
+    } catch {
+      setErr("Could not update template. Check required fields and try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const labelStyle: React.CSSProperties = { display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 };
+  const inputStyle: React.CSSProperties = { width: "100%", padding: "10px 12px", border: "1.5px solid #d1d5db", borderRadius: 8, fontSize: 14, color: "#111827", outline: "none", boxSizing: "border-box", fontFamily: "inherit" };
+  const lockedStyle: React.CSSProperties = { ...inputStyle, background: "#f3f4f6", color: "#6b7280", cursor: "not-allowed" };
+
+  const channelLabel  = CHANNEL_OPTIONS.find((o) => o.value === template.channel)?.label   || template.channel;
+  const categoryLabel = CATEGORY_OPTIONS.find((o) => o.value === template.category)?.label || (template.category || "—");
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, backdropFilter: "blur(2px)", padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, width: 560, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 12px 48px rgba(0,0,0,0.18)" }}>
+        <div style={{ padding: "24px 28px 16px", borderBottom: "1px solid #f3f4f6" }}>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: "#111827", margin: 0 }}>Edit Template</h2>
+          <p style={{ fontSize: 13.5, color: "#6b7280", margin: "6px 0 0" }}>
+            Update the wording, subject, or placeholders. Event key and channel are locked.
+          </p>
+        </div>
+
+        <div style={{ padding: "20px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
+          {err && <div style={{ background: "#FEF2F2", border: "1px solid #FCA5A5", color: "#B91C1C", borderRadius: 8, padding: "8px 12px", fontSize: 13 }}>{err}</div>}
+
+          <div>
+            <label style={labelStyle}>Template Name *</label>
+            <input style={inputStyle} value={form.name} onChange={(e) => set("name")(e.target.value)} />
+          </div>
+          <div>
+            <label style={labelStyle}>Description</label>
+            <input style={inputStyle} value={form.description} onChange={(e) => set("description")(e.target.value)} />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div>
+              <label style={labelStyle}>Channel (locked)</label>
+              <input style={lockedStyle} value={channelLabel} readOnly disabled />
+            </div>
+            <div>
+              <label style={labelStyle}>Trigger Event (locked)</label>
+              <input style={lockedStyle} value={template.event_key} readOnly disabled />
+            </div>
+          </div>
+
+          {isEmail && (
+            <div>
+              <label style={labelStyle}>Subject</label>
+              <input style={inputStyle} placeholder="Email subject line" value={form.subject} onChange={(e) => set("subject")(e.target.value)} />
+            </div>
+          )}
+
+          <div>
+            <label style={labelStyle}>Body *</label>
+            <textarea style={{ ...inputStyle, minHeight: 96, resize: "vertical" }} value={form.body_text} onChange={(e) => set("body_text")(e.target.value)} />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div>
+              <label style={labelStyle}>Category (locked)</label>
+              <input style={lockedStyle} value={categoryLabel} readOnly disabled />
+            </div>
+            <div>
+              <label style={labelStyle}>Available Placeholders</label>
+              <input style={inputStyle} placeholder={'["{{user_name}}","{{due_date}}"]'} value={form.available_placeholders} onChange={(e) => set("available_placeholders")(e.target.value)} />
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 4 }}>
+            <span style={{ fontSize: 14, fontWeight: 500, color: "#111827" }}>Active</span>
+            <ToggleSwitch on={form.is_active} onChange={() => set("is_active")(!form.is_active)} />
+          </div>
+        </div>
+
+        <div style={{ position: "sticky", bottom: 0, background: "#fff", padding: "16px 28px 24px", display: "flex", justifyContent: "flex-end", gap: 10, borderTop: "1px solid #f3f4f6" }}>
+          <button onClick={onClose} style={{ padding: "9px 20px", border: "1.5px solid #d1d5db", borderRadius: 8, background: "#fff", fontSize: 14, fontWeight: 500, color: "#374151", cursor: "pointer" }}>Cancel</button>
+          <button
+            onClick={handleSave}
+            disabled={!canSave}
+            style={{
+              padding: "9px 22px", border: "none", borderRadius: 8,
+              background: canSave ? "linear-gradient(135deg,#2563eb 0%,#9333ea 100%)" : "#A5B4FC",
+              fontSize: 14, fontWeight: 600, color: "#fff",
+              cursor: canSave ? "pointer" : "not-allowed",
+            }}
+          >
+            {saving ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const PAGE_SIZE = 10;
 
 export default function NotificationTemplates() {
@@ -258,6 +421,8 @@ export default function NotificationTemplates() {
   const [currentPage, setCurrentPage] = useState(1);
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  /* Which template row is being edited. `null` = modal closed. */
+  const [editing, setEditing] = useState<NotificationTemplate | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -449,7 +614,11 @@ export default function NotificationTemplates() {
                     </td>
                     <td style={{ padding: "16px 24px", textAlign: "right" }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, opacity: hoveredRow === tmpl.id ? 1 : 0, transition: "opacity 0.15s" }}>
-                        <button title="Edit" style={{ padding: 6, borderRadius: 4, border: "none", background: "transparent", cursor: "pointer" }}>
+                        <button
+                          title="Edit"
+                          onClick={() => setEditing(tmpl)}
+                          style={{ padding: 6, borderRadius: 4, border: "none", background: "transparent", cursor: "pointer" }}
+                        >
                           <img src={iconPencil} alt="" style={{ width: 14, height: 14 }} />
                         </button>
                         <button title="Duplicate" style={{ padding: 6, borderRadius: 4, border: "none", background: "transparent", cursor: "pointer" }}>
@@ -505,6 +674,16 @@ export default function NotificationTemplates() {
         <CreateTemplateModal
           onClose={() => setShowCreate(false)}
           onCreated={(t) => setTemplates((prev) => [t, ...prev])}
+        />
+      )}
+
+      {editing && (
+        <EditTemplateModal
+          template={editing}
+          onClose={() => setEditing(null)}
+          onUpdated={(t) =>
+            setTemplates((prev) => prev.map((x) => (x.id === t.id ? t : x)))
+          }
         />
       )}
     </div>
