@@ -5,7 +5,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import AdminBackButton from '../../components/admin/AdminBackButton';
 import {
   LineChart,
   Line,
@@ -105,9 +104,6 @@ export default function RevenueDashboard() {
   return (
     <div className="min-h-screen bg-slate-50">
       <main className="mx-auto max-w-[1440px] space-y-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-
-        {/* Back navigation — top-left, above the page header (desktop + mobile). */}
-        <AdminBackButton className="!mb-0" />
 
         {/* ── Page header + actions ───────────────────────────────── */}
         <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-start lg:justify-between">

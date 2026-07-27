@@ -2,8 +2,6 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { callSSOEndpoint } from "../../lib/sso";
-import { useAuthStore } from "../../store/authStore";
-import { getDashboardRoute } from "../../utils/navigation";
 
 export default function LinkedInCallback() {
   const navigate = useNavigate();
@@ -21,18 +19,10 @@ export default function LinkedInCallback() {
 
     callSSOEndpoint("linkedin", code)
       .then(data => {
-        useAuthStore.getState().setAuth({
-          access_token: data.access_token,
-          user:         data.user,
-          roles:        data.roles,
-        });
+        sessionStorage.setItem("access_token",  data.access_token);
+        sessionStorage.setItem("refresh_token", data.refresh_token);
         // From login → dashboard, from signup → profile-setup (already verified)
-        navigate(
-          postLogin === "/dashboard"
-            ? getDashboardRoute(data.roles?.[0] ?? "")
-            : "/signup/profile-setup",
-          { replace: true }
-        );
+        navigate(postLogin === "/dashboard" ? "/dashboard" : "/signup/profile-setup");
       })
       .catch(() => navigate("/signup?sso_error=linkedin"));
   }, []);

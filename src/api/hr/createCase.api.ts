@@ -58,17 +58,70 @@ export const createCaseApi = {
   /**
    * GET /attorneys
    */
+  // getAttorneys: async (): Promise<AttorneyOption[]> => {
+  //   try {
+  //     const res = await axios.get('/attorneys', {
+  //       params: { is_accepting: true, limit: 50 },
+  //     });
+  //     return res.data.items ?? [];
+  //   } catch {
+  //     // Attorney list is optional — degrade gracefully
+  //     return [];
+  //   }
+  // },
+
   getAttorneys: async (): Promise<AttorneyOption[]> => {
-    try {
-      const res = await axios.get('/attorneys', {
-        params: { is_accepting: true, limit: 50 },
-      });
-      return res.data.items ?? [];
-    } catch {
-      // Attorney list is optional — degrade gracefully
-      return [];
-    }
-  },
+  try {
+    const res = await axios.get('/attorneys', {
+      params: { is_accepting: true, limit: 50 },
+    });
+
+    const items = Array.isArray(res.data)
+      ? res.data
+      : res.data.items ?? [];
+
+    return items.map((att: {
+      user_id: string;
+      law_firm_name: string | null;
+      profile_photo_url: string | null;
+      specialisations: string | string[] | null;
+      is_accepting_cases: boolean;
+      active_cases?: number;
+      user: {
+        first_name: string;
+        last_name: string;
+        email: string;
+      };
+    }): AttorneyOption => {
+      let specialisations: string[] = [];
+
+      if (Array.isArray(att.specialisations)) {
+        specialisations = att.specialisations;
+      } else if (typeof att.specialisations === 'string') {
+        try {
+          const parsed = JSON.parse(att.specialisations);
+          specialisations = Array.isArray(parsed) ? parsed : [];
+        } catch {
+          specialisations = [];
+        }
+      }
+
+      return {
+        user_id: att.user_id,
+        full_name: `${att.user.first_name} ${att.user.last_name}`.trim(),
+        email: att.user.email,
+        profile_photo_url: att.profile_photo_url,
+        law_firm_name: att.law_firm_name,
+        specialisations,
+        active_cases: att.active_cases ?? 0,
+        is_accepting: att.is_accepting_cases,
+      };
+    });
+  } catch (error) {
+    console.error('Failed to load attorneys:', error);
+    return [];
+  }
+},
 
   // ── HR Case CRUD ──────────────────────────────────────────────────────────
 
