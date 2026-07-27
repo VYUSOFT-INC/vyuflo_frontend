@@ -18,9 +18,9 @@ jobs:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ secrets.STAGING_HOST }}
-          username: ${{ secrets.STAGING_USER }}
-          key: ${{ secrets.STAGING_SSH_KEY }}
+          host: ${{ github.event.inputs.environment == 'staging' && secrets.STAGING_HOST || secrets.HOST }}
+          username: ${{ github.event.inputs.environment == 'staging' && secrets.STAGING_USER || secrets.USER }}
+          key: ${{ github.event.inputs.environment == 'staging' && secrets.STAGING_SSH_KEY || secrets.SSH_KEY }}
           script: |
             cd /opt/vyuflo-${{ github.event.inputs.environment }}/frontend
 
@@ -28,12 +28,4 @@ jobs:
             git pull origin ${{ github.ref_name }}
 
             cd /opt/vyuflo-${{ github.event.inputs.environment }}
-
-            if [ "${{ github.event.inputs.environment }}" = "dev" ]; then
-              export PORT=3000
-            else
-              export PORT=80
-            fi
-
-            docker compose -f docker-compose.${{ github.event.inputs.environment }}.yml build --build-arg PORT=$PORT frontend
-            docker compose -f docker-compose.${{ github.event.inputs.environment }}.yml up -d frontend
+            docker compose -f docker-compose.${{ github.event.inputs.environment }}.yml up -d --build frontend

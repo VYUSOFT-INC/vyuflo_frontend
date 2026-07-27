@@ -1,32 +1,34 @@
-// src/hooks/usePushNotifications.ts
-// React hook for push notification state.
-// Use this in any component that needs to know/change push status.
+// src/hooks/employee/usePushNotifications.ts
+// NOTE: place this in src/hooks/employee/ (not src/hooks/)
+// because PushNotificationBanner imports from '../hooks/employee/usePushNotifications'
 
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   getPushPermission,
   subscribeToPush,
   unsubscribeFromPush,
-  setPushNavigate,
+  initPushNotifications,
 } from "../../utils/pushNotifications";
-import { useNavigate } from "react-router-dom";
-import { useNotificationPreferences } from "../employee/useNotifications";
+import { useNotificationPreferences } from "./useNotifications";
 
 export type PushState =
-  | "unsupported"  // browser doesn't support push
-  | "default"      // user hasn't been asked yet
-  | "granted"      // subscribed and active
-  | "denied"       // user blocked it in browser settings
-  | "loading";     // request in flight
+  | "unsupported"
+  | "default"
+  | "granted"
+  | "denied"
+  | "loading";
 
 export function usePushNotifications() {
   const navigate = useNavigate();
   const { prefs, update: updatePrefs } = useNotificationPreferences();
   const [pushState, setPushState] = useState<PushState>("default");
 
-  // Register navigate so SW notification clicks route correctly
+  // Register the service worker once. navigator.serviceWorker.register()
+  // resolves to the same registration if already registered, so this is
+  // safe to call from every component that uses this hook.
   useEffect(() => {
-    setPushNavigate(navigate);
+    initPushNotifications(navigate);
   }, [navigate]);
 
   // Sync with actual browser permission on mount
@@ -38,7 +40,6 @@ export function usePushNotifications() {
     setPushState("default");
   }, []);
 
-  // Enable: ask browser → subscribe → save pref
   const enable = useCallback(async () => {
     setPushState("loading");
     const result = await subscribeToPush();
@@ -47,13 +48,11 @@ export function usePushNotifications() {
       await updatePrefs({ push_enabled: true });
     } else if (result === "denied") {
       setPushState("denied");
-      // Don't save pref — user actively blocked it
     } else {
-      setPushState("default"); // error — revert UI
+      setPushState("default");
     }
   }, [updatePrefs]);
 
-  // Disable: unsubscribe → save pref
   const disable = useCallback(async () => {
     await unsubscribeFromPush();
     setPushState("default");

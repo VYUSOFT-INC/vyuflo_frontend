@@ -20,7 +20,6 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 import { helpSupportApi } from '../../../api/lawyer/helpSupport.api';
 import type {
   SubmitTicketPayload,
@@ -107,9 +106,6 @@ export default function MyTickets() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
-      {/* Back navigation — top-left, above the page header (desktop + mobile). */}
-      <LawyerBackButton className="!mb-0" />
-
       {/* Header */}
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>

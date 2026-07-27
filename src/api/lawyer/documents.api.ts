@@ -72,15 +72,7 @@ export async function downloadDocument(documentId: string): Promise<Blob> {
   return res.data as Blob;
 }
 
-/* ── Upload document (multipart) ────────────────────────────────────
- *
- * Bulletproof: uses validateStatus so axios never throws, then we inspect
- * status ourselves. This dodges any global axios response interceptor
- * that crashes on error responses (the "Cannot read properties of
- * undefined (reading 'data')" TypeError we saw was the interceptor
- * choking on an empty 500 body). Non-2xx responses are re-thrown as an
- * axios-shaped error so the caller's catch{} keeps working.
- * ─────────────────────────────────────────────────────────────────── */
+/* ── Upload document (multipart) ────────────────────────────────────── */
 export async function uploadDocument(payload: {
   file:           File;
   application_id: string | null;
@@ -98,18 +90,8 @@ export async function uploadDocument(payload: {
 
   const res = await axios.post<Document>('/documents/upload', fd, {
     headers: { 'Content-Type': 'multipart/form-data' },
-    validateStatus: () => true,
   });
-
-  if (res.status >= 200 && res.status < 300) {
-    return res.data;
-  }
-
-  // Re-throw with axios-shaped error so callers keep working unchanged.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const err: any = new Error(`Upload failed with status ${res.status}`);
-  err.response = { status: res.status, data: res.data };
-  throw err;
+  return res.data;
 }
 
 /* ── Page thumbnails (OCR page strip) ──────────────────────────────── */
@@ -144,43 +126,9 @@ export async function triggerOcr(documentId: string): Promise<void> {
   await axios.post(`/documents/${documentId}/ocr/trigger`);
 }
 
-/* ── Soft delete ─────────────────────────────────────────────────────
- * Bulletproof: never throws on the axios path. Non-2xx are re-thrown as
- * axios-shaped errors so caller catch{} branches still see the right
- * status/detail.  If backend does soft-delete (sets deleted_at but keeps
- * the row), the caller is responsible for hiding the id locally — the
- * frontend maintains a session-scoped "deleted ids" set so re-fetches
- * don't bring the row back.
- * ─────────────────────────────────────────────────────────────────── */
+/* ── Soft delete ───────────────────────────────────────────────────── */
 export async function softDeleteDocument(documentId: string): Promise<void> {
-  const res = await axios.delete(`/documents/${documentId}`, {
-    validateStatus: () => true,
-  });
-  if (res.status >= 200 && res.status < 300) {
-    // Persist to session storage so a reload doesn't re-show the row
-    // even if backend didn't actually purge it.
-    try {
-      const key = 'deletedDocIds';
-      const cur = JSON.parse(sessionStorage.getItem(key) || '[]');
-      if (!cur.includes(documentId)) {
-        cur.push(documentId);
-        sessionStorage.setItem(key, JSON.stringify(cur));
-      }
-    } catch { /* sessionStorage might be blocked */ }
-    return;
-  }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const err: any = new Error(`Delete failed with status ${res.status}`);
-  err.response = { status: res.status, data: res.data };
-  throw err;
-}
-
-/* Read the session-scoped "deleted ids" set. Callers filter fetch
- * results against this so soft-deleted docs stop appearing. */
-export function getLocallyDeletedIds(): Set<string> {
-  try {
-    return new Set(JSON.parse(sessionStorage.getItem('deletedDocIds') || '[]'));
-  } catch { return new Set(); }
+  await axios.delete(`/documents/${documentId}`);
 }
 
 /* ── OCR fields ─────────────────────────────────────────────────────── */
@@ -312,6 +260,4 @@ export const documentsApi = {
   toggleChecklistItem,
   listNotes,
   addNote,
-  // helpers
-  getLocallyDeletedIds,
 };

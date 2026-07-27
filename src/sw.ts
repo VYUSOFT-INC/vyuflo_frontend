@@ -1,6 +1,8 @@
 /// <reference lib="webworker" />
 
-declare let self: ServiceWorkerGlobalScope;
+declare let self: ServiceWorkerGlobalScope & {
+  __WB_MANIFEST: Array<string | { url: string; revision: string | null }>;
+};
 
 // injectManifest injects this; we intentionally do not precache the app
 // (precaching the ~3MB bundle was freezing the browser).
@@ -35,17 +37,19 @@ self.addEventListener("push", (event) => {
     payload = { title: APP_NAME, body: event.data.text(), url: "/" };
   }
 
+  const options: NotificationOptions & { vibrate: number[]; renotify: boolean } = {
+    body: payload.body || "",
+    icon: payload.icon || DEFAULT_ICON,
+    badge: DEFAULT_ICON,
+    data: { url: payload.url || "/" },
+    vibrate: [200, 100, 200],
+    requireInteraction: false,
+    tag: "vyuflo-notif",
+    renotify: true,
+  };
+
   event.waitUntil(
-    self.registration.showNotification(payload.title || APP_NAME, {
-      body: payload.body || "",
-      icon: payload.icon || DEFAULT_ICON,
-      badge: DEFAULT_ICON,
-      data: { url: payload.url || "/" },
-      vibrate: [200, 100, 200],
-      requireInteraction: false,
-      tag: "vyuflo-notif",
-      renotify: true,
-    })
+    self.registration.showNotification(payload.title || APP_NAME, options)
   );
 });
 
@@ -62,7 +66,7 @@ self.addEventListener("notificationclick", (event) => {
         for (const client of windowClients) {
           if ("focus" in client) {
             void client.focus();
-            client.postMessage({ type: "PUSH_NAV", url: targetUrl });
+            (client as WindowClient).postMessage({ type: "PUSH_NAV", url: targetUrl });
             return;
           }
         }

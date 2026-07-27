@@ -1,18 +1,13 @@
-// // src/utils/fileUrl.ts
-// export const getFileUrl = (path: string | null | undefined): string | null => {
-//   if (!path) return null;
+// src/utils/fileUrl.ts
 
-//   // Already a full URL (S3, CDN, http) — return as-is
-//   if (path.startsWith("http://") || path.startsWith("https://")) return path;
-
-//   // Strip /api/v1 from base — static files are mounted at root /static, not under /api/v1
-//   const base = (import.meta.env.VITE_API_BASE_URL as string ?? '').replace('/api/v1', '');
-
-//   return `${base}/static/${path.replace(/^uploads\//, '')}`;
-// };  
-
+// Backend returns either a full URL or a relative API path (e.g. "/api/v1/users/me/avatar").
+// Both pass straight through — the browser handles them the same way in <img src>.
 export const getFileUrl = (path: string | null | undefined): string | null => {
   if (!path) return null;
   if (path.startsWith("http://") || path.startsWith("https://")) return path;
-  return `/static/${path.replace(/^uploads\//, '')}`;
+  if (path.startsWith("/")) return path;   // relative API paths — e.g. "/api/v1/users/me/avatar"
+
+  // Shouldn't happen — surfaces as a visible bug instead of a silent 404.
+  console.warn("getFileUrl received a non-URL path — backend should resolve this:", path);
+  return null;
 };

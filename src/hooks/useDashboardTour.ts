@@ -1,84 +1,105 @@
 // src/hooks/useDashboardTour.ts
 //
-// Shared hook used by all 4 dashboard tour components.
-// Persists "tour seen" in localStorage so closing/skipping/finishing
-// prevents the tour from auto-starting on the next dashboard visit.
-// Also best-effort PATCHes /users/me/tour-seen when the API supports it.
+// Production-grade tour hook.
+// - Reads tour-seen flag from ui_session cookie (written at login)
+// - Waits for the first data-tour DOM element before starting
+// - Updates cookie immediately on finish/skip (no flicker on re-visit)
+// - Persists to DB via PATCH /users/me/tour-seen (fire and forget)
 
 import { useEffect, useCallback, useRef } from 'react';
 import { profileApi } from '../api/employee/profile.api';
+import { getUiSession, updateUiSession } from '../utils/uiSession';
+import type { UiSession } from '../utils/uiSession';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type TourRole = 'employee' | 'hr' | 'attorney' | 'admin';
 
-const TOUR_FLAG_MAP: Record<TourRole, keyof TourUser> = {
+const TOUR_FLAG_MAP: Record<TourRole, keyof UiSession> = {
   employee: 'tour_employee_seen',
   hr:       'tour_hr_seen',
   attorney: 'tour_attorney_seen',
   admin:    'tour_admin_seen',
 };
 
-const storageKey = (role: TourRole) => `vyuflo:tour-seen:${role}`;
+// First data-tour element per role — used to detect when DOM is ready
+const FIRST_STEP_ID: Record<TourRole, string> = {
+  employee: 'kpi',
+  hr:       'hr-kpi',
+  attorney: 'attorney-kpi',
+  admin:    'admin-kpi',
+};
 
-function readLocalSeen(role: TourRole): boolean {
-  try {
-    return localStorage.getItem(storageKey(role)) === '1';
-  } catch {
-    return false;
-  }
+// ── Wait for DOM element (polling — more reliable than MutationObserver) ──────
+
+function waitForElement(selector: string, timeoutMs = 15_000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // Already in DOM
+    if (document.querySelector(selector)) {
+      resolve();
+      return;
+    }
+    // Poll every 100ms
+    const interval = setInterval(() => {
+      if (document.querySelector(selector)) {
+        clearInterval(interval);
+        clearTimeout(timeout);
+        resolve();
+      }
+    }, 100);
+    // Give up after timeoutMs
+    const timeout = setTimeout(() => {
+      clearInterval(interval);
+      reject(new Error(`[Tour] Element "${selector}" not found after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
 }
 
-function persistSeen(role: TourRole) {
-  try {
-    localStorage.setItem(storageKey(role), '1');
-  } catch {
-    // ignore quota / private-mode failures
-  }
-}
+// ── Hook ──────────────────────────────────────────────────────────────────────
 
-export interface TourUser {
-  tour_employee_seen?: boolean;
-  tour_hr_seen?:       boolean;
-  tour_attorney_seen?: boolean;
-  tour_admin_seen?:    boolean;
-}
+export function useDashboardTour(role: TourRole, startTour: () => void) {
+  const fired        = useRef(false);
+  const startTourRef = useRef(startTour);
 
-// ── Hook ─────────────────────────────────────────────────────────────────────
-
-export function useDashboardTour(
-  role:      TourRole,
-  user:      TourUser | undefined | null,
-  startTour: () => void,
-) {
-  // Guard against double-firing when parent re-renders
-  const fired = useRef(false);
+  // Keep ref pointing at latest startTour to avoid stale closures
+  useEffect(() => {
+    startTourRef.current = startTour;
+  }, [startTour]);
 
   useEffect(() => {
     if (fired.current) return;
 
-    // Already dismissed on this device — never auto-start
-    if (readLocalSeen(role)) return;
-
-    // Wait for profile so we can honor DB flags on first visit
-    if (!user) return;
+    const session = getUiSession();
+    if (!session) return;
 
     const flag = TOUR_FLAG_MAP[role];
-    if (user[flag]) {
-      persistSeen(role);
-      return;
-    }
 
+    // Tour already seen — do nothing
+    if (session[flag]) return;
+
+    // Mark as fired so strict-mode double-invoke doesn't start tour twice
     fired.current = true;
-    const t = setTimeout(startTour, 900);
-    return () => clearTimeout(t);
-  }, [user, role, startTour]);
 
-  // Call when user finishes or skips
+    const selector = `[data-tour="${FIRST_STEP_ID[role]}"]`;
+
+    waitForElement(selector)
+      .then(() => {
+        startTourRef.current();
+      })
+      .catch((err) => {
+        console.warn(err.message);
+        // Reset so it can try again on next render if needed
+        fired.current = false;
+      });
+  }, [role]);  // startTour intentionally omitted — we use the ref
+
   const markSeen = useCallback(() => {
-    persistSeen(role);
+    // 1. Update cookie immediately — tour won't re-show this session
+    updateUiSession({ [TOUR_FLAG_MAP[role]]: true });
+
+    // 2. Persist to DB — fire and forget
     profileApi.markTourSeen(role).catch(() => {
-      // Non-critical: localStorage already covers this device
+      // Non-critical: if API fails, tour shows again on next login (acceptable)
     });
   }, [role]);
 

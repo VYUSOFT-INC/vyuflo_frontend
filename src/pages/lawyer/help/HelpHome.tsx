@@ -20,7 +20,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 import { helpSupportApi } from '../../../api/lawyer/helpSupport.api';
 import type {
   ArticleCategory,
@@ -178,9 +177,6 @@ export default function HelpHome() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
-      {/* Back navigation — top-left, above the page header (desktop + mobile). */}
-      <LawyerBackButton className="!mb-0" />
-
       {/* ── Top-right nav bar: My Tickets + Notifications ─────────── */}
       <div className="flex items-center justify-between">
         <div>

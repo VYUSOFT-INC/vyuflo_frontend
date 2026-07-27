@@ -103,8 +103,7 @@ instance.interceptors.response.use(
           {},
           { withCredentials: true }
         );
-        const access_token = res.data?.access_token as string | undefined;
-        if (!access_token) throw new Error('No access_token in refresh response');
+        const { access_token } = res.data;
         useAuthStore.getState().setTokens({ access_token });
         originalRequest.headers.Authorization = `Bearer ${access_token}`;
         return instance(originalRequest);  // retry original request
@@ -112,16 +111,19 @@ instance.interceptors.response.use(
       } catch {
         // Refresh failed — session expired, force logout
         useAuthStore.getState().clearAuth();
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login';
-        }
+        window.location.href = '/login';
         return Promise.reject(error);
       }
     }
 
+    // ✅ 403 — no permission
+    //if (status === 403) {
+      //window.location.href = '/dashboard';
+    }
+
     // All other errors — pass through to the calling function
-    return Promise.reject(error);
-  }
+   // return Promise.reject(error);
+  //}
 );
 
 export default instance;

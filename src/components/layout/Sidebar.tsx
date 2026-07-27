@@ -18,6 +18,7 @@ import { useAuthStore } from '../../store/authStore';
 import { Avatar } from '../ui/Avatar';
 import { getUiSession, type UiSession } from '../../utils/uiSession';
 import { getFileUrl } from '../../utils/fileUrl';
+import { useMyProfile } from '../../hooks/employee/useProfile';
 import imgLogoIcon from '../../assets/icons/plane-icon.svg';
 import { getNavItems } from '../../config/navConfig';
 
@@ -93,9 +94,11 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
     return () => window.removeEventListener('ui-session-updated', handler);
   }, []);
 
+  const { data: profile } = useMyProfile();
+
   const navItems      = getNavItems(session?.roles);
   const fullName      = session ? `${session.first_name} ${session.last_name}`.trim() || 'User' : 'User';
-  const avatarUrl     = getFileUrl(session?.profile ?? null);
+  const avatarUrl     = getFileUrl(profile?.profile_picture_url ?? null);
   const sectionHeader = consoleLabel(session?.roles);
 
   const isSettingsPage            = location.pathname.startsWith('/admin/settings');

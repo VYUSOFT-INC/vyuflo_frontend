@@ -14,7 +14,6 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 import { intakeApi } from '../../../api/lawyer/intake.api';
 import type { AssignedApplication, IntakeStatus } from '../../../types/lawyer/intake.types';
 // Note: "View Profile" button is added to each card. It navigates to
@@ -140,9 +139,6 @@ export default function IntakeLanding() {
   return (
     <div className="min-h-screen bg-slate-50">
       <main className="mx-auto max-w-[1240px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
-
-        {/* Back navigation — top-left, above the page header (desktop + mobile). */}
-        <LawyerBackButton className="!mb-0" />
 
         {/* Header */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
