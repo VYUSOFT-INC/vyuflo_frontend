@@ -338,6 +338,7 @@ import ResetPasswordOTP from './pages/public/Resetpasswordotp';
 import ResetPasswordNew from './pages/public/ResetPasswordNew';
 import LinkedInCallback from './pages/public/LinkedInCallback';
 import AcceptInvitePage from './pages/public/AcceptInvitePage';
+import VisaChecklist    from './pages/public/VisaChecklist';
 
 // ── onboarding ───────────────────────────────────────────────────────────────
 import VerifyEmailPage  from './pages/signup/VerifyEmailPage';
@@ -487,6 +488,14 @@ export default function App() {
 
           {/* ── Client Intake Portal ────────────────────────────────────────── */}
           <Route path="/intake/:token" element={<ClientIntakePortal />} />
+
+
+          {/* ── SHARED — Visa Checklist ──────────────────────────────────────── */}
+          <Route element={<RoleRoute allowedRoles={['employee', 'hr', 'attorney']} />}>
+            <Route element={<DashboardLayout />}>
+              <Route path="/visa-checklist" element={<VisaChecklist />} />
+            </Route>
+          </Route>
 
           {/* ── EMPLOYEE routes ─────────────────────────────────────────────── */}
           <Route element={<RoleRoute allowedRoles={['employee']} />}>
