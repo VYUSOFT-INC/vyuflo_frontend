@@ -25,6 +25,7 @@ import { useCurrentUser } from '../../../hooks/useAuth';
 import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 import { documentsApi } from '../../../api/lawyer/documents.api';
 import { documentRequestsApi } from '../../../api/lawyer/documentRequests.api';
+import { getLocallyDeletedDocumentIds } from '../../../utils/locallyDeletedDocuments';
 // Backend visa catalog — used to fetch the REAL required-documents
 // list for the client's visa type (whatever admin has configured in
 // Visa Types Manager).  Falls back to an empty list on any error so
@@ -179,7 +180,7 @@ export default function DocumentReviewPage() {
 
     // Filter out docs the user deleted this session — backend may
     // soft-delete (set deleted_at) but still return the row from /filter.
-    const deletedIds = documentsApi.getLocallyDeletedIds();
+    const deletedIds = getLocallyDeletedDocumentIds();
     if (deletedIds.size > 0) {
       sibs = sibs.filter((s) => !deletedIds.has(s.id));
     }
