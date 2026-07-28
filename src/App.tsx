@@ -411,6 +411,7 @@ import NotificationsRemindersPage from './pages/lawyer/notifications/Notificatio
 import LawyerSettingsPage         from './pages/lawyer/settings/LawyerSettingsPage';
 import CaseListPage               from './pages/lawyer/cases/CaseListPage';
 import CaseDetailPage             from './pages/lawyer/cases/CaseDetailPage';
+import LawyerDashboardPage        from './pages/lawyer/dashboard/LawyerDashboardPage';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -572,9 +573,9 @@ export default function App() {
 
           {/* ── ATTORNEY (LAWYER) routes ────────────────────────────────────── */}
           <Route element={<RoleRoute allowedRoles={['attorney']} />}>
-            <Route path="/lawyer"           element={<Navigate to="/lawyer/intake" replace />} />
-            <Route path="/lawyer/dashboard" element={<Navigate to="/lawyer/intake" replace />} />
+            <Route path="/lawyer" element={<Navigate to="/lawyer/dashboard" replace />} />
             <Route element={<DashboardLayout />}>
+              <Route path="/lawyer/dashboard"                     element={<LawyerDashboardPage />} />
               <Route path="/lawyer/intake"                        element={<IntakeLanding />} />
               <Route path="/lawyer/cases"                         element={<CaseListPage />} />
               <Route path="/lawyer/cases/:caseId"                 element={<CaseDetailPage />} />
