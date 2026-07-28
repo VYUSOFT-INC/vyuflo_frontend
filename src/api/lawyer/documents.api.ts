@@ -24,7 +24,7 @@ import type {
 } from '../../types/lawyer/documents.types';
 import { DEFAULT_CHECKLIST } from '../../types/lawyer/documents.types';
 import {
-  getLocallyDeletedIds,
+  getLocallyDeletedDocumentIds as getLocallyDeletedIds,
 } from '../../utils/locallyDeletedDocuments';
 
 /* ════════════════════════════════════════════════════════════════════
