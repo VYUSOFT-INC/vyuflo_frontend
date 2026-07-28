@@ -68,6 +68,7 @@ const employeeNav: NavItem[] = [
   // { to: '/consultations',     label: 'Book Consultation',     icon: { kind: 'lucide', Icon: CalendarDays  } },
   { to: '/profile',           label: 'Settings',              icon: { kind: 'lucide', Icon: Settings      } },
   { to: '/notifications',     label: 'Notifications',         icon: { kind: 'lucide', Icon: Bell         } },
+  { to: '/visa-checklist',         label: 'Visa Checklist', icon: { kind: 'lucide', Icon: FileCheck2      } },
 ];
 
 // ── HR / EMPLOYER NAV ─────────────────────────────────────────────────────────
@@ -81,6 +82,7 @@ const hrNav: NavItem[] = [
   { to: '/employer/messages',      label: 'Messages',      icon: { kind: 'lucide', Icon: MessageSquare   } },
   { to: '/employer/profile',       label: 'Settings',      icon: { kind: 'lucide', Icon: Settings        } },
   { to: '/employer/notifications', label: 'Notifications', icon: { kind: 'lucide', Icon: Bell            } },
+  { to: '/visa-checklist',         label: 'Visa Checklist', icon: { kind: 'lucide', Icon: FileCheck2      } },
 ];
 
 // ── ATTORNEY / LAWYER NAV ─────────────────────────────────────────────────────
@@ -98,6 +100,7 @@ const attorneyNav: NavItem[] = [
   { to: '/lawyer/settings',      label: 'Settings',       icon: { kind: 'lucide', Icon: Settings       } },
   { to: '/lawyer/notifications', label: 'Notifications',  icon: { kind: 'lucide', Icon: Bell          } },
   { to: '/lawyer/help',          label: 'Help & Support', icon: { kind: 'lucide', Icon: HelpCircle     } },
+  { to: '/visa-checklist',         label: 'Visa Checklist', icon: { kind: 'lucide', Icon: FileCheck2      } },
 ];
 
 // ── APP ADMIN NAV ─────────────────────────────────────────────────────────────
