@@ -23,6 +23,9 @@ import type {
   UpdateStatusPayload,
 } from '../../types/lawyer/documents.types';
 import { DEFAULT_CHECKLIST } from '../../types/lawyer/documents.types';
+import {
+  getLocallyDeletedDocumentIds as getLocallyDeletedIds,
+} from '../../utils/locallyDeletedDocuments';
 
 /* ════════════════════════════════════════════════════════════════════
  *  EXISTING ENDPOINTS (backend ready)
@@ -260,4 +263,6 @@ export const documentsApi = {
   toggleChecklistItem,
   listNotes,
   addNote,
+
+  getLocallyDeletedIds,
 };
