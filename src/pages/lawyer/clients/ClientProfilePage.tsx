@@ -7,15 +7,20 @@
 // Data sources (aggregated by clients.api.ts):
 //   • GET /lawyer/applications      → HR-assigned scope (security boundary)
 //   • GET /users/{user_id}/profile  → user profile row
+//   • GET /documents?application_id → per-case document list
 //
 // SECURITY: 403 if the client is not in the lawyer's HR-assigned list →
 // no mock fallback, explicit "access restricted" card.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { clientsApi } from '../../../api/lawyer/clients.api';
+import { intakeApi }  from '../../../api/lawyer/intake.api';
+import { documentsApi } from '../../../api/lawyer/documents.api';
 import type { ClientProfileResponse } from '../../../types/lawyer/clients.types';
+import type { AssignedApplication } from '../../../types/lawyer/intake.types';
+import type { Document } from '../../../types/lawyer/documents.types';
 
 type Tab = 'overview' | 'cases' | 'documents' | 'messages' | 'notes';
 
@@ -133,13 +138,11 @@ export default function ClientProfilePage() {
 
         {/* Tab content */}
         <div className="mt-6">
-          {tab === 'overview' && <OverviewTab profile={profile} />}
-          {tab !== 'overview' && (
-            <div className="rounded-xl border-2 border-dashed border-gray-300 bg-white p-12 text-center">
-              <p className="text-base font-semibold text-gray-900">{TABS.find((t) => t.id === tab)?.label}</p>
-              <p className="mt-1 text-sm text-gray-500">This tab is part of the next build phase.</p>
-            </div>
-          )}
+          {tab === 'overview'  && <OverviewTab profile={profile} />}
+          {tab === 'cases'     && <CasesTab profile={profile} />}
+          {tab === 'documents' && <DocumentsTab profile={profile} />}
+          {tab === 'messages'  && <MessagesTab profile={profile} />}
+          {tab === 'notes'     && <NotesTab />}
         </div>
       </div>
     </div>
@@ -397,6 +400,350 @@ function FieldInline({ icon, label, value }: { icon: string; label: string; valu
           {value || 'Not provided'}
         </p>
       </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════
+ * CASES TAB — all cases for this client (multi-visa support)
+ * ════════════════════════════════════════════════════════════════════ */
+
+/** Same match logic used in clients.api.ts buildProfile */
+function matchesClient(a: AssignedApplication, profile: ClientProfileResponse): boolean {
+  if (a.client_id && profile.client_id && a.client_id === profile.client_id) return true;
+  if (a.user_id && profile.client_id && a.user_id === profile.client_id) return true;
+  if (a.client_email && profile.email && a.client_email.toLowerCase() === profile.email.toLowerCase()) return true;
+  if (a.client_name && profile.full_name && a.client_name.trim().toLowerCase() === profile.full_name.trim().toLowerCase()) return true;
+  return false;
+}
+
+const STATUS_BADGE: Record<string, string> = {
+  pending_intake:     'bg-amber-50 text-amber-700',
+  intake_in_progress: 'bg-blue-50 text-blue-700',
+  intake_completed:   'bg-emerald-50 text-emerald-700',
+};
+
+function humanStatus(s: string): string {
+  return s.split('_').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+}
+
+function CasesTab({ profile }: { profile: ClientProfileResponse }) {
+  const navigate = useNavigate();
+  const [apps, setApps] = useState<AssignedApplication[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]   = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true); setError(null);
+      try {
+        const all = await intakeApi.listAssignedApplications();
+        const mine = all.filter((a) => matchesClient(a, profile));
+        if (!cancelled) setApps(mine);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load cases.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [profile.client_id]);
+
+  if (loading) {
+    return <div className="rounded-xl border border-gray-200 bg-white p-8 text-sm text-gray-500">Loading cases…</div>;
+  }
+  if (error) {
+    return <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">{error}</div>;
+  }
+  if (apps.length === 0) {
+    return (
+      <div className="rounded-xl border-2 border-dashed border-gray-300 bg-white p-10 text-center">
+        <p className="text-base font-semibold text-gray-900">No cases yet</p>
+        <p className="mt-1 text-sm text-gray-500">
+          Once HR assigns a case for {profile.full_name}, it will show up here.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {apps.map((a) => {
+        const pct = a.status === 'intake_completed' ? 100
+          : a.status === 'intake_in_progress' ? Math.min(90, (a.intake_step ?? 2) * 20)
+          : 10;
+        return (
+          <div
+            key={a.application_id}
+            onClick={() => navigate(`/lawyer/cases/${a.application_id}`)}
+            className="cursor-pointer rounded-xl border border-gray-200 bg-white p-5 transition hover:border-indigo-300 hover:shadow-sm"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-base font-semibold text-gray-900">
+                    {a.visa_type_label || a.visa_type || 'Case'}
+                  </h3>
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+                    STATUS_BADGE[a.status] || 'bg-gray-100 text-gray-700'
+                  }`}>
+                    {humanStatus(a.status)}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-gray-500 font-mono">
+                  #{a.application_id.slice(0, 8).toUpperCase()}
+                </p>
+                <p className="mt-1 text-xs text-gray-400">
+                  Assigned {new Date(a.assigned_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); navigate(`/lawyer/cases/${a.application_id}`); }}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                Open case →
+              </button>
+            </div>
+
+            <div className="mt-4">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-medium text-gray-700">Progress</span>
+                <span className="font-semibold text-gray-900">{pct}%</span>
+              </div>
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100">
+                <div className="h-full bg-gradient-to-r from-indigo-500 to-purple-600 transition-all" style={{ width: `${pct}%` }} />
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════
+ * DOCUMENTS TAB — grouped by case (accordion)
+ * ════════════════════════════════════════════════════════════════════ */
+
+interface CaseDocGroup {
+  app: AssignedApplication;
+  docs: Document[];
+  loading: boolean;
+  error: string | null;
+}
+
+function DocumentsTab({ profile }: { profile: ClientProfileResponse }) {
+  const navigate = useNavigate();
+  const [groups, setGroups] = useState<CaseDocGroup[]>([]);
+  const [initLoading, setInitLoading] = useState(true);
+  const [openIds, setOpenIds] = useState<Set<string>>(new Set());
+
+  // Load the client's cases first, then hydrate each with its docs.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setInitLoading(true);
+      try {
+        const all = await intakeApi.listAssignedApplications();
+        const mine = all.filter((a) => matchesClient(a, profile));
+        if (cancelled) return;
+
+        // First case starts expanded so the user sees documents immediately.
+        setOpenIds(new Set(mine.slice(0, 1).map((a) => a.application_id)));
+        setGroups(mine.map((a) => ({ app: a, docs: [], loading: true, error: null })));
+
+        // Kick off document fetch per case in parallel.
+        await Promise.all(mine.map(async (a) => {
+          try {
+            const res = await documentsApi.filterDocuments({ application_id: a.application_id });
+            const items = res.items ?? [];
+            if (cancelled) return;
+            setGroups((prev) => prev.map((g) =>
+              g.app.application_id === a.application_id
+                ? { ...g, docs: items, loading: false, error: null }
+                : g,
+            ));
+          } catch (e) {
+            if (cancelled) return;
+            setGroups((prev) => prev.map((g) =>
+              g.app.application_id === a.application_id
+                ? { ...g, docs: [], loading: false, error: e instanceof Error ? e.message : 'Failed to load' }
+                : g,
+            ));
+          }
+        }));
+      } catch (e) {
+        if (cancelled) return;
+        setGroups([]);
+      } finally {
+        if (!cancelled) setInitLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [profile.client_id]);
+
+  const totalDocs = useMemo(
+    () => groups.reduce((sum, g) => sum + g.docs.length, 0),
+    [groups],
+  );
+
+  const toggle = (id: string) => {
+    setOpenIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  if (initLoading) {
+    return <div className="rounded-xl border border-gray-200 bg-white p-8 text-sm text-gray-500">Loading documents…</div>;
+  }
+  if (groups.length === 0) {
+    return (
+      <div className="rounded-xl border-2 border-dashed border-gray-300 bg-white p-10 text-center">
+        <p className="text-base font-semibold text-gray-900">No cases yet</p>
+        <p className="mt-1 text-sm text-gray-500">
+          Documents appear here once {profile.full_name} has an assigned case with uploaded files.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Header bar */}
+      <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold text-gray-900">All documents</p>
+          <p className="text-xs text-gray-500">
+            {totalDocs} document{totalDocs === 1 ? '' : 's'} across {groups.length} case{groups.length === 1 ? '' : 's'}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate(`/lawyer/documents/queue?client=${encodeURIComponent(profile.full_name)}`)}
+          className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+        >
+          Open in Queue →
+        </button>
+      </div>
+
+      {/* Case accordions */}
+      {groups.map((g) => {
+        const isOpen = openIds.has(g.app.application_id);
+        return (
+          <div key={g.app.application_id} className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+            <button
+              type="button"
+              onClick={() => toggle(g.app.application_id)}
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-semibold text-gray-900">
+                    {g.app.visa_type_label || g.app.visa_type || 'Case'}
+                  </p>
+                  <span className="font-mono text-[11px] text-gray-500">
+                    #{g.app.application_id.slice(0, 8).toUpperCase()}
+                  </span>
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+                    STATUS_BADGE[g.app.status] || 'bg-gray-100 text-gray-700'
+                  }`}>
+                    {humanStatus(g.app.status)}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  {g.loading ? 'Loading documents…' : `${g.docs.length} document${g.docs.length === 1 ? '' : 's'}`}
+                </p>
+              </div>
+              <span className={`text-gray-400 transition-transform ${isOpen ? 'rotate-90' : ''}`}>▶</span>
+            </button>
+
+            {isOpen && (
+              <div className="border-t border-gray-100 bg-slate-50/40">
+                {g.loading ? (
+                  <div className="p-4 text-xs text-gray-500">Loading…</div>
+                ) : g.error ? (
+                  <div className="p-4 text-xs text-rose-600">{g.error}</div>
+                ) : g.docs.length === 0 ? (
+                  <div className="p-6 text-center text-xs text-gray-500">
+                    No documents uploaded for this case yet.
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-gray-100">
+                    {g.docs.map((doc) => (
+                      <li
+                        key={doc.id}
+                        onClick={() =>
+                          navigate(`/lawyer/documents/${doc.id}/review?application_id=${g.app.application_id}`)
+                        }
+                        className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 hover:bg-white"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-gray-900">{doc.name}</p>
+                          <p className="mt-0.5 text-xs text-gray-500">
+                            {doc.document_type || doc.category || '—'}
+                            {doc.uploaded_at && (
+                              <> · {new Date(doc.uploaded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</>
+                            )}
+                          </p>
+                        </div>
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${docStatusBadge(doc.status)}`}>
+                          {doc.status?.replace(/_/g, ' ') || 'Pending'}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function docStatusBadge(status: string | null | undefined): string {
+  switch (status) {
+    case 'approved':        return 'bg-emerald-50 text-emerald-700';
+    case 'rejected':        return 'bg-rose-50 text-rose-700';
+    case 'in_progress':     return 'bg-blue-50 text-blue-700';
+    case 'action_required': return 'bg-amber-50 text-amber-700';
+    default:                return 'bg-gray-100 text-gray-600';
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+ * MESSAGES + NOTES placeholders (unchanged phase)
+ * ════════════════════════════════════════════════════════════════════ */
+function MessagesTab({ profile }: { profile: ClientProfileResponse }) {
+  const navigate = useNavigate();
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
+      <p className="text-base font-semibold text-gray-900">Messages</p>
+      <p className="mt-1 text-sm text-gray-500">Chat with {profile.full_name} lives in the Messages workspace.</p>
+      <button
+        type="button"
+        onClick={() => {
+          const params = new URLSearchParams({ userId: profile.client_id, name: profile.full_name });
+          navigate(`/lawyer/messages?${params.toString()}`);
+        }}
+        className="mt-4 inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+      >
+        Open message thread →
+      </button>
+    </div>
+  );
+}
+function NotesTab() {
+  return (
+    <div className="rounded-xl border-2 border-dashed border-gray-300 bg-white p-12 text-center">
+      <p className="text-base font-semibold text-gray-900">Notes</p>
+      <p className="mt-1 text-sm text-gray-500">This tab is part of the next build phase.</p>
     </div>
   );
 }

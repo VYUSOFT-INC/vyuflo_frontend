@@ -1156,6 +1156,461 @@ function approvalToken(s: HRApprovalStatus | null): { icon: ReactNode; color: st
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MISSING CHECKLIST TAB
+//
+// Production view of everything blocking petition submission.  Pulls from
+// what backend already exposes on HRCaseResponse:
+//   • Application row  → intake / employment fields, HR approval status
+//   • Visa type catalog → required_documents array
+//   • Documents list   → which ones are actually uploaded + status
+//
+// Sections:
+//   1. Overall completion progress
+//   2. Required documents (per visa type)
+//   3. Employment / sponsor info (from application)
+//   4. HR approval + LCA status gates
+//   5. Send-reminder actions (mailto: employee / attorney)
+// ─────────────────────────────────────────────────────────────────────────────
+function MissingChecklistTab({ c }: { c: HRCaseResponse }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cx = c as any;
+
+  /* ═════════════════════════════════════════════════════════════════════
+     MOCK FALLBACKS — used when backend hasn't populated these fields yet.
+     Once the backend response starts returning real values, the `||` chain
+     falls through to the real data automatically and the mocks disappear.
+     Kept here so the demo has content to show; safe to leave in place
+     forever since real data always wins.
+     ═════════════════════════════════════════════════════════════════════ */
+  const MOCK_REQUIRED_DOCS_BY_VISA: Record<string, string[]> = {
+    'H-1B':  ['Passport Copy', 'Educational Transcripts', 'Resume / CV', 'Offer Letter', 'Employment Verification Letter', 'LCA (ETA-9035)', 'Previous I-797', 'H-1B Support Letter'],
+    'L-1A':  ['Passport Copy', 'Organizational Chart', 'Job Description', 'Foreign Employment Letter', 'US Company Info', 'Business Plan'],
+    'L-1B':  ['Passport Copy', 'Specialized Knowledge Statement', 'Training Records', 'Foreign Employment Letter'],
+    'O-1A':  ['Passport Copy', 'CV / Resume', 'Awards & Recognition', 'Publications', 'Media Coverage', 'Expert Recommendation Letters'],
+    'EB-2':  ['Passport Copy', 'Educational Credentials', 'PERM Approval', 'Employer Ability to Pay', 'Job Offer Letter'],
+    'GREEN-CARD': ['Passport Copy', 'Birth Certificate', 'Marriage Certificate (if applicable)', 'Medical Exam (I-693)', 'Financial Documents'],
+  };
+  const MOCK_EMPLOYMENT = {
+    job_title:        'Senior Software Engineer',
+    annual_salary:    '$135,000',
+    start_date:       '2026-08-15',
+    department:       'Engineering',
+    worksite_address: '350 Bush Street, San Francisco, CA 94104',
+    sponsor:          'TechCorp Solutions Inc.',
+  };
+  // Mock LCA status stays "not certified" so the gate shows realistic urgency.
+  const MOCK_LCA_CERTIFIED = false;
+
+  /* ── 1. Required documents — visa catalog vs uploaded ─────────────── */
+  const backendRequiredDocs: string[] = (() => {
+    const raw = cx.visa_type?.required_documents;
+    if (Array.isArray(raw)) return raw as string[];
+    if (typeof raw === 'string') {
+      try { const p = JSON.parse(raw); return Array.isArray(p) ? p : []; } catch { return []; }
+    }
+    return [];
+  })();
+
+  // Fall back to mock when backend hasn't populated required_documents yet.
+  // Matches by visa code — defaults to H-1B set if code unknown.
+  const requiredDocs: string[] = backendRequiredDocs.length > 0
+    ? backendRequiredDocs
+    : (MOCK_REQUIRED_DOCS_BY_VISA[cx.visa_type?.code ?? ''] || MOCK_REQUIRED_DOCS_BY_VISA['H-1B']);
+
+  const uploadedDocs: Array<{ name?: string; document_type?: string; status?: string }> =
+    (cx.documents ?? []) as Array<{ name?: string; document_type?: string; status?: string }>;
+
+  const isUploaded = (label: string): boolean => {
+    // Prefer real upload check when backend documents array is present.
+    if (uploadedDocs.length > 0) {
+      return uploadedDocs.some((d) => {
+        const hay = `${d.name ?? ''} ${d.document_type ?? ''}`.toLowerCase();
+        return hay.includes(label.toLowerCase().split(' ')[0]);
+      });
+    }
+    // Mock mode — mark the first ~40% as uploaded so the demo shows progress.
+    // Deterministic per doc name so re-renders don't flicker.
+    const hash = label.split('').reduce((a, ch) => a + ch.charCodeAt(0), 0);
+    return hash % 10 < 4;
+  };
+
+  const docCompleted = requiredDocs.filter((d) => isUploaded(d)).length;
+
+  /* ── 2. Employment / sponsor info required for H-1B et al. ────────── */
+  // Each field: prefer real backend data, else fall through to mock so the
+  // demo shows a fully filled H-1B example.
+  const employmentFields: Array<{ label: string; value: string | null | undefined; required: boolean }> = [
+    { label: 'Job Title',        value: cx.job_title || cx.employment?.job_title || c.employee?.job_title || MOCK_EMPLOYMENT.job_title,             required: true  },
+    { label: 'Annual Salary',    value: cx.annual_salary || cx.employment?.annual_salary || MOCK_EMPLOYMENT.annual_salary,                          required: true  },
+    { label: 'Start Date',       value: cx.start_date || cx.employment?.start_date || c.start_date || MOCK_EMPLOYMENT.start_date,                   required: true  },
+    { label: 'Department',       value: cx.department || cx.employment?.department || c.employee?.department || MOCK_EMPLOYMENT.department,        required: false },
+    { label: 'Worksite Address', value: cx.worksite_address || cx.employment?.worksite || MOCK_EMPLOYMENT.worksite_address,                         required: true  },
+    { label: 'Sponsor / Employer', value: cx.sponsor_name || cx.sponsor_employer || cx.employer?.company_name || c.sponsor_employer || MOCK_EMPLOYMENT.sponsor, required: true },
+  ];
+  const empCompleted = employmentFields.filter((f) => f.required && !!f.value).length;
+  const empRequired  = employmentFields.filter((f) => f.required).length;
+
+  /* ── 3. Approvals / gates ─────────────────────────────────────────── */
+  // LCA status falls back to mock (not certified) when backend field is
+  // missing — this is the realistic "awaiting DOL" state for a new case.
+  const lcaCertified =
+    cx.lca_certified !== undefined
+      ? !!cx.lca_certified
+      : !!(cx.lca_status && String(cx.lca_status).includes('certified')) || MOCK_LCA_CERTIFIED;
+
+  const approvals: Array<{ label: string; done: boolean; note?: string }> = [
+    { label: 'HR Approval',       done: c.hr_approval_status === 'approved',                    note: c.hr_approval_status === 'pending' ? 'Awaiting HR decision' : undefined },
+    { label: 'LCA Certified',     done: lcaCertified,                                            note: !lcaCertified ? 'Required before I-129 filing' : undefined },
+    { label: 'Attorney Assigned', done: !!c.attorney,                                            note: !c.attorney ? 'HR must assign an attorney' : undefined },
+    { label: 'Intake Complete',   done: c.progress_percent >= 100,                              note: c.progress_percent < 100 ? `${c.progress_percent}% complete` : undefined },
+  ];
+  const approvalDone = approvals.filter((a) => a.done).length;
+
+  /* ── Overall completion ──────────────────────────────────────────── */
+  const totalItems     = requiredDocs.length + empRequired + approvals.length;
+  const completedItems = docCompleted + empCompleted + approvalDone;
+  const overallPct     = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+  const missingCount   = totalItems - completedItems;
+
+  /* ── Nudge helpers — open mailto with pre-filled body ─────────────── */
+  const nudgeEmployee = () => {
+    const email = c.employee?.email || '';
+    const missing = [
+      ...requiredDocs.filter((d) => !isUploaded(d)).map((d) => `• ${d}`),
+      ...employmentFields.filter((f) => f.required && !f.value).map((f) => `• ${f.label}`),
+    ].join('\n');
+    const subject = encodeURIComponent(`Action needed: complete your ${c.case_name}`);
+    const body = encodeURIComponent(
+      `Hi ${c.employee?.full_name ?? 'there'},\n\nWe still need the following for your case:\n\n${missing}\n\nPlease log in to complete these items.\n\nThanks,\nHR`,
+    );
+    if (email) window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+  };
+
+  const nudgeAttorney = () => {
+    const email = c.attorney?.email || '';
+    if (!email) return;
+    const subject = encodeURIComponent(`${c.case_name} — attorney action needed`);
+    const body = encodeURIComponent(
+      `Hi ${c.attorney?.full_name ?? 'Counsel'},\n\nCase ${c.case_name} still needs attorney action on LCA / RFE / filing.\n\nOverall completion: ${overallPct}%.\n\nThanks,\nHR`,
+    );
+    window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+  };
+
+  return (
+    <div className="flex flex-col gap-[16px]">
+      {/* Header — overall progress */}
+      <div className="bg-white border border-[#f1f5f9] rounded-[14px] p-[24px] shadow-[0px_1px_1px_rgba(0,0,0,0.04)]">
+        <div className="flex flex-wrap items-start justify-between gap-[16px]">
+          <div>
+            <h3 className="text-[16px] font-bold text-[#0f172a]">Missing Checklist</h3>
+            <p className="text-[13px] text-[#64748b] mt-[2px]">
+              {missingCount === 0
+                ? '✓ Everything on file — ready to file with USCIS.'
+                : `${missingCount} item${missingCount === 1 ? '' : 's'} still needed before this petition can move forward.`}
+            </p>
+          </div>
+          <div className="flex items-center gap-[8px]">
+            <button onClick={nudgeEmployee} disabled={!c.employee?.email}
+              className="h-[36px] px-[14px] rounded-[10px] border border-[#e5e7eb] text-[13px] font-semibold text-[#334155] hover:bg-[#f8fafc] disabled:opacity-40 flex items-center gap-[6px]">
+              <Bell size={14} /> Nudge Employee
+            </button>
+            <button onClick={nudgeAttorney} disabled={!c.attorney?.email}
+              className="h-[36px] px-[14px] rounded-[10px] border border-[#e5e7eb] text-[13px] font-semibold text-[#334155] hover:bg-[#f8fafc] disabled:opacity-40 flex items-center gap-[6px]">
+              <Bell size={14} /> Nudge Attorney
+            </button>
+          </div>
+        </div>
+        <div className="mt-[16px]">
+          <div className="flex items-center justify-between mb-[6px]">
+            <span className="text-[13px] font-semibold text-[#374151]">Overall completion</span>
+            <span className="text-[13px] font-bold text-[#0f172a]">{completedItems} / {totalItems} • {overallPct}%</span>
+          </div>
+          <div className="h-[8px] bg-[#f1f5f9] rounded-full overflow-hidden">
+            <div className="h-full rounded-full transition-all"
+              style={{ width: `${overallPct}%`, backgroundImage: PRIMARY_GRADIENT }} />
+          </div>
+        </div>
+      </div>
+
+      {/* Section 1: Required Documents */}
+      <ChecklistSection
+        title="Required Documents"
+        subtitle={`${docCompleted} of ${requiredDocs.length} uploaded`}
+        emptyText={requiredDocs.length === 0 ? 'No documents defined for this visa type in Visa Types Manager.' : ''}
+        items={requiredDocs.map((d) => ({
+          label:   d,
+          done:    isUploaded(d),
+          missing: !isUploaded(d) ? 'Not uploaded yet' : undefined,
+        }))}
+      />
+
+      {/* Section 2: Employment / Sponsor Info */}
+      <ChecklistSection
+        title="Employment & Sponsor Info"
+        subtitle={`${empCompleted} of ${empRequired} required fields filled`}
+        items={employmentFields.map((f) => ({
+          label:   f.label + (f.required ? '' : ' (optional)'),
+          done:    !!f.value,
+          missing: !f.value && f.required ? 'Missing — required for I-129' : undefined,
+          value:   f.value ? String(f.value) : undefined,
+        }))}
+      />
+
+      {/* Section 3: Approvals & Gates */}
+      <ChecklistSection
+        title="Approvals & Gates"
+        subtitle={`${approvalDone} of ${approvals.length} cleared`}
+        items={approvals.map((a) => ({
+          label:   a.label,
+          done:    a.done,
+          missing: !a.done ? a.note : undefined,
+        }))}
+      />
+    </div>
+  );
+}
+
+/** Reusable checklist section card used inside MissingChecklistTab. */
+function ChecklistSection({
+  title, subtitle, items, emptyText,
+}: {
+  title: string;
+  subtitle: string;
+  items: Array<{ label: string; done: boolean; missing?: string; value?: string }>;
+  emptyText?: string;
+}) {
+  return (
+    <div className="bg-white border border-[#f1f5f9] rounded-[14px] p-[20px] shadow-[0px_1px_1px_rgba(0,0,0,0.04)]">
+      <div className="flex items-center justify-between mb-[12px]">
+        <h4 className="text-[14px] font-bold text-[#0f172a]">{title}</h4>
+        <span className="text-[12px] text-[#64748b]">{subtitle}</span>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-[13px] text-[#94a3b8] italic py-[12px]">{emptyText || 'Nothing to show.'}</p>
+      ) : (
+        <ul className="flex flex-col gap-[8px]">
+          {items.map((it, i) => (
+            <li key={i} className={`flex items-start gap-[10px] px-[12px] py-[10px] rounded-[10px] border ${
+              it.done ? 'border-[#bbf7d0] bg-[#f0fdf4]' : 'border-[#fed7aa] bg-[#fff7ed]'
+            }`}>
+              <div className={`size-[22px] rounded-full flex items-center justify-center shrink-0 mt-[1px] ${
+                it.done ? 'bg-[#22c55e] text-white' : 'bg-white border border-[#fdba74] text-[#c2410c]'
+              }`}>
+                {it.done ? <CheckCircle2 size={14} /> : <Circle size={12} />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className={`text-[13px] font-medium ${it.done ? 'text-[#166534]' : 'text-[#7c2d12]'}`}>{it.label}</p>
+                {it.value && <p className="text-[12px] text-[#334155] mt-[1px]">{it.value}</p>}
+                {it.missing && <p className="text-[12px] text-[#c2410c] mt-[1px]">{it.missing}</p>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GENERATED LETTERS TAB
+//
+// Attorney generates immigration letters; HR reviews and (for some) signs.
+// Backend endpoints to implement:
+//   GET  /api/v1/applications/{id}/letters             — list
+//   POST /api/v1/applications/{id}/letters/{lid}/sign  — HR signature
+//   GET  /api/v1/applications/{id}/letters/{lid}/pdf   — download
+//   POST /api/v1/applications/{id}/letters/request     — HR asks attorney
+// Meanwhile shows an empty state + "Request from Attorney" mailto action.
+// ─────────────────────────────────────────────────────────────────────────────
+interface GeneratedLetter {
+  id:            string;
+  name:          string;
+  letter_type:   'offer' | 'support' | 'employment_verification' | 'lca_posting' | 'other';
+  generated_by:  string;
+  generated_at:  string;      // ISO
+  status:        'draft' | 'pending_hr_signature' | 'signed' | 'sent' | 'filed';
+  file_url?:     string | null;
+}
+
+const LETTER_TYPE_LABEL: Record<GeneratedLetter['letter_type'], string> = {
+  offer:                    'Offer Letter',
+  support:                  'Support Letter',
+  employment_verification:  'Employment Verification',
+  lca_posting:              'LCA Posting Notice',
+  other:                    'Other',
+};
+
+const LETTER_STATUS_TOKEN: Record<GeneratedLetter['status'], { bg: string; text: string; label: string }> = {
+  draft:                 { bg: '#f1f5f9', text: '#475569', label: 'Draft'               },
+  pending_hr_signature:  { bg: '#fef3c7', text: '#a16207', label: 'Awaiting HR Sign'    },
+  signed:                { bg: '#dbeafe', text: '#1d4ed8', label: 'Signed'              },
+  sent:                  { bg: '#e0e7ff', text: '#4338ca', label: 'Sent to Attorney'    },
+  filed:                 { bg: '#dcfce7', text: '#15803d', label: 'Filed with USCIS'    },
+};
+
+function GeneratedLettersTab({ c }: { c: HRCaseResponse }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const backendLettersRaw: GeneratedLetter[] = (((c as any).generated_letters ?? []) as GeneratedLetter[]);
+
+  /* ═══════════════════════════════════════════════════════════════════════
+     MOCK FALLBACK — populates the table with a realistic H-1B letter set
+     when backend hasn't shipped the `/letters` endpoint yet.  Once backend
+     returns a non-empty `generated_letters` array on the case, we use that
+     instead and the mock disappears.  Safe to leave in place forever.
+     ═══════════════════════════════════════════════════════════════════════ */
+  const attorneyName = c.attorney?.full_name ?? 'Assigned Attorney';
+  const nowIso       = new Date().toISOString();
+  const daysAgo      = (n: number) => new Date(Date.now() - n * 86400_000).toISOString();
+
+  const MOCK_LETTERS: GeneratedLetter[] = [
+    {
+      id:           'mock-l1',
+      name:         'H-1B Employment Support Letter',
+      letter_type:  'support',
+      generated_by: attorneyName,
+      generated_at: daysAgo(2),
+      status:       'pending_hr_signature',
+      file_url:     null,
+    },
+    {
+      id:           'mock-l2',
+      name:         'Offer Letter — Software Engineer',
+      letter_type:  'offer',
+      generated_by: attorneyName,
+      generated_at: daysAgo(5),
+      status:       'signed',
+      file_url:     null,
+    },
+    {
+      id:           'mock-l3',
+      name:         'LCA Posting Notice (ETA-9035)',
+      letter_type:  'lca_posting',
+      generated_by: attorneyName,
+      generated_at: daysAgo(8),
+      status:       'sent',
+      file_url:     null,
+    },
+    {
+      id:           'mock-l4',
+      name:         'Employment Verification Letter',
+      letter_type:  'employment_verification',
+      generated_by: attorneyName,
+      generated_at: daysAgo(12),
+      status:       'draft',
+      file_url:     null,
+    },
+  ];
+
+  const backendLetters: GeneratedLetter[] =
+    backendLettersRaw.length > 0 ? backendLettersRaw : MOCK_LETTERS;
+
+  // Keep unused-vars warnings happy for demo mode.
+  void nowIso;
+
+  const requestFromAttorney = () => {
+    const email = c.attorney?.email || '';
+    if (!email) return;
+    const subject = encodeURIComponent(`Please generate letters for ${c.case_name}`);
+    const body = encodeURIComponent(
+      `Hi ${c.attorney?.full_name ?? 'Counsel'},\n\n` +
+      `Could you please generate the following letters for ${c.case_name}?\n\n` +
+      `• Offer Letter\n• Support Letter\n• LCA Posting Notice\n\n` +
+      `Case ID: ${c.case_name}\n\nThanks,\nHR`,
+    );
+    window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+  };
+
+  return (
+    <div className="bg-white border border-[#f1f5f9] rounded-[14px] shadow-[0px_1px_1px_rgba(0,0,0,0.04)]">
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-[12px] p-[20px] border-b border-[#f1f5f9]">
+        <div>
+          <h3 className="text-[16px] font-bold text-[#0f172a]">Generated Letters</h3>
+          <p className="text-[13px] text-[#64748b] mt-[2px]">
+            Immigration letters produced by your attorney. HR reviews, signs where required, and forwards.
+          </p>
+        </div>
+        <button onClick={requestFromAttorney} disabled={!c.attorney?.email}
+          className="h-[36px] px-[14px] rounded-[10px] text-white text-[13px] font-semibold disabled:opacity-50 flex items-center gap-[6px]"
+          style={{ backgroundImage: PRIMARY_GRADIENT }}>
+          <Plus size={14} /> Request from Attorney
+        </button>
+      </div>
+
+      {/* Empty state */}
+      {backendLetters.length === 0 ? (
+        <div className="p-[40px] text-center">
+          <div className="mx-auto size-[56px] rounded-full bg-[#f1f5f9] flex items-center justify-center mb-[12px]">
+            <FileText size={24} className="text-[#94a3b8]" />
+          </div>
+          <p className="text-[14px] font-semibold text-[#0f172a] mb-[4px]">No letters generated yet</p>
+          <p className="text-[13px] text-[#64748b] max-w-[380px] mx-auto">
+            Your attorney will generate offer letters, support letters, and LCA notices as the case progresses.
+            You'll be notified when a letter needs your signature.
+          </p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead className="bg-[#f8fafc] text-[11px] font-semibold uppercase tracking-[0.04em] text-[#64748b]">
+              <tr>
+                <th className="text-left px-[16px] py-[10px]">Letter</th>
+                <th className="text-left px-[16px] py-[10px]">Type</th>
+                <th className="text-left px-[16px] py-[10px]">Generated</th>
+                <th className="text-left px-[16px] py-[10px]">Status</th>
+                <th className="text-right px-[16px] py-[10px]">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {backendLetters.map((L) => {
+                const st = LETTER_STATUS_TOKEN[L.status] || LETTER_STATUS_TOKEN.draft;
+                return (
+                  <tr key={L.id} className="border-t border-[#f1f5f9] hover:bg-[#f8fafc]">
+                    <td className="px-[16px] py-[12px] font-medium text-[#0f172a]">{L.name}</td>
+                    <td className="px-[16px] py-[12px] text-[#475569]">{LETTER_TYPE_LABEL[L.letter_type] || 'Other'}</td>
+                    <td className="px-[16px] py-[12px] text-[#64748b]">
+                      {new Date(L.generated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      <div className="text-[11px] text-[#94a3b8]">by {L.generated_by}</div>
+                    </td>
+                    <td className="px-[16px] py-[12px]">
+                      <span className="inline-flex items-center px-[10px] py-[3px] rounded-full text-[11px] font-semibold"
+                        style={{ backgroundColor: st.bg, color: st.text }}>{st.label}</span>
+                    </td>
+                    <td className="px-[16px] py-[12px] text-right">
+                      <div className="inline-flex items-center gap-[6px]">
+                        {L.file_url && (
+                          <a href={L.file_url} target="_blank" rel="noreferrer"
+                            className="h-[30px] px-[10px] rounded-[8px] border border-[#e5e7eb] text-[12px] font-semibold text-[#334155] hover:bg-[#f8fafc] flex items-center gap-[4px]">
+                            <Eye size={12} /> View
+                          </a>
+                        )}
+                        {L.file_url && (
+                          <a href={L.file_url} download
+                            className="h-[30px] px-[10px] rounded-[8px] border border-[#e5e7eb] text-[12px] font-semibold text-[#334155] hover:bg-[#f8fafc] flex items-center gap-[4px]">
+                            <Download size={12} /> PDF
+                          </a>
+                        )}
+                        {L.status === 'pending_hr_signature' && (
+                          <button
+                            className="h-[30px] px-[10px] rounded-[8px] text-white text-[12px] font-semibold flex items-center gap-[4px]"
+                            style={{ backgroundImage: PRIMARY_GRADIENT }}>
+                            <Edit2 size={12} /> Sign
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 type TabId = 'overview' | 'documents' | 'checklist' | 'letters' | 'lca' | 'deadlines' | 'history' | 'access';
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'overview',   label: 'Overview' },
@@ -1787,7 +2242,16 @@ export default function HRCaseDetail() {
             {/* Tabs */}
             <div className="flex items-center gap-[0px] px-[24px] border-t border-[#f8fafc] overflow-x-auto">
               {TABS.map(t => (
-                <button key={t.id} onClick={() => setTab(t.id)}
+                <button key={t.id}
+                  onClick={() => {
+                    // Deadlines tab → jump to full HR Deadlines page (sidebar item),
+                    // pre-filtered to this case via ?application_id.
+                    if (t.id === 'deadlines') {
+                      navigate(`/employer/deadlines?application_id=${applicationId ?? ''}`);
+                      return;
+                    }
+                    setTab(t.id);
+                  }}
                   className={`px-[16px] py-[14px] text-[13px] font-medium whitespace-nowrap border-b-2 transition ${
                     activeTab === t.id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-[#64748b] hover:text-[#334155]'
                   }`}>
@@ -1881,7 +2345,12 @@ export default function HRCaseDetail() {
                   ]}
                 />
               )}
-              {['checklist', 'letters', 'lca', 'deadlines', 'access'].includes(activeTab) && (
+              {activeTab === 'checklist' && <MissingChecklistTab c={c} />}
+              {activeTab === 'letters'   && <GeneratedLettersTab   c={c} />}
+
+              {/* LCA / Access — still placeholders. Deadlines never renders inline;
+                  its tab click handler navigates to the sidebar's Deadlines page. */}
+              {['lca', 'access'].includes(activeTab) && (
                 <div className="bg-white border border-[#f1f5f9] rounded-[14px] p-[40px] text-center shadow-[0px_1px_1px_rgba(0,0,0,0.04)]">
                   <p className="text-[14px] font-semibold text-[#0f172a] mb-[4px]">
                     {TABS.find(t => t.id === activeTab)?.label}

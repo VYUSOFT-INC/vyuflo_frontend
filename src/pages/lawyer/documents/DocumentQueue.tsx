@@ -53,6 +53,31 @@ const DATE_RANGE_OPTIONS: { value: 'all' | 'today' | 'last_7_days' | 'last_30_da
 
 const PAGE_SIZE = 10;
 
+/* ── Grouped row shape (one row per case) ───────────────────────────── */
+interface CaseGroup {
+  key:            string;
+  application_id: string | null;
+  client_name:    string;
+  case_id:        string;
+  docs:           Document[];
+  last_updated:   string;
+}
+
+/** Pick the single "dominant" status a group should display, in priority order. */
+function groupPrimaryStatus(docs: Document[]): DocumentStatus {
+  const order: DocumentStatus[] = [
+    'action_required',
+    'rejected',
+    'pending',
+    'in_progress',
+    'approved',
+  ];
+  for (const s of order) {
+    if (docs.some((d) => d.status === s)) return s;
+  }
+  return docs[0]?.status ?? 'pending';
+}
+
 /* ── Mock fallback (used when backend returns empty so UI stays visible) */
 function buildMockDocs(): Document[] {
   const now = Date.now();
@@ -140,28 +165,54 @@ export default function DocumentQueue() {
 
   /* ── Load documents ──────────────────────────────────────────────────
    * Strategy:
-   *  1. Try GET /documents/filter (Attorney-Documents — auto-scoped to lawyer)
-   *  2. If that fails or returns empty, fall back to 2-step legacy
-   *     (assigned apps → /documents per app)
-   *  3. If everything is still empty, fall back to mock so UI is visible
+   *  1. ALWAYS fetch assigned apps first — they carry client_name +
+   *     visa_type which the /documents endpoints don't join. Without this
+   *     the UI would show "Unknown client" for every row.
+   *  2. Try GET /documents/filter (Attorney-Documents — auto-scoped to lawyer).
+   *     Enrich each returned doc with client_name + case_id from the map.
+   *  3. If filter is empty/unavailable, fall back to per-app /documents fetch
+   *     (which does the join manually).
+   *  4. If everything is still empty, fall back to mock so UI is visible.
    * ─────────────────────────────────────────────────────────────────── */
   const load = async () => {
     setLoading(true);
     setError(null);
     try {
-      // Step 1 — try filter endpoint
+      // Step 0 — always load the client name map first
+      const apps = await intakeApi.listAssignedApplications().catch(() => []);
+      const clientByAppId = new Map(
+        apps.map((a) => [
+          a.application_id,
+          {
+            client_name: a.client_name,
+            case_id:
+              `#VF-${a.application_id.slice(0, 4).toUpperCase()}` +
+              (a.visa_type ? ` · ${a.visa_type}` : ''),
+          },
+        ]),
+      );
+
+      const enrich = (doc: Document): Document => {
+        const meta = doc.application_id ? clientByAppId.get(doc.application_id) : undefined;
+        return {
+          ...doc,
+          client_name: doc.client_name || meta?.client_name || doc.client_name,
+          case_id:     doc.case_id     || meta?.case_id     || doc.case_id,
+        };
+      };
+
+      // Step 1 — try filter endpoint (preferred, single call)
       try {
         const res = await documentsApi.filterDocuments({});
         if (res.items?.length) {
-          setDocs(res.items);
+          setDocs(res.items.map(enrich));
           return;
         }
       } catch {
         // filter not yet wired or errored — try legacy fallback
       }
 
-      // Step 2 — legacy: assigned apps → /documents
-      const apps = await intakeApi.listAssignedApplications();
+      // Step 2 — legacy: per-app /documents
       if (apps.length === 0) {
         setDocs(buildMockDocs());
         return;
@@ -179,7 +230,7 @@ export default function DocumentQueue() {
       const all: Document[] = results.flatMap(({ app, items }) =>
         items.map((doc) => ({
           ...doc,
-          client_name: app.client_name,
+          client_name: doc.client_name || app.client_name,
           case_id:     `#VF-${app.application_id.slice(0, 4).toUpperCase()}` +
                        (app.visa_type ? ` · ${app.visa_type}` : ''),
         })),
@@ -238,11 +289,51 @@ export default function DocumentQueue() {
     return arr;
   }, [filtered, sortBy]);
 
-  /* ── Pagination slice ─────────────────────────────────────────────── */
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  /* ── Group by case (application_id | case_id) ─────────────────────── */
+  const groups = useMemo<CaseGroup[]>(() => {
+    const map = new Map<string, CaseGroup>();
+    for (const d of sorted) {
+      const key = d.application_id || d.case_id || `orphan-${d.id}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.docs.push(d);
+        // Track the newest upload as the group's last updated
+        if (new Date(d.uploaded_at).getTime() > new Date(existing.last_updated).getTime()) {
+          existing.last_updated = d.uploaded_at;
+        }
+      } else {
+        map.set(key, {
+          key,
+          application_id: d.application_id || null,
+          client_name: d.client_name || 'Unknown client',
+          case_id: d.case_id || `#VF-${(d.application_id || d.id).slice(0, 4).toUpperCase()}`,
+          docs: [d],
+          last_updated: d.uploaded_at,
+        });
+      }
+    }
+    // Sort groups by newest doc within group (respects the sortBy pass above).
+    return [...map.values()].sort(
+      (a, b) => new Date(b.last_updated).getTime() - new Date(a.last_updated).getTime(),
+    );
+  }, [sorted]);
+
+  /* ── Pagination slice (page groups, not docs) ─────────────────────── */
+  const totalPages = Math.max(1, Math.ceil(groups.length / PAGE_SIZE));
   const pageStart = (page - 1) * PAGE_SIZE;
-  const paginated = sorted.slice(pageStart, pageStart + PAGE_SIZE);
+  const paginated = groups.slice(pageStart, pageStart + PAGE_SIZE);
   useEffect(() => { if (page > totalPages) setPage(1); }, [totalPages, page]);
+
+  /* ── Row-expansion state (inline accordion) ───────────────────────── */
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleExpand = (key: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   /* ── KPI stats (derived) ──────────────────────────────────────────── */
   const stats: QueueStats = useMemo(() => {
@@ -265,16 +356,32 @@ export default function DocumentQueue() {
       return next;
     });
   };
+  /** Every doc across every group currently paginated (used for select-all). */
+  const paginatedDocIds = useMemo(
+    () => paginated.flatMap((g) => g.docs.map((d) => d.id)),
+    [paginated],
+  );
   const toggleSelectAll = () => {
-    if (paginated.every((d) => selected.has(d.id))) {
+    if (paginatedDocIds.length > 0 && paginatedDocIds.every((id) => selected.has(id))) {
       const next = new Set(selected);
-      paginated.forEach((d) => next.delete(d.id));
+      paginatedDocIds.forEach((id) => next.delete(id));
       setSelected(next);
     } else {
       const next = new Set(selected);
-      paginated.forEach((d) => next.add(d.id));
+      paginatedDocIds.forEach((id) => next.add(id));
       setSelected(next);
     }
+  };
+  /** Toggle every doc inside a group at once (used from the group header). */
+  const toggleGroupSelect = (g: CaseGroup) => {
+    const ids = g.docs.map((d) => d.id);
+    const allSel = ids.every((id) => selected.has(id));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allSel) ids.forEach((id) => next.delete(id));
+      else        ids.forEach((id) => next.add(id));
+      return next;
+    });
   };
 
   /* ── Bulk actions ─────────────────────────────────────────────────── */
@@ -416,28 +523,30 @@ export default function DocumentQueue() {
                       <th className="w-8 px-4 py-3">
                         <input
                           type="checkbox"
-                          checked={paginated.length > 0 && paginated.every((d) => selected.has(d.id))}
+                          checked={paginatedDocIds.length > 0 && paginatedDocIds.every((id) => selected.has(id))}
                           onChange={toggleSelectAll}
                           className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                         />
                       </th>
                       <th className="px-4 py-3">Client / Case ID</th>
-                      <th className="px-4 py-3">Document Type</th>
-                      <th className="px-4 py-3">Submitted Date</th>
+                      <th className="px-4 py-3">Documents</th>
+                      <th className="px-4 py-3">Last Updated</th>
                       <th className="px-4 py-3">Status</th>
                       <th className="px-4 py-3 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {paginated.map((doc) => (
-                      <Row
-                        key={doc.id}
-                        doc={doc}
-                        selected={selected.has(doc.id)}
-                        onSelect={() => toggleSelect(doc.id)}
-                        onAction={() => handleRowAction(doc)}
-                        onRowClick={() => handleRowAction(doc)}
-                        actionLabel={rowActionLabel(doc.status)}
+                    {paginated.map((g) => (
+                      <GroupRow
+                        key={g.key}
+                        group={g}
+                        expanded={expanded.has(g.key)}
+                        onToggleExpand={() => toggleExpand(g.key)}
+                        selectedIds={selected}
+                        onToggleGroupSelect={() => toggleGroupSelect(g)}
+                        onToggleDocSelect={toggleSelect}
+                        onDocClick={handleRowAction}
+                        rowActionLabel={rowActionLabel}
                       />
                     ))}
                   </tbody>
@@ -448,8 +557,8 @@ export default function DocumentQueue() {
               <div className="flex flex-col items-center justify-between gap-3 border-t border-gray-100 px-4 py-3 sm:flex-row sm:px-6">
                 <p className="text-xs text-gray-500">
                   Showing <span className="font-semibold text-gray-700">{pageStart + 1}</span> to{' '}
-                  <span className="font-semibold text-gray-700">{Math.min(pageStart + PAGE_SIZE, sorted.length)}</span> of{' '}
-                  <span className="font-semibold text-gray-700">{sorted.length}</span> results
+                  <span className="font-semibold text-gray-700">{Math.min(pageStart + PAGE_SIZE, groups.length)}</span> of{' '}
+                  <span className="font-semibold text-gray-700">{groups.length}</span> case{groups.length === 1 ? '' : 's'}
                 </p>
                 <div className="flex items-center gap-2">
                   <button
@@ -506,20 +615,113 @@ function StatCard({
   );
 }
 
-/* ── Table row ──────────────────────────────────────────────────────── */
-function Row({
+/* ── Grouped-by-case row (one row per case, click to expand) ────────── */
+function GroupRow({
+  group,
+  expanded,
+  onToggleExpand,
+  selectedIds,
+  onToggleGroupSelect,
+  onToggleDocSelect,
+  onDocClick,
+  rowActionLabel,
+}: {
+  group: CaseGroup;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  selectedIds: Set<string>;
+  onToggleGroupSelect: () => void;
+  onToggleDocSelect: (id: string) => void;
+  onDocClick: (doc: Document) => void;
+  rowActionLabel: (s: DocumentStatus) => string;
+}) {
+  const docCount = group.docs.length;
+  const primary  = groupPrimaryStatus(group.docs);
+  const cfg      = STATUS_COLORS[primary] ?? STATUS_COLORS.pending;
+
+  // Documents column: "N document(s)" + a small colored count-badge for the
+  // primary bucket (e.g. "1 pending", "2 action").
+  const bucketCount = group.docs.filter((d) => d.status === primary).length;
+  const bucketLabel = STATUS_LABELS[primary]?.toLowerCase() ?? primary;
+
+  const allDocsSelected =
+    docCount > 0 && group.docs.every((d) => selectedIds.has(d.id));
+
+  return (
+    <>
+      <tr
+        className={`cursor-pointer hover:bg-gray-50 ${allDocsSelected ? 'bg-indigo-50/40' : ''}`}
+        onClick={onToggleExpand}
+      >
+        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={allDocsSelected}
+            onChange={onToggleGroupSelect}
+            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+          />
+        </td>
+        <td className="px-4 py-3">
+          <p className="text-sm font-semibold text-gray-900">
+            {group.client_name || 'Unknown client'}
+          </p>
+          <p className="text-xs text-gray-500">{group.case_id}</p>
+        </td>
+        <td className="px-4 py-3">
+          <p className="text-sm text-gray-700">
+            {docCount} document{docCount === 1 ? '' : 's'}
+          </p>
+          <span className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${cfg.bg} ${cfg.text}`}>
+            {bucketCount} {bucketLabel}
+          </span>
+        </td>
+        <td className="px-4 py-3">
+          <p className="text-sm text-gray-700">{formatDate(group.last_updated)}</p>
+          <p className="text-xs text-gray-400">{formatTime(group.last_updated)}</p>
+        </td>
+        <td className="px-4 py-3">
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${cfg.bg} ${cfg.text}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+            {STATUS_LABELS[primary] ?? primary}
+          </span>
+        </td>
+        <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={onToggleExpand}
+            className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+          >
+            {expanded ? 'Close ▲' : 'Open →'}
+          </button>
+        </td>
+      </tr>
+
+      {/* Expanded body — one sub-row per document */}
+      {expanded && group.docs.map((doc) => (
+        <DocSubRow
+          key={doc.id}
+          doc={doc}
+          selected={selectedIds.has(doc.id)}
+          onSelect={() => onToggleDocSelect(doc.id)}
+          onOpen={() => onDocClick(doc)}
+          actionLabel={rowActionLabel(doc.status)}
+        />
+      ))}
+    </>
+  );
+}
+
+/* ── Sub-row for a single document under an expanded group ──────────── */
+function DocSubRow({
   doc,
   selected,
   onSelect,
-  onAction,
-  onRowClick,
+  onOpen,
   actionLabel,
 }: {
   doc: Document;
   selected: boolean;
   onSelect: () => void;
-  onAction: () => void;
-  onRowClick: () => void;
+  onOpen: () => void;
   actionLabel: string;
 }) {
   const cfg = STATUS_COLORS[doc.status] ?? STATUS_COLORS.pending;
@@ -528,10 +730,10 @@ function Row({
 
   return (
     <tr
-      className={`cursor-pointer hover:bg-gray-50 ${selected ? 'bg-indigo-50/40' : ''}`}
-      onClick={onRowClick}
+      onClick={onOpen}
+      className={`cursor-pointer bg-slate-50/40 hover:bg-slate-50 ${selected ? 'bg-indigo-50/40' : ''}`}
     >
-      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+      <td className="px-4 py-2 pl-8" onClick={(e) => e.stopPropagation()}>
         <input
           type="checkbox"
           checked={selected}
@@ -539,30 +741,31 @@ function Row({
           className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
         />
       </td>
-      <td className="px-4 py-3">
-        <p className="text-sm font-semibold text-gray-900">{doc.client_name || 'Unknown client'}</p>
-        <p className="text-xs text-gray-500">{doc.case_id || `#VF-${doc.id.slice(0, 4).toUpperCase()}`}</p>
-      </td>
-      <td className="px-4 py-3">
+      <td className="px-4 py-2 pl-4" colSpan={2}>
         <div className="flex items-center gap-2">
-          <img src={fileIcon} alt="" className="h-5 w-5 shrink-0" />
+          <img src={fileIcon} alt="" className="h-4 w-4 shrink-0" />
           <span className="truncate text-sm text-gray-700">{doc.name}</span>
+          {doc.document_type && (
+            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+              {doc.document_type}
+            </span>
+          )}
         </div>
       </td>
-      <td className="px-4 py-3">
-        <p className="text-sm text-gray-700">{formatDate(doc.uploaded_at)}</p>
-        <p className="text-xs text-gray-400">{formatTime(doc.uploaded_at)}</p>
+      <td className="px-4 py-2">
+        <p className="text-xs text-gray-600">{formatDate(doc.uploaded_at)}</p>
+        <p className="text-[10px] text-gray-400">{formatTime(doc.uploaded_at)}</p>
       </td>
-      <td className="px-4 py-3">
-        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${cfg.bg} ${cfg.text}`}>
+      <td className="px-4 py-2">
+        <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${cfg.bg} ${cfg.text}`}>
           <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
           {STATUS_LABELS[doc.status] ?? doc.status}
         </span>
       </td>
-      <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+      <td className="px-4 py-2 text-right" onClick={(e) => e.stopPropagation()}>
         <button
-          onClick={onAction}
-          className={`text-xs font-semibold ${
+          onClick={onOpen}
+          className={`text-[11px] font-semibold ${
             doc.status === 'action_required' ? 'text-red-600 hover:text-red-700' :
             doc.status === 'approved'        ? 'text-gray-600 hover:text-gray-700' :
                                                 'text-indigo-600 hover:text-indigo-700'
