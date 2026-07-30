@@ -12,6 +12,7 @@ import type {
   BillingClientListResponse,
   ClientType,
 } from '../../../types/lawyer/billing.types';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 /* ── Mock fallback ─────────────────────────────────────────────────────── */
 const MOCK_CLIENTS: BillingClientListResponse = {
@@ -73,6 +74,7 @@ export default function BillingClientsList() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
+      <LawyerBackButton />
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <button onClick={() => navigate('/lawyer/billing')} className="mb-2 text-xs text-indigo-600 hover:underline">

@@ -48,7 +48,10 @@ export default function AdminBackButton({
   };
 
   return (
-    <div className={`mb-3 md:mb-4 ${className}`}>
+    // Left-padding-only wrapper — no mx-auto so flex-column pages don't
+    // center the chip. Padding matches the admin content container's
+    // horizontal inset so the button lines up with the page title.
+    <div className={`px-4 sm:px-8 pt-4 sm:pt-6 mb-1 ${className}`}>
       <button
         type="button"
         onClick={handleClick}

@@ -34,6 +34,7 @@ import type {
   CaseStatus,
   CaseUrgency,
 } from '../../../types/lawyer/cases.types';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 /* ═══════════════════════════════════════════════════════════════════════
    MOCK FALLBACK — realistic immigration cases.
@@ -378,6 +379,7 @@ export default function CaseListPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <LawyerBackButton />
       <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 md:py-8">
 
         {/* Header */}

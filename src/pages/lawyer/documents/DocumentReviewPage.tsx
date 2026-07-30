@@ -22,7 +22,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useCurrentUser } from '../../../hooks/useAuth';
 
-import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 import { documentsApi } from '../../../api/lawyer/documents.api';
 import { documentRequestsApi } from '../../../api/lawyer/documentRequests.api';
 import { getLocallyDeletedDocumentIds } from '../../../utils/locallyDeletedDocuments';
@@ -53,6 +52,7 @@ import {
   ISSUE_CATEGORY_LABELS,
   SEVERITY_LABELS,
 } from '../../../types/lawyer/documents.types';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 /* ── Placeholders (NOT mocks) ──────────────────────────────────────────
  * Earlier this file fell back to hardcoded "Aarav Patel / Passport_Scan"
@@ -135,33 +135,37 @@ export default function DocumentReviewPage() {
     // Siblings — resolve application_id from real doc first, then fall
     // back to the URL query param (set by DocumentQueue's row click).
     const effectiveAppId = loadedDoc.application_id || applicationIdFromUrl || '';
+    const uploaderUserId = loadedDoc.user_id || '';
 
-    // The scoped filter (?application_id=<uuid>) returns empty on this
-    // backend for reasons unclear (probably a bug in list_documents_filtered
-    // when application_id is passed). But the SAME endpoint called with
-    // NO filter returns every doc the attorney can see — that's what
-    // Documents Queue uses successfully. So we fetch broad + filter
-    // locally. This gets the Case Documents rail populated with all the
-    // client's uploads without waiting on backend to fix scoped-filter.
+    // Strict filter: we ONLY want documents that belong to this specific
+    // case (same application_id).  If app_id is unknown, we fall back to
+    // "same uploader" (user_id) — that keeps the rail scoped to this
+    // client, not the entire firm.  Never mix in other clients' uploads.
+    const matchesCase = (d: Document): boolean => {
+      if (effectiveAppId)      return d.application_id === effectiveAppId;
+      if (uploaderUserId)      return d.user_id        === uploaderUserId;
+      return d.id === documentId; // last resort — just the current doc
+    };
+
     let sibs: Document[] = [];
     try {
-      // Attempt 1: scoped filter (best case, backend eventually fixes this)
-      const scoped = await documentsApi.filterDocuments({ application_id: effectiveAppId });
-      if (scoped.items?.length) sibs = scoped.items;
+      // Attempt 1: scoped filter — but ONLY if we actually have an app_id.
+      // Passing an empty string used to trip the "no filter → all docs"
+      // path and leak other clients' uploads into the rail.
+      if (effectiveAppId) {
+        const scoped = await documentsApi.filterDocuments({ application_id: effectiveAppId });
+        if (scoped.items?.length) sibs = scoped.items.filter(matchesCase);
+      }
     } catch {
       /* fall through to broad fetch */
     }
 
     if (sibs.length === 0) {
       try {
-        // Attempt 2: broad fetch + client-side application_id filter — this
-        // is what Documents Queue does. Also include the current doc.
+        // Attempt 2: broad fetch + strict client-side filter.
         const broad = await documentsApi.filterDocuments({});
         const items = broad.items || [];
-        sibs = items.filter((d) => {
-          if (!effectiveAppId) return d.id === documentId;
-          return d.application_id === effectiveAppId;
-        });
+        sibs = items.filter(matchesCase);
       } catch {
         /* leave sibs empty */
       }
@@ -172,7 +176,7 @@ export default function DocumentReviewPage() {
     if (sibs.length === 0 && effectiveAppId) {
       try {
         const legacy = await documentsApi.listDocuments({ application_id: effectiveAppId });
-        sibs = legacy.items || [];
+        sibs = (legacy.items || []).filter(matchesCase);
       } catch {
         /* leave sibs empty */
       }

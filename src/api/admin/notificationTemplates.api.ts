@@ -5,6 +5,7 @@ import type {
   NotificationTemplate,
   ToggleTemplatePayload,
   CreateTemplatePayload,
+  UpdateTemplatePayload,
 } from "../../types/admin/notificationTemplates.types";
 
 // NOTE: paths have NO "/v1" prefix because the axios baseURL already ends
@@ -40,5 +41,15 @@ export const createTemplate = async (
   payload: CreateTemplatePayload
 ): Promise<NotificationTemplate> => {
   const res = await axios.post("/notification-templates", payload);
+  return res.data;
+};
+
+/** PATCH /notification-templates/{id} — edit an existing template.
+ *  Backend accepts partial payload; only include changed fields. */
+export const updateTemplate = async (
+  templateId: string,
+  payload: UpdateTemplatePayload
+): Promise<NotificationTemplate> => {
+  const res = await axios.patch(`/notification-templates/${templateId}`, payload);
   return res.data;
 };

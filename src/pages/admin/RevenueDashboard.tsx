@@ -48,6 +48,7 @@ import iconCalendar       from '../../assets/icons/common/calendar.svg';
 import iconChevronRight   from '../../assets/icons/common/chevron-right.svg';
 import iconLoader         from '../../assets/icons/common/loader.svg';
 import iconInbox          from '../../assets/icons/common/inbox.svg';
+import AdminBackButton from '../../components/admin/AdminBackButton';
 
 /* ── Date filter options ────────────────────────────────────────────── */
 
@@ -103,6 +104,7 @@ export default function RevenueDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <AdminBackButton />
       <main className="mx-auto max-w-[1440px] space-y-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
 
         {/* ── Page header + actions ───────────────────────────────── */}

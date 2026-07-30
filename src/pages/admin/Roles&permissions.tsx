@@ -16,6 +16,7 @@ import {
   createRole, updateRole, deleteRole,
   assignPermissionToRole, removePermissionFromRole,
 } from "../../api/admin/roles.api";
+import AdminBackButton from '../../components/admin/AdminBackButton';
 
 interface Permission {
   id: string;
@@ -409,6 +410,7 @@ export default function RolesPermissionsEditor() {
   return (
     <div className="flex flex-col min-h-screen"
       style={{ fontFamily: "'Inter', -apple-system, sans-serif", background: "#F9FAFB" }}>
+      <AdminBackButton />
 
       {/* ── Container: STACKS on mobile, SIDE-BY-SIDE on lg+ ── */}
       <div className="flex flex-1 flex-col lg:flex-row" style={{ overflow: "hidden" }}>

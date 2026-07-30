@@ -21,6 +21,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { helpSupportApi } from '../../../api/lawyer/helpSupport.api';
 import type { Ticket, TicketReply } from '../../../types/lawyer/helpSupport.types';
 import { PriorityBadge, StatusBadge } from './MyTickets';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 const MOCK_TICKET: Ticket = {
   id:             'mock-tkt-001',
@@ -151,6 +152,7 @@ export default function TicketDetail() {
   if (!ticket) {
     return (
       <div className="p-6">
+      <LawyerBackButton />
         <button onClick={() => navigate('/lawyer/help/tickets')} className="mb-4 text-xs text-indigo-600 hover:underline">
           ← Back to My Tickets
         </button>

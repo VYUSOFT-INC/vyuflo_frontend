@@ -27,6 +27,7 @@ import type {
   ReminderItem,
   RemindersTab,
 } from '../../../types/lawyer/notifReminders.types';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 /* ════════════════════════════════════════════════════════════════════
    MOCK FALLBACK (same shape as backend) — kept inline like other modules.
@@ -360,6 +361,7 @@ export default function NotificationsRemindersPage() {
      ════════════════════════════════════════════════════════════════ */
   return (
     <div className="space-y-5 p-4 sm:p-6">
+      <LawyerBackButton />
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>

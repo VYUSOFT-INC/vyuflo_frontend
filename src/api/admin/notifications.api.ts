@@ -1,131 +1,80 @@
-// src/api/notifications.api.ts
+// src/api/admin/notifications.api.ts
+//
+// Admin cross-role Notifications & Reminders API wrappers.
+// Backed by /api/v1/admin/notifications-reminders/*  (see backend spec).
 
-import axios from "../axios";
+import api from '../axios';
+import type {
+  AdminNotificationUpdateListResponse,
+  AdminReminderCounts,
+  AdminReminderListResponse,
+  AdminRoleFilter,
+} from '../../types/admin/notifications.types';
 
-// ── Types ──────────────────────────────────────────────────────────
-export type ChannelType = "Email" | "In-App" | "SMS" | "Push";
+const BASE = '/admin/notifications-reminders';
 
-export interface NotificationTemplate {
-  id:           string;
-  name:         string;
-  description:  string;
-  channel:      ChannelType;
-  trigger:      string;
-  status:       "active" | "inactive";
-  subject?:     string;
-  body?:        string;
-  variables?:   string[];
-  lastModified: string;
-  modifiedBy:   string;
-  iconBg:       string;
+interface UpdatesQuery {
+  role_filter?: AdminRoleFilter;
+  user_id?:     string;
+  before?:      string;
+  limit?:       number;
 }
 
-export interface TemplateListResponse {
-  templates:  NotificationTemplate[];
-  total:      number;
-  page:       number;
-  limit:      number;
-  totalPages: number;
+interface RemindersQuery {
+  role_filter?:  AdminRoleFilter;
+  user_id?:      string;
+  include_past?: boolean;
+  before?:       string;
+  limit?:        number;
 }
 
-export interface TriggerOption {
-  key:   string;
-  label: string;
+/* Small helper — strip undefined / empty query params. */
+function clean<T extends Record<string, unknown>>(o: T): Record<string, string | number | boolean> {
+  const out: Record<string, string | number | boolean> = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (v === undefined || v === null || v === '') continue;
+    out[k] = v as string | number | boolean;
+  }
+  return out;
 }
 
-export interface ChannelOption {
-  key:     ChannelType;
-  label:   string;
-  iconBg:  string;
-  color:   string;
-}
+export const adminNotifRemindersApi = {
+  /** Tab-badge counts. */
+  getCounts: async (role_filter: AdminRoleFilter = 'all'): Promise<AdminReminderCounts> => {
+    const r = await api.get<AdminReminderCounts>(`${BASE}/counts`, {
+      params: clean({ role_filter }),
+    });
+    return r.data;
+  },
 
-export interface CreateTemplatePayload {
-  name:     string;
-  channel:  ChannelType;
-  trigger:  string;
-  subject?: string;
-  body:     string;
-  status:   "active" | "inactive";
-}
+  /** "All Updates" tab. */
+  listUpdates: async (q: UpdatesQuery = {}): Promise<AdminNotificationUpdateListResponse> => {
+    const r = await api.get<AdminNotificationUpdateListResponse>(`${BASE}/updates`, {
+      params: clean(q as Record<string, unknown>),
+    });
+    return r.data;
+  },
 
-// ── API calls ──────────────────────────────────────────────────────
+  /** "Deadlines" tab — subset where category='deadline'. Same shape as updates. */
+  listDeadlines: async (q: UpdatesQuery = {}): Promise<AdminNotificationUpdateListResponse> => {
+    const r = await api.get<AdminNotificationUpdateListResponse>(`${BASE}/deadlines`, {
+      params: clean(q as Record<string, unknown>),
+    });
+    return r.data;
+  },
 
-/** GET /admin/notification-templates */
-export const fetchTemplates = async (params?: {
-  search?:  string;
-  channel?: ChannelType;
-  status?:  "active" | "inactive";
-  trigger?: string;
-  page?:    number;
-  limit?:   number;
-}): Promise<TemplateListResponse> => {
-  const res = await axios.get("/admin/notification-templates", { params });
-  return res.data.data;
-};
+  /** "Reminders" tab. */
+  listReminders: async (q: RemindersQuery = {}): Promise<AdminReminderListResponse> => {
+    const r = await api.get<AdminReminderListResponse>(`${BASE}/reminders`, {
+      params: clean(q as Record<string, unknown>),
+    });
+    return r.data;
+  },
 
-/** GET /admin/notification-templates/:id */
-export const fetchTemplateById = async (id: string): Promise<NotificationTemplate> => {
-  const res = await axios.get(`/admin/notification-templates/${id}`);
-  return res.data.data.template;
-};
-
-/** POST /admin/notification-templates */
-export const createTemplate = async (payload: CreateTemplatePayload): Promise<NotificationTemplate> => {
-  const res = await axios.post("/admin/notification-templates", payload);
-  return res.data.data.template;
-};
-
-/** PUT /admin/notification-templates/:id */
-export const updateTemplate = async (
-  id: string,
-  payload: Partial<CreateTemplatePayload>
-): Promise<NotificationTemplate> => {
-  const res = await axios.put(`/admin/notification-templates/${id}`, payload);
-  return res.data.data.template;
-};
-
-/** DELETE /admin/notification-templates/:id */
-export const deleteTemplate = async (id: string): Promise<void> => {
-  await axios.delete(`/admin/notification-templates/${id}`);
-};
-
-/** PUT /admin/notification-templates/:id/status */
-export const toggleTemplateStatus = async (
-  id: string,
-  status: "active" | "inactive"
-): Promise<NotificationTemplate> => {
-  const res = await axios.put(`/admin/notification-templates/${id}/status`, { status });
-  return res.data.data.template;
-};
-
-/** POST /admin/notification-templates/:id/duplicate */
-export const duplicateTemplate = async (id: string, newName: string): Promise<NotificationTemplate> => {
-  const res = await axios.post(`/admin/notification-templates/${id}/duplicate`, { newName });
-  return res.data.data.template;
-};
-
-/** POST /admin/notification-templates/:id/test */
-export const sendTestNotification = async (
-  id: string,
-  recipientEmail: string,
-  sampleData: Record<string, string>
-): Promise<{ message: string }> => {
-  const res = await axios.post(`/admin/notification-templates/${id}/test`, {
-    recipientEmail,
-    sampleData,
-  });
-  return res.data.data;
-};
-
-/** GET /admin/notification-templates/triggers */
-export const fetchTriggerOptions = async (): Promise<TriggerOption[]> => {
-  const res = await axios.get("/admin/notification-templates/triggers");
-  return res.data.data.triggers;
-};
-
-/** GET /admin/notification-templates/channels */
-export const fetchChannelOptions = async (): Promise<ChannelOption[]> => {
-  const res = await axios.get("/admin/notification-templates/channels");
-  return res.data.data.channels;
+  /** Mark All as Read — optional category scope (defaults to all tabs). */
+  markAllRead: async (category?: string): Promise<void> => {
+    await api.post(`${BASE}/read-all`, undefined, {
+      params: category ? { category } : undefined,
+    });
+  },
 };

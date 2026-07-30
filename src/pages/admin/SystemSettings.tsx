@@ -11,6 +11,7 @@ import type { SettingItem } from "../../types/admin/settings.types";
 /* ── Icon imports (common only) ─────────────────────────────────────── */
 import iconInfo from "../../assets/icons/common/info.svg";
 import iconSave from "../../assets/icons/common/save-white.svg";
+import AdminBackButton from '../../components/admin/AdminBackButton';
 
 // ── Section meta: maps URL hash → setting_group + page title ───────
 type NavKey =
@@ -198,6 +199,7 @@ export default function SystemSettings() {
 
   return (
     <div className="flex flex-col min-h-screen bg-[#f9fafb]" style={{ fontFamily: "'Inter', sans-serif" }}>
+      <AdminBackButton />
       <main className="flex-1 min-w-0 overflow-y-auto" style={{ background: "#f9fafb" }}>
         <div className="flex flex-col gap-6 max-w-[896px] mx-auto p-4 pb-[120px] sm:gap-7 sm:p-6 sm:pb-[120px] lg:p-8 lg:pb-[120px]">
 
