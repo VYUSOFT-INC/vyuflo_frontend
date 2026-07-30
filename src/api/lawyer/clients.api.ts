@@ -56,10 +56,61 @@ export async function getClientProfile(
   const assigned = await intakeApi.listAssignedApplications();
 
   // Match by application_id first (always present), then fall back to
-  // client_id (may not be shipped yet by backend).
-  const app: AssignedApplication | undefined =
-    assigned.find((a) => a.application_id === idParam) ||
-    assigned.find((a) => a.client_id === idParam);
+  // client_id / user_id (backend inconsistently ships either — CaseDetail
+  // gives us the user_id; the worklist may only have application_id).
+  // We also do a defensive scan over EVERY id-shaped field on the row so
+  // future backend rename doesn't break the "View client" deep-link.
+  const looksLikeThisClient = (a: AssignedApplication): boolean => {
+    if (a.application_id === idParam) return true;
+    if (a.client_id      === idParam) return true;
+    if (a.user_id        === idParam) return true;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const raw = a as any;
+    return [
+      raw.applicant_id,
+      raw.employee_id,
+      raw.client_user_id,
+      raw.applicant?.id,
+      raw.user?.id,
+      raw.client?.id,
+      raw.employee?.id,
+    ].some((v) => typeof v === 'string' && v === idParam);
+  };
+
+  let app: AssignedApplication | undefined = assigned.find(looksLikeThisClient);
+
+  // ── Rescue path: /users/{id}/profile is granted per-case, so if the
+  // attorney genuinely holds this client's case the profile call will
+  // succeed even when the assigned-worklist row can't be matched by id.
+  // We use that success as a signal to synthesize a minimal app record so
+  // downstream buildProfile() still has something to work with.
+  if (!app) {
+    try {
+      const res = await axios.get<UserProfileApiResponse>(`/users/${idParam}/profile`);
+      // Synthesize a placeholder app so buildProfile can still compose a
+      // page. Any assigned application that happens to share the user's
+      // email is preferred (gives us the correct visa_type / case #).
+      const email = (res.data as unknown as { email?: string })?.email;
+      const byEmail =
+        email && assigned.find((a) => a.client_email?.toLowerCase() === email.toLowerCase());
+      app = byEmail || ({
+        application_id:  idParam,
+        client_id:       idParam,
+        user_id:         idParam,
+        client_name:     res.data.full_legal_name || '',
+        client_email:    email || '',
+        visa_type:       null,
+        visa_type_label: null,
+        status:          'intake_completed',
+        intake_session_id: null,
+        intake_step:     null,
+        assigned_at:     res.data.created_at || new Date().toISOString(),
+        hr_reviewed_by:  null,
+      } as AssignedApplication);
+    } catch {
+      /* fall through — will 403 below */
+    }
+  }
 
   if (!app) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

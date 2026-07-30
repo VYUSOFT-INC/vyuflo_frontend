@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { SettingsSidebar } from './SettingsSidebar';
+import { useAuthStore } from '../../store/authStore';
+import LawyerNotificationsHost from '../lawyer/LawyerNotificationsHost';
 
 function VyufloLogo({ size = 18 }: { size?: number }) {
   return (
@@ -78,6 +80,12 @@ export function DashboardLayout() {
   const [collapsed,    setCollapsed]    = useState(false);
   const location = useLocation();
 
+  // Attorney-only surface for lawyer notifications: mount the background
+  // watcher + top-right toaster once at the shell level. Other roles must
+  // not run the poller (it hits attorney-scoped endpoints and would 403).
+  const roles = useAuthStore((s) => s.roles);
+  const isAttorney = roles?.includes('attorney');
+
   const isSettingsPage = location.pathname.startsWith('/profile') ||
                          location.pathname.startsWith('/settings');
 
@@ -92,6 +100,9 @@ export function DashboardLayout() {
 
   return (
     <div className="flex h-screen bg-[#f7f9fc] overflow-hidden">
+
+      {/* ── Attorney-only notification watcher + toaster ── */}
+      {isAttorney && <LawyerNotificationsHost />}
 
       {/* ── Desktop sidebars ── */}
       {isNoSidebarPage ? null : isSettingsPage ? (
