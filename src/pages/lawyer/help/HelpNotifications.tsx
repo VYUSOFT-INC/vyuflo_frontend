@@ -23,6 +23,7 @@ import type {
   HelpNotificationListResponse,
   NotificationCategory,
 } from '../../../types/lawyer/helpSupport.types';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 const MOCK_NOTIFICATIONS: HelpNotificationListResponse = {
   items: [
@@ -184,6 +185,7 @@ export default function HelpNotifications() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
+      <LawyerBackButton />
       {/* Header */}
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>

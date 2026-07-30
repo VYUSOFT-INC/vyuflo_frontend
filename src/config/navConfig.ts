@@ -124,6 +124,11 @@ const appAdminNav: NavItem[] = [
   { to: '/admin/system-audit-logs',      label: 'Audit Logs',             icon: { kind: 'lucide', Icon: ScrollText       } },
   { to: '/admin/settings',               label: 'System Settings',        icon: { kind: 'lucide', Icon: Settings         } },
   { to: '/admin/help-support',           label: 'Help & Support',         icon: { kind: 'lucide', Icon: HelpCircle       } },
+  {
+  to:    '/admin/notifications',
+  label: 'Notifications',
+  icon:  { kind: 'lucide', Icon: Bell },       // reuse whatever bell icon your admin sidebar imports
+}
 ];
 
 const navByRole: Record<AppRole, NavItem[]> = {

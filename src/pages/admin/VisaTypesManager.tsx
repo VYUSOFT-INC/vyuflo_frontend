@@ -23,6 +23,7 @@ import iconStatTotal    from "../../assets/icons/visa-types-manager/stat-total.s
 import iconStatActive   from "../../assets/icons/visa-types-manager/stat-active.svg";
 import iconStatPending  from "../../assets/icons/visa-types-manager/stat-pending.svg";
 import iconStatCases    from "../../assets/icons/visa-types-manager/stat-cases.svg";
+import AdminBackButton from '../../components/admin/AdminBackButton';
 
 // VisaCardIcon kept inline because each card uses a dynamic accent color
 const VisaCardIcon = ({ color }: { color: string }) => (
@@ -501,6 +502,7 @@ export default function VisaTypesManager() {
 
   return (
     <div className="min-h-screen bg-[#f9fafb]" style={{ fontFamily: "'Inter', sans-serif" }}>
+      <AdminBackButton />
       <main className="overflow-y-auto" style={{ background: "#f9fafb" }}>
 
         <div className="bg-white flex flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-8" style={{ borderBottom: "1px solid #e5e7eb", paddingTop: 20, paddingBottom: 20 }}>

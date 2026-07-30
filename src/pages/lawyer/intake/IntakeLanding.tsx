@@ -16,6 +16,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { intakeApi } from '../../../api/lawyer/intake.api';
 import type { AssignedApplication, IntakeStatus } from '../../../types/lawyer/intake.types';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 // Note: "View Profile" button is added to each card. It navigates to
 // /lawyer/clients/{client_id}. Until backend includes `client_id` in the
 // /lawyer/applications response, the button is shown but disabled with a
@@ -138,6 +139,7 @@ export default function IntakeLanding() {
   /* ── Render ──────────────────────────────────────────────────────── */
   return (
     <div className="min-h-screen bg-slate-50">
+      <LawyerBackButton />
       <main className="mx-auto max-w-[1240px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
 
         {/* Header */}

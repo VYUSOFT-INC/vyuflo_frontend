@@ -11,6 +11,7 @@ import type {
   InvoiceListResponse,
   InvoiceStatus,
 } from '../../../types/lawyer/billing.types';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 /* ── Mock fallback ─────────────────────────────────────────────────────── */
 const MOCK_INVOICES: InvoiceListResponse = {
@@ -81,6 +82,7 @@ export default function InvoicesList() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
+      <LawyerBackButton />
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <button

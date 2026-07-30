@@ -29,6 +29,7 @@ import type {
   TicketPriority,
   TicketStatus,
 } from '../../../types/lawyer/helpSupport.types';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 const MOCK_TICKETS: TicketListResponse = {
   items: [
@@ -106,6 +107,7 @@ export default function MyTickets() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
+      <LawyerBackButton />
       {/* Header */}
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>

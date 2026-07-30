@@ -386,6 +386,7 @@ import VisaTypesManager       from './pages/admin/VisaTypesManager';
 import SystemAuditLogs        from './pages/admin/SystemAuditLogs';
 import SubscriptionPricing    from './pages/admin/SubscriptionPricing';
 import AdminHelpSupport       from './pages/admin/HelpSupport';
+import AdminNotificationsPage from './pages/admin/AdminNotificationsPage';
 
 // ── lawyer (attorney) pages ──────────────────────────────────────────────────
 import IntakeLanding      from './pages/lawyer/intake/IntakeLanding';
@@ -568,6 +569,7 @@ export default function App() {
               <Route path="/admin/system-audit-logs"              element={<SystemAuditLogs />} />
               <Route path="/admin/subscription-pricing"           element={<SubscriptionPricing />} />
               <Route path="/admin/help-support"                   element={<AdminHelpSupport />} />
+              <Route path="/admin/notifications" element={<AdminNotificationsPage />} />
             </Route>
           </Route>
 

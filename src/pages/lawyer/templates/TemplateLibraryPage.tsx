@@ -35,6 +35,7 @@ import axios from '../../../api/axios';
 import { templatesApi } from '../../../api/lawyer/templates.api';
 import { intakeApi } from '../../../api/lawyer/intake.api';
 import type { AssignedApplication } from '../../../types/lawyer/intake.types';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 /** Visa type row as returned by GET /api/v1/visa-types. Shape mirrored
  *  here (not pulled from a shared types module) because the Template
@@ -355,6 +356,7 @@ export default function TemplateLibraryPage() {
      ════════════════════════════════════════════════════════════════ */
   return (
     <div className="space-y-5 p-4 sm:p-6">
+      <LawyerBackButton />
       {/* ── Header row ────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>

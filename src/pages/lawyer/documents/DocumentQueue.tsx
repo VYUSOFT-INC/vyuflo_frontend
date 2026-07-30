@@ -32,6 +32,7 @@ import { STATUS_LABELS, STATUS_COLORS } from '../../../types/lawyer/documents.ty
 import iconFilePdf  from '../../../assets/icons/lawyer-documents/icon-file-pdf.svg';
 import iconFileImg  from '../../../assets/icons/lawyer-documents/icon-file-img.svg';
 import iconFileDoc  from '../../../assets/icons/lawyer-documents/icon-file-doc.svg';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 /* ── Status filter options ──────────────────────────────────────────── */
 const STATUS_FILTER_OPTIONS: { value: 'all' | DocumentStatus; label: string }[] = [
@@ -324,15 +325,26 @@ export default function DocumentQueue() {
   const paginated = groups.slice(pageStart, pageStart + PAGE_SIZE);
   useEffect(() => { if (page > totalPages) setPage(1); }, [totalPages, page]);
 
-  /* ── Row-expansion state (inline accordion) ───────────────────────── */
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const toggleExpand = (key: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+  /* ── Row click handler ─────────────────────────────────────────────
+   * Group row → open the newest document's review page for that case.
+   * The Review page shows a "Case Documents" rail so the attorney can
+   * page through every doc for the case without coming back here.
+   */
+  const openGroup = (g: CaseGroup) => {
+    // Prefer a still-actionable doc so the review page opens on something
+    // useful. Fall back to whatever is first.
+    const priority: DocumentStatus[] = [
+      'action_required', 'rejected', 'pending', 'in_progress', 'approved',
+    ];
+    let target: Document | undefined;
+    for (const s of priority) {
+      target = g.docs.find((d) => d.status === s);
+      if (target) break;
+    }
+    target = target || g.docs[0];
+    if (!target) return;
+    const suffix = g.application_id ? `?application_id=${g.application_id}` : '';
+    navigate(`/lawyer/documents/${target.id}/review${suffix}`);
   };
 
   /* ── KPI stats (derived) ──────────────────────────────────────────── */
@@ -423,6 +435,7 @@ export default function DocumentQueue() {
   /* ── Render ──────────────────────────────────────────────────────── */
   return (
     <div className="min-h-screen bg-slate-50">
+      <LawyerBackButton />
       <main className="mx-auto max-w-[1280px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
 
         {/* Header */}
@@ -540,13 +553,9 @@ export default function DocumentQueue() {
                       <GroupRow
                         key={g.key}
                         group={g}
-                        expanded={expanded.has(g.key)}
-                        onToggleExpand={() => toggleExpand(g.key)}
                         selectedIds={selected}
                         onToggleGroupSelect={() => toggleGroupSelect(g)}
-                        onToggleDocSelect={toggleSelect}
-                        onDocClick={handleRowAction}
-                        rowActionLabel={rowActionLabel}
+                        onOpen={() => openGroup(g)}
                       />
                     ))}
                   </tbody>
@@ -615,32 +624,26 @@ function StatCard({
   );
 }
 
-/* ── Grouped-by-case row (one row per case, click to expand) ────────── */
+/* ── Grouped-by-case row (one row per case, no inline expansion) ────
+ * Click anywhere on the row → open the newest actionable document's
+ * review page for that case. From there, the sibling rail on Review
+ * lets the attorney page through every doc for the same case, so
+ * the queue itself doesn't need to render document sub-rows.  */
 function GroupRow({
   group,
-  expanded,
-  onToggleExpand,
   selectedIds,
   onToggleGroupSelect,
-  onToggleDocSelect,
-  onDocClick,
-  rowActionLabel,
+  onOpen,
 }: {
   group: CaseGroup;
-  expanded: boolean;
-  onToggleExpand: () => void;
   selectedIds: Set<string>;
   onToggleGroupSelect: () => void;
-  onToggleDocSelect: (id: string) => void;
-  onDocClick: (doc: Document) => void;
-  rowActionLabel: (s: DocumentStatus) => string;
+  onOpen: () => void;
 }) {
   const docCount = group.docs.length;
   const primary  = groupPrimaryStatus(group.docs);
   const cfg      = STATUS_COLORS[primary] ?? STATUS_COLORS.pending;
 
-  // Documents column: "N document(s)" + a small colored count-badge for the
-  // primary bucket (e.g. "1 pending", "2 action").
   const bucketCount = group.docs.filter((d) => d.status === primary).length;
   const bucketLabel = STATUS_LABELS[primary]?.toLowerCase() ?? primary;
 
@@ -648,130 +651,48 @@ function GroupRow({
     docCount > 0 && group.docs.every((d) => selectedIds.has(d.id));
 
   return (
-    <>
-      <tr
-        className={`cursor-pointer hover:bg-gray-50 ${allDocsSelected ? 'bg-indigo-50/40' : ''}`}
-        onClick={onToggleExpand}
-      >
-        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-          <input
-            type="checkbox"
-            checked={allDocsSelected}
-            onChange={onToggleGroupSelect}
-            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-          />
-        </td>
-        <td className="px-4 py-3">
-          <p className="text-sm font-semibold text-gray-900">
-            {group.client_name || 'Unknown client'}
-          </p>
-          <p className="text-xs text-gray-500">{group.case_id}</p>
-        </td>
-        <td className="px-4 py-3">
-          <p className="text-sm text-gray-700">
-            {docCount} document{docCount === 1 ? '' : 's'}
-          </p>
-          <span className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${cfg.bg} ${cfg.text}`}>
-            {bucketCount} {bucketLabel}
-          </span>
-        </td>
-        <td className="px-4 py-3">
-          <p className="text-sm text-gray-700">{formatDate(group.last_updated)}</p>
-          <p className="text-xs text-gray-400">{formatTime(group.last_updated)}</p>
-        </td>
-        <td className="px-4 py-3">
-          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${cfg.bg} ${cfg.text}`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
-            {STATUS_LABELS[primary] ?? primary}
-          </span>
-        </td>
-        <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-          <button
-            onClick={onToggleExpand}
-            className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
-          >
-            {expanded ? 'Close ▲' : 'Open →'}
-          </button>
-        </td>
-      </tr>
-
-      {/* Expanded body — one sub-row per document */}
-      {expanded && group.docs.map((doc) => (
-        <DocSubRow
-          key={doc.id}
-          doc={doc}
-          selected={selectedIds.has(doc.id)}
-          onSelect={() => onToggleDocSelect(doc.id)}
-          onOpen={() => onDocClick(doc)}
-          actionLabel={rowActionLabel(doc.status)}
-        />
-      ))}
-    </>
-  );
-}
-
-/* ── Sub-row for a single document under an expanded group ──────────── */
-function DocSubRow({
-  doc,
-  selected,
-  onSelect,
-  onOpen,
-  actionLabel,
-}: {
-  doc: Document;
-  selected: boolean;
-  onSelect: () => void;
-  onOpen: () => void;
-  actionLabel: string;
-}) {
-  const cfg = STATUS_COLORS[doc.status] ?? STATUS_COLORS.pending;
-  const ft = doc.file_type?.toLowerCase() || '';
-  const fileIcon = ft === 'pdf' ? iconFilePdf : (ft === 'jpg' || ft === 'jpeg' || ft === 'png') ? iconFileImg : iconFileDoc;
-
-  return (
     <tr
+      className={`cursor-pointer hover:bg-gray-50 ${allDocsSelected ? 'bg-indigo-50/40' : ''}`}
       onClick={onOpen}
-      className={`cursor-pointer bg-slate-50/40 hover:bg-slate-50 ${selected ? 'bg-indigo-50/40' : ''}`}
     >
-      <td className="px-4 py-2 pl-8" onClick={(e) => e.stopPropagation()}>
+      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
         <input
           type="checkbox"
-          checked={selected}
-          onChange={onSelect}
+          checked={allDocsSelected}
+          onChange={onToggleGroupSelect}
           className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
         />
       </td>
-      <td className="px-4 py-2 pl-4" colSpan={2}>
-        <div className="flex items-center gap-2">
-          <img src={fileIcon} alt="" className="h-4 w-4 shrink-0" />
-          <span className="truncate text-sm text-gray-700">{doc.name}</span>
-          {doc.document_type && (
-            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
-              {doc.document_type}
-            </span>
-          )}
-        </div>
+      <td className="px-4 py-3">
+        <p className="text-sm font-semibold text-gray-900">
+          {group.client_name || 'Unknown client'}
+        </p>
+        <p className="text-xs text-gray-500">{group.case_id}</p>
       </td>
-      <td className="px-4 py-2">
-        <p className="text-xs text-gray-600">{formatDate(doc.uploaded_at)}</p>
-        <p className="text-[10px] text-gray-400">{formatTime(doc.uploaded_at)}</p>
-      </td>
-      <td className="px-4 py-2">
-        <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${cfg.bg} ${cfg.text}`}>
-          <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
-          {STATUS_LABELS[doc.status] ?? doc.status}
+      <td className="px-4 py-3">
+        <p className="text-sm text-gray-700">
+          {docCount} document{docCount === 1 ? '' : 's'}
+        </p>
+        <span className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${cfg.bg} ${cfg.text}`}>
+          {bucketCount} {bucketLabel}
         </span>
       </td>
-      <td className="px-4 py-2 text-right" onClick={(e) => e.stopPropagation()}>
+      <td className="px-4 py-3">
+        <p className="text-sm text-gray-700">{formatDate(group.last_updated)}</p>
+        <p className="text-xs text-gray-400">{formatTime(group.last_updated)}</p>
+      </td>
+      <td className="px-4 py-3">
+        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${cfg.bg} ${cfg.text}`}>
+          <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+          {STATUS_LABELS[primary] ?? primary}
+        </span>
+      </td>
+      <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={onOpen}
-          className={`text-[11px] font-semibold ${
-            doc.status === 'action_required' ? 'text-red-600 hover:text-red-700' :
-            doc.status === 'approved'        ? 'text-gray-600 hover:text-gray-700' :
-                                                'text-indigo-600 hover:text-indigo-700'
-          }`}
+          className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
         >
-          {actionLabel} →
+          Open →
         </button>
       </td>
     </tr>

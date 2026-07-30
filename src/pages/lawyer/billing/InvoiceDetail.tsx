@@ -29,6 +29,7 @@ import type {
   TimeEntry,
 } from '../../../types/lawyer/billing.types';
 import { InvoiceStatusBadge } from './InvoicesList';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 /* ════════════════════════════════════════════════════════════════════
    MOCK FALLBACK — remove when backend has real data
@@ -248,6 +249,7 @@ export default function InvoiceDetail() {
   if (error || !invoice) {
     return (
       <div className="p-6">
+      <LawyerBackButton />
         <button onClick={() => navigate('/lawyer/billing')} className="mb-4 text-xs text-indigo-600 hover:underline">
           ← Back to Billing
         </button>

@@ -29,6 +29,7 @@ import type {
   TopUnbilledClient,
   TopUnbilledClientsResponse,
 } from '../../../types/lawyer/billing.types';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 /* ════════════════════════════════════════════════════════════════════════════
    MOCK FALLBACK DATA — remove once backend has real data
@@ -355,6 +356,7 @@ export default function BillingDashboard() {
   /* ── Render ─────────────────────────────────────────────────────────── */
   return (
     <div className="space-y-6 p-4 sm:p-6">
+      <LawyerBackButton />
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Billing & Time Tracking</h1>

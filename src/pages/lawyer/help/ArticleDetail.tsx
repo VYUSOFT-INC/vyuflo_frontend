@@ -19,6 +19,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { helpSupportApi } from '../../../api/lawyer/helpSupport.api';
 import type { HelpArticle } from '../../../types/lawyer/helpSupport.types';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 const MOCK_ARTICLE: HelpArticle = {
   id: 'art-001',
@@ -78,6 +79,7 @@ export default function ArticleDetail() {
   if (loading) {
     return (
       <div className="p-6">
+      <LawyerBackButton />
         <div className="h-96 animate-pulse rounded-xl bg-gray-100" />
       </div>
     );

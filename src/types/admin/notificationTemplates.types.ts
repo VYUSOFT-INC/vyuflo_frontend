@@ -41,3 +41,18 @@ export interface CreateTemplatePayload {
   category?:              string;
   is_active:              boolean;
 }
+
+/** PATCH /notification-templates/{id} — edit-in-place payload.
+ *  All fields optional; only the ones present in the modal get sent. */
+export interface UpdateTemplatePayload {
+  name?:                   string;
+  description?:            string;
+  channel?:                string;
+  event_key?:              string;
+  subject?:                string;
+  body_html?:              string;
+  body_text?:              string;
+  available_placeholders?: string;
+  category?:               string;
+  is_active?:              boolean;
+}

@@ -461,7 +461,12 @@ export default function CaseDetailPage() {
             </div>
 
             {/* Quick actions
-                 ── View client     → client profile (all cases + bio)
+                 ── View client     → client profile (all cases + bio).
+                                       clients.api.ts now handles the case
+                                       where the URL id is a user_id (not
+                                       application_id) and falls back to
+                                       /users/{id}/profile so the profile
+                                       still loads for a valid attorney.
                  ── Documents       → Document Queue pre-filtered to this client
                  ── Message client  → Messages screen, auto-opens this client's
                                        chat thread via ?clientId=<user_id> */}

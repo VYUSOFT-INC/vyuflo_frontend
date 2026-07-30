@@ -33,6 +33,7 @@ import iconChevronLeft    from '../../assets/icons/common/chevron-left.svg';
 import iconChevronRight   from '../../assets/icons/common/chevron-right.svg';
 import iconCheckCircle    from '../../assets/icons/common/check-circle-green.svg';
 import iconAlertCircle    from '../../assets/icons/common/alert-circle-red.svg';
+import AdminBackButton from '../../components/admin/AdminBackButton';
 
 /* ── Period options ─────────────────────────────────────────────────── */
 
@@ -127,6 +128,7 @@ export default function SystemAuditLogs() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <AdminBackButton />
       <main className="mx-auto max-w-[1440px] space-y-6 px-4 py-6 sm:px-8 sm:py-8">
 
         {/* ── Page header + actions ───────────────────────────────── */}

@@ -21,6 +21,7 @@ import { documentsApi } from '../../../api/lawyer/documents.api';
 import type { ClientProfileResponse } from '../../../types/lawyer/clients.types';
 import type { AssignedApplication } from '../../../types/lawyer/intake.types';
 import type { Document } from '../../../types/lawyer/documents.types';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 type Tab = 'overview' | 'cases' | 'documents' | 'messages' | 'notes';
 
@@ -85,6 +86,7 @@ export default function ClientProfilePage() {
   if (error || !profile) {
     return (
       <div className="p-8">
+      <LawyerBackButton />
         <div className="mx-auto max-w-md rounded-xl border border-amber-200 bg-amber-50 p-6">
           <h2 className="text-sm font-semibold text-amber-900">Access restricted</h2>
           <p className="mt-1 text-sm text-amber-800">

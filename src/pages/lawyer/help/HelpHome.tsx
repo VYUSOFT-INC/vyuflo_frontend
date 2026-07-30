@@ -25,6 +25,7 @@ import type {
   ArticleCategory,
   HelpArticle,
 } from '../../../types/lawyer/helpSupport.types';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 /* ════════════════════════════════════════════════════════════════════
    MOCK FALLBACK — realistic immigration-law help content
@@ -177,6 +178,7 @@ export default function HelpHome() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
+      <LawyerBackButton />
       {/* ── Top-right nav bar: My Tickets + Notifications ─────────── */}
       <div className="flex items-center justify-between">
         <div>
