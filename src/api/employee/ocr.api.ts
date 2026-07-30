@@ -14,6 +14,35 @@ const ocrApi = {
     return Array.isArray(res.data) ? res.data : [];
   },
 
+  // ── POST /documents/:id/ocr-extract ────────────────────────────────────
+  // Called when getFields() returns [] — sends the file to the backend,
+  // which resolves the expected type from DocumentType.ocr_slug and proxies
+  // to the standalone OCR microservice. Goes through this same authenticated
+  // axios instance (not raw fetch) so the auth interceptor/cookies that
+  // every other call here relies on are actually attached.
+  extract: async (
+    documentId: string,
+    blob:       Blob,
+    fileName:   string,
+  ): Promise<{
+    document_type:  string;
+    type_mismatch:  boolean;
+    expected_type?: string | null;
+    fields: {
+      field_name:       string;
+      extracted_value:  string;
+      confidence_score: number;
+      needs_review:     boolean;
+    }[];
+  }> => {
+    const form = new FormData();
+    form.append("file", blob, fileName);
+    const res = await axios.post(`/documents/${documentId}/ocr-extract`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return res.data;
+  },
+
   // ── POST /documents/:id/ocr-fields/save ────────────────────────────────
   // Smart upsert — one endpoint for both flows:
   //   No existing DB fields → INSERT all (first open after OCR)
