@@ -29,9 +29,6 @@ import type {
 } from '../../../types/lawyer/documents.types';
 import { STATUS_LABELS, STATUS_COLORS } from '../../../types/lawyer/documents.types';
 
-import iconFilePdf  from '../../../assets/icons/lawyer-documents/icon-file-pdf.svg';
-import iconFileImg  from '../../../assets/icons/lawyer-documents/icon-file-img.svg';
-import iconFileDoc  from '../../../assets/icons/lawyer-documents/icon-file-doc.svg';
 import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 /* ── Status filter options ──────────────────────────────────────────── */
@@ -361,13 +358,6 @@ export default function DocumentQueue() {
   }, [docs]);
 
   /* ── Selection helpers ────────────────────────────────────────────── */
-  const toggleSelect = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
   /** Every doc across every group currently paginated (used for select-all). */
   const paginatedDocIds = useMemo(
     () => paginated.flatMap((g) => g.docs.map((d) => d.id)),
@@ -416,20 +406,6 @@ export default function DocumentQueue() {
       setSelected(new Set());
       setBulkBusy(false);
     }
-  };
-
-  /* ── Row action handler ───────────────────────────────────────────── */
-  // ✅ Route matches App.tsx: /lawyer/documents/:documentId/review
-  const handleRowAction = (doc: Document) => {
-    navigate(`/lawyer/documents/${doc.id}/review`);
-  };
-
-  /* ── Action label per status ──────────────────────────────────────── */
-  const rowActionLabel = (status: DocumentStatus): string => {
-    if (status === 'approved' || status === 'rejected') return 'View';
-    if (status === 'in_progress') return 'Continue';
-    if (status === 'action_required') return 'Review';
-    return 'Start Review';
   };
 
   /* ── Render ──────────────────────────────────────────────────────── */
