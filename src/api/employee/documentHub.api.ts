@@ -120,7 +120,7 @@ const documentHubApi = {
       application_id: applicationId ?? "",
 
       document_type:
-        documentType ?? file.name.replace(/\.[^/.]+$/, ""),
+        documentType ?? "unclassified",
 
       category: category ?? autoCategory,
 
