@@ -230,7 +230,7 @@ export default function Signup() {
     }
   }
 
-  async function handleSSOSuccess(provider: 'google' | 'microsoft' | 'linkedin', token: string) {
+  async function handleSSOSuccess(provider: 'google' | 'microsoft' | 'apple', token: string) {
     setSsoLoading(provider);
     setSsoError(null);
     try {

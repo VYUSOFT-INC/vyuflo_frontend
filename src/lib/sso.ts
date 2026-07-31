@@ -39,7 +39,7 @@ export const msalInstance = isMsalSupported
     })
   : null;
 
-export async function callSSOEndpoint(provider: 'google' | 'microsoft' | 'linkedin', providerToken: string) {
+export async function callSSOEndpoint(provider: 'google' | 'microsoft' | 'apple', providerToken: string) {
   return authApi.sso({
     provider,
     provider_token: providerToken,
