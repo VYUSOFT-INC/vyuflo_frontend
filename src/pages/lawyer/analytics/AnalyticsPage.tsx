@@ -90,7 +90,57 @@ export default function AnalyticsPage() {
   useEffect(() => { load(); }, [load]);
 
   const handleExport = () => {
-    alert('CSV export coming soon. Backend endpoint to be added: GET /analytics/export?period=...');
+    // Client-side CSV export — builds a report from whatever KPI/status/visa
+    // data is currently rendered, no backend endpoint needed. Once the
+    // backend adds GET /analytics/export?period= we can swap in a blob
+    // download without changing the button UX.
+    const rows: string[][] = [];
+    rows.push(['Vyuflo — My Analytics']);
+    rows.push([`Period: ${PERIOD_LABELS[period] || period}`]);
+    rows.push([`Generated: ${new Date().toLocaleString('en-US')}`]);
+    rows.push([]);
+
+    rows.push(['KPI', 'Value']);
+    rows.push(['Active Cases',       String(kpi?.active_cases ?? 0)]);
+    rows.push(['New Clients (Month)', String(kpi?.new_clients_month ?? 0)]);
+    rows.push(['Avg Case Duration (days)', String(kpi?.avg_case_duration_days ?? 0)]);
+    rows.push(['Pending Actions',    String(kpi?.pending_actions ?? 0)]);
+    rows.push(['Monthly Revenue',    `$${(kpi?.monthly_revenue ?? 0).toLocaleString()}`]);
+    rows.push([]);
+
+    if (statusItems.length) {
+      rows.push(['Case Status', 'Count', 'Percentage']);
+      statusItems.forEach((s) => rows.push([s.label, String(s.count), `${s.percentage}%`]));
+      rows.push([]);
+    }
+
+    if (visaItems.length) {
+      rows.push(['Visa Type', 'Code', 'Count', 'Percentage']);
+      visaItems.forEach((v) => rows.push([v.visa_name, v.visa_code, String(v.count), `${v.percentage}%`]));
+      rows.push([]);
+    }
+
+    if (actions.length) {
+      rows.push(['Upcoming Action', 'Client', 'Priority', 'Due']);
+      actions.forEach((a) => rows.push([
+        a.action_title || '',
+        a.client_name  || '',
+        a.priority     || '',
+        a.due_date     || '',
+      ]));
+    }
+
+    const esc = (v: string) => `"${(v ?? '').replace(/"/g, '""')}"`;
+    const csv = rows.map((r) => r.map(esc).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `vyuflo-analytics-${period}-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const handleActionClick = (a: UpcomingAction) => {
@@ -160,7 +210,12 @@ export default function AnalyticsPage() {
         <div className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-white">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
             <h3 className="text-base font-semibold text-gray-900">Upcoming Actions Required</h3>
-            <button className="text-xs font-medium text-indigo-600 hover:text-indigo-700">View All →</button>
+            <button
+              onClick={() => navigate('/lawyer/cases?urgency=critical')}
+              className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
+            >
+              View All →
+            </button>
           </div>
           <ActionsTable items={actions} loading={loading} onClick={handleActionClick} />
         </div>

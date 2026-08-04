@@ -355,9 +355,9 @@ import DocumentViewer        from './pages/employee/DocumentViewer';
 import SecureMessaging       from './pages/employee/SecureMessaging';
 import NotificationsCenterV2 from './pages/employee/NotificationsCenterV2';
 import ProfileSecurity       from './pages/employee/ProfileSecurity';
-// import PaymentsScreen        from './pages/employee/PaymentsScreen';
-// import SelectAttorney        from './pages/employee/SelectAttorney';
-// import BookConsultation      from './pages/employee/BookConsultation';
+import PaymentsScreen        from './pages/employee/PaymentsScreen';
+import SelectAttorney        from './pages/employee/SelectAttorney'; 
+import BookConsultation      from './pages/employee/BookConsultation';
 import ConnectEmployer       from './pages/employee/ConnectEmployer';
 
 // ── hr pages ──────────────────────────────────────────────────────────────────
@@ -511,9 +511,9 @@ export default function App() {
               <Route path="/documents/viewer"                 element={<DocumentViewer />} />
               <Route path="/messages"                         element={<SecureMessaging />} />
               <Route path="/notifications"                    element={<NotificationsCenterV2 />} />
-              {/* <Route path="/payments"                         element={<PaymentsScreen />} /> */}
-              {/* <Route path="/consultations"                    element={<SelectAttorney />} /> */}
-              {/* <Route path="/consultations/book/:attorneyId"   element={<BookConsultation />} /> */}
+               <Route path="/payments"                         element={<PaymentsScreen />} /> 
+              <Route path="/consultations"                    element={<SelectAttorney />} /> 
+              <Route path="/consultations/book/:attorneyId"   element={<BookConsultation />} /> 
               <Route path="/profile"                          element={<ProfileSecurity />} />
               <Route path="/profile/authentication"           element={<ProfileSecurity />} />
               <Route path="/profile/mfa"                      element={<ProfileSecurity />} />
