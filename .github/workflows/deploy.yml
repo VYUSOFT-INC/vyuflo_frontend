@@ -28,5 +28,5 @@ jobs:
             git pull origin ${{ github.ref_name }}
 
             cd /opt/vyuflo-${{ github.event.inputs.environment }}
-            COMPOSE_BACKEND=${{ github.event.inputs.environment == 'staging' && 'docker-compose.staging.yml' || 'docker-compose.yml' }}
+            COMPOSE_BACKEND=${{ github.event.inputs.environment == 'staging' && 'staging-frontend' || 'frontend' }}
             docker compose -f docker-compose.${{ github.event.inputs.environment }}.yml up -d --build $COMPOSE_BACKEND
