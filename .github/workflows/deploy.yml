@@ -18,9 +18,9 @@ jobs:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ github.event.inputs.environment == 'staging' && secrets.STAGING_HOST || secrets.HOST }}
-          username: ${{ github.event.inputs.environment == 'staging' && secrets.STAGING_USER || secrets.USER }}
-          key: ${{ github.event.inputs.environment == 'staging' && secrets.STAGING_SSH_KEY || secrets.SSH_KEY }}
+          host: ${{ github.event.inputs.environment == 'staging' && secrets.STAGING_HOST || secrets.STAGING_HOST }}
+          username: ${{ github.event.inputs.environment == 'staging' && secrets.STAGING_USER || secrets.STAGING_USER }}
+          key: ${{ github.event.inputs.environment == 'staging' && secrets.STAGING_SSH_KEY || secrets.STAGING_SSH_KEY }}
           script: |
             cd /opt/vyuflo-${{ github.event.inputs.environment }}/frontend
 
@@ -28,4 +28,7 @@ jobs:
             git pull origin ${{ github.ref_name }}
 
             cd /opt/vyuflo-${{ github.event.inputs.environment }}
-            docker compose -f docker-compose.${{ github.event.inputs.environment }}.yml up -d --build frontend
+            
+            # Deploy frontend only
+            COMPOSE_FRONTEND=${{ github.event.inputs.environment == 'staging' && 'staging-frontend' || 'frontend' }}
+            docker compose -f docker-compose.${{ github.event.inputs.environment }}.yml up -d --build $COMPOSE_FRONTEND
