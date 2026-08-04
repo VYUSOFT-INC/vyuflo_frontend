@@ -1,7 +1,10 @@
 // src/api/admin/users.api.ts
 //
 // Admin User Management API — mirrors backend enum exactly.
-// Roles: hr | admin | employee | lawyer  (4 canonical values).
+// FE display roles: hr | admin | employee | lawyer  (4 canonical values).
+// Backend enum:     hr | app_admin | employee | attorney
+// We translate on outgoing wire calls via toBackendRole(); incoming
+// responses go through normaliseRole() so the UI always sees FE codes.
 // baseURL ends with /api/v1 — paths here start with /admin/...
 
 import axios from "../axios";
@@ -62,7 +65,7 @@ export const ROLE_STYLE: Record<UserRole, { bg: string; color: string; border: s
   lawyer:   { bg: "#f5f3ff", color: "#6d28d9", border: "#ddd6fe" },
 };
 
-/** Normalise whatever the backend gives us to a canonical role code. */
+/** Normalise incoming role from backend → FE canonical code. */
 export function normaliseRole(raw: string): UserRole {
   const r = (raw || "").toLowerCase().replace(/[\s-]/g, "_");
   if (r === "hr" || r === "hr_admin") return "hr";
@@ -70,6 +73,14 @@ export function normaliseRole(raw: string): UserRole {
   if (r === "employee" || r === "applicant") return "employee";
   if (r === "lawyer" || r === "attorney") return "lawyer";
   return "employee";
+}
+
+/** Convert FE canonical role → backend enum on outgoing calls.
+ *  Backend expects `attorney` and `app_admin`; UI shows `lawyer` and `admin`. */
+export function toBackendRole(r: UserRole): string {
+  if (r === "lawyer") return "attorney";
+  if (r === "admin")  return "app_admin";
+  return r; // hr, employee → same on both sides
 }
 
 // ── API calls ──────────────────────────────────────────────────────
@@ -88,7 +99,9 @@ export const fetchUsers = async (params?: {
   page?:   number;
   limit?:  number;
 }): Promise<UserListResponse> => {
-  const res = await axios.get("/admin/users", { params });
+  const p: Record<string, unknown> = { ...params };
+  if (params?.role) p.role = toBackendRole(params.role);
+  const res = await axios.get("/admin/users", { params: p });
   return res.data.data ?? res.data;
 };
 
@@ -100,7 +113,8 @@ export const fetchUserById = async (id: string): Promise<AdminUser> => {
 
 /** POST /admin/users */
 export const createUser = async (payload: CreateUserPayload): Promise<AdminUser> => {
-  const res = await axios.post("/admin/users", payload);
+  const body = { ...payload, role: toBackendRole(payload.role) };
+  const res = await axios.post("/admin/users", body);
   return (res.data.data?.user ?? res.data.data ?? res.data) as AdminUser;
 };
 
@@ -109,7 +123,9 @@ export const updateUser = async (
   id: string,
   payload: Partial<Pick<AdminUser, "name" | "email" | "role" | "company">>,
 ): Promise<AdminUser> => {
-  const res = await axios.put(`/admin/users/${id}`, payload);
+  const body: Record<string, unknown> = { ...payload };
+  if (payload.role) body.role = toBackendRole(payload.role as UserRole);
+  const res = await axios.put(`/admin/users/${id}`, body);
   return (res.data.data?.user ?? res.data.data ?? res.data) as AdminUser;
 };
 
@@ -126,7 +142,7 @@ export const updateUserStatus = async (id: string, status: UserStatus): Promise<
 
 /** PUT /admin/users/:id/role */
 export const updateUserRole = async (id: string, role: UserRole): Promise<AdminUser> => {
-  const res = await axios.put(`/admin/users/${id}/role`, { role });
+  const res = await axios.put(`/admin/users/${id}/role`, { role: toBackendRole(role) });
   return (res.data.data?.user ?? res.data.data ?? res.data) as AdminUser;
 };
 
@@ -135,7 +151,10 @@ export const bulkUpdateRole = async (
   userIds: string[],
   role: UserRole,
 ): Promise<{ updated: number }> => {
-  const res = await axios.post("/admin/users/bulk-role", { userIds, role });
+  const res = await axios.post("/admin/users/bulk-role", {
+    userIds,
+    role: toBackendRole(role),
+  });
   return res.data.data ?? res.data;
 };
 
@@ -145,6 +164,8 @@ export const exportUsers = async (params?: {
   status?: UserStatus;
   search?: string;
 }): Promise<Blob> => {
-  const res = await axios.get("/admin/users/export", { params, responseType: "blob" });
+  const p: Record<string, unknown> = { ...params };
+  if (params?.role) p.role = toBackendRole(params.role);
+  const res = await axios.get("/admin/users/export", { params: p, responseType: "blob" });
   return res.data as Blob;
 };

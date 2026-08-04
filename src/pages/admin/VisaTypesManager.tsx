@@ -4,11 +4,10 @@
 // Exception: VisaCardIcon stays inline (takes dynamic color prop)
 
 import { useState, useEffect, useMemo } from "react";
-import { fetchVisaTypes, createVisaType, fetchVisaTypeDetail } from "../../api/admin/visa-types.api";
-import type { VisaTypeItem, VisaTypeStats, CreateVisaTypePayload } from "../../types/admin/visaTypes.types";
+import { fetchVisaTypes, createVisaType, updateVisaType, fetchVisaTypeDetail } from "../../api/admin/visa-types.api";
+import type { VisaTypeItem, VisaTypeStats, CreateVisaTypePayload, UpdateVisaTypePayload } from "../../types/admin/visaTypes.types";
 
 /* ── Icon imports ─────────────────────────────────────────────────── */
-// Common
 import iconDownload     from "../../assets/icons/common/download.svg";
 import iconPlus         from "../../assets/icons/common/plus-white.svg";
 import iconXClose       from "../../assets/icons/common/x-close.svg";
@@ -18,14 +17,12 @@ import iconDots         from "../../assets/icons/common/dots-vertical.svg";
 import iconEye          from "../../assets/icons/common/eye-view.svg";
 import iconPencil       from "../../assets/icons/common/pencil-edit.svg";
 
-// Page-specific KPI stat icons
 import iconStatTotal    from "../../assets/icons/visa-types-manager/stat-total.svg";
 import iconStatActive   from "../../assets/icons/visa-types-manager/stat-active.svg";
 import iconStatPending  from "../../assets/icons/visa-types-manager/stat-pending.svg";
 import iconStatCases    from "../../assets/icons/visa-types-manager/stat-cases.svg";
 import AdminBackButton from '../../components/admin/AdminBackButton';
 
-// VisaCardIcon kept inline because each card uses a dynamic accent color
 const VisaCardIcon = ({ color }: { color: string }) => (
   <svg width="20" height="20" viewBox="0 0 22 22" fill="none">
     <rect x="1" y="4" width="20" height="14" rx="3" stroke={color} strokeWidth="1.6"/>
@@ -35,7 +32,6 @@ const VisaCardIcon = ({ color }: { color: string }) => (
   </svg>
 );
 
-// ── Category mapping ──────────────────────────────────────────────
 const CATEGORY_LABELS: Record<string, string> = {
   employment: "Work Visa", student: "Student Visa", visitor: "Visitor Visa",
   permanent_resident: "Immigrant Visa", exchange: "Exchange Visa",
@@ -99,7 +95,12 @@ function timeAgo(iso: string) {
   return `Modified on ${new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
 }
 
-function VisaTypeCard({ card, accent, onView }: { card: VisaTypeItem; accent: { color: string; bg: string }; onView: (id: string) => void }) {
+function VisaTypeCard({ card, accent, onView, onEdit }: {
+  card: VisaTypeItem;
+  accent: { color: string; bg: string };
+  onView: (id: string) => void;
+  onEdit: (card: VisaTypeItem) => void;
+}) {
   const badge = statusBadge(card.status);
   return (
     <div className="bg-white rounded-[12px] flex flex-col"
@@ -143,7 +144,7 @@ function VisaTypeCard({ card, accent, onView }: { card: VisaTypeItem; accent: { 
             <img src={iconEye} alt="" style={{ width: 16, height: 14 }} />
             <span className="font-medium text-[#2563eb]" style={{ fontSize: 14 }}>View Details</span>
           </button>
-          <button className="flex items-center gap-[4px] ml-[8px]" style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+          <button onClick={() => onEdit(card)} className="flex items-center gap-[4px] ml-[8px]" style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
             <img src={iconPencil} alt="" style={{ width: 14, height: 14 }} />
             <span className="font-medium text-[#2563eb]" style={{ fontSize: 14 }}>Edit</span>
           </button>
@@ -311,6 +312,188 @@ function CreateVisaModal({ onClose, onCreated }: { onClose: () => void; onCreate
   );
 }
 
+/* ────────────────────────────────────────────────────────────────
+ * Edit Visa Modal — same layout as Create, pre-filled from the row.
+ * Saves propagate to: Visa Checklist (client), lawyer Review checklist,
+ * HR Case Detail required-docs. All read from the same /visa-types row.
+ * ─────────────────────────────────────────────────────────────── */
+function EditVisaModal({
+  visa, onClose, onSaved,
+}: {
+  visa: VisaTypeItem;
+  onClose: () => void;
+  onSaved: (v: VisaTypeItem) => void;
+}) {
+  const initialDocs = (() => {
+    const raw: unknown = (visa as unknown as { required_documents?: unknown }).required_documents;
+    if (Array.isArray(raw)) return (raw as string[]).join("\n");
+    if (typeof raw === "string") {
+      try { const arr = JSON.parse(raw); return Array.isArray(arr) ? arr.join("\n") : raw; }
+      catch { return raw; }
+    }
+    return "";
+  })();
+
+  const [code, setCode]                       = useState(visa.code || "");
+  const [name, setName]                       = useState(visa.name || "");
+  const [shortLabel, setShortLabel]           = useState(visa.short_label || "");
+  const [description, setDescription]         = useState(visa.description || "");
+  const [category, setCategory]               = useState(visa.category || "employment");
+  const [status, setStatus]                   = useState(visa.status || "active");
+  const [requiresSponsor, setRequiresSponsor] = useState(!!visa.requires_employer_sponsor);
+  const [requiredDocs, setRequiredDocs]       = useState(initialDocs);
+  const [processingDays, setProcessingDays]   = useState(String(visa.typical_processing_days ?? ""));
+  const [govFee, setGovFee]                   = useState(String(visa.government_fee_usd ?? ""));
+  const [uscisUrl, setUscisUrl]               = useState(visa.uscis_url || "");
+  const [displayOrder, setDisplayOrder]       = useState(String(visa.display_order ?? ""));
+  const [successRate, setSuccessRate]         = useState(String(visa.success_rate ?? ""));
+  const [saving, setSaving]                   = useState(false);
+  const [err, setErr]                         = useState<string | null>(null);
+
+  const submit = async () => {
+    setErr(null);
+    if (!code.trim() || !name.trim() || !category) {
+      setErr("Code, Name and Category are required.");
+      return;
+    }
+    const docsArr = requiredDocs.split(/[\n,]/).map((d) => d.trim()).filter(Boolean);
+
+    const payload: UpdateVisaTypePayload = {
+      code: code.trim(),
+      name: name.trim(),
+      short_label: shortLabel.trim() || undefined,
+      description: description.trim() || undefined,
+      category,
+      requires_employer_sponsor: requiresSponsor,
+      required_documents: JSON.stringify(docsArr),
+      typical_processing_days: Number(processingDays) || 0,
+      government_fee_usd: Number(govFee) || 0,
+      uscis_url: uscisUrl.trim() || undefined,
+      display_order: Number(displayOrder) || 0,
+      is_active: status === "active",
+      status,
+      success_rate: Number(successRate) || 0,
+    };
+
+    try {
+      setSaving(true);
+      const saved = await updateVisaType(visa.id, payload);
+      onSaved(saved);
+      onClose();
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail;
+      const msg = Array.isArray(detail) ? detail.map((d: any) => d.msg).join(", ") : (detail || e?.message || "Could not save changes.");
+      setErr(typeof msg === "string" ? msg : "Could not save changes.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "white", borderRadius: 12, width: "100%", maxWidth: 640, maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 40px rgba(0,0,0,0.2)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid #e5e7eb" }}>
+          <div>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>Edit Visa Type</h2>
+            <p style={{ fontSize: 12.5, color: "#6b7280", marginTop: 2 }}>
+              Saves propagate to the Visa Checklist, lawyer Review checklist, and HR case-detail requirements.
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+            <img src={iconXClose} alt="" style={{ width: 20, height: 20 }} />
+          </button>
+        </div>
+
+        <div style={{ padding: 24, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
+          {err && <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", color: "#B91C1C", borderRadius: 8, padding: "8px 12px", fontSize: 13 }}>{err}</div>}
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div>
+              <label style={labelStyle}>Code <span style={{ color: "#dc2626" }}>*</span></label>
+              <input value={code} onChange={(e) => setCode(e.target.value)} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Name <span style={{ color: "#dc2626" }}>*</span></label>
+              <input value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
+            </div>
+          </div>
+
+          <div>
+            <label style={labelStyle}>Short Label</label>
+            <input value={shortLabel} onChange={(e) => setShortLabel(e.target.value)} style={inputStyle} />
+          </div>
+
+          <div>
+            <label style={labelStyle}>Description</label>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} style={{ ...inputStyle, height: 70, paddingTop: 8, resize: "vertical" }} />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div>
+              <label style={labelStyle}>Category <span style={{ color: "#dc2626" }}>*</span></label>
+              <select value={category} onChange={(e) => setCategory(e.target.value)} style={{ ...inputStyle, cursor: "pointer" }}>
+                {CATEGORY_FORM_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Status <span style={{ color: "#dc2626" }}>*</span></label>
+              <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ ...inputStyle, cursor: "pointer" }}>
+                {STATUS_FORM_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label style={labelStyle}>Required Documents</label>
+            <textarea value={requiredDocs} onChange={(e) => setRequiredDocs(e.target.value)}
+              placeholder="One per line or comma-separated: Passport Copy, Offer Letter"
+              style={{ ...inputStyle, height: 90, paddingTop: 8, resize: "vertical" }} />
+            <span style={{ fontSize: 11, color: "#9ca3af" }}>Separate with commas or new lines. These flow to the Visa Checklist + HR Case required-docs.</span>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+            <div>
+              <label style={labelStyle}>Processing Days</label>
+              <input type="number" value={processingDays} onChange={(e) => setProcessingDays(e.target.value)} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Govt Fee (USD)</label>
+              <input type="number" value={govFee} onChange={(e) => setGovFee(e.target.value)} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Success Rate (%)</label>
+              <input type="number" value={successRate} onChange={(e) => setSuccessRate(e.target.value)} style={inputStyle} />
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div>
+              <label style={labelStyle}>USCIS URL</label>
+              <input value={uscisUrl} onChange={(e) => setUscisUrl(e.target.value)} placeholder="https://..." style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Display Order</label>
+              <input type="number" value={displayOrder} onChange={(e) => setDisplayOrder(e.target.value)} style={inputStyle} />
+            </div>
+          </div>
+
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 14, color: "#374151" }}>
+            <input type="checkbox" checked={requiresSponsor} onChange={(e) => setRequiresSponsor(e.target.checked)} style={{ width: 16, height: 16, cursor: "pointer" }} />
+            Requires employer sponsor
+          </label>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, padding: "16px 24px", borderTop: "1px solid #e5e7eb" }}>
+          <button onClick={onClose} disabled={saving} style={{ padding: "9px 20px", borderRadius: 8, border: "1px solid #d1d5db", background: "white", color: "#374151", fontSize: 14, fontWeight: 500, cursor: "pointer" }}>Cancel</button>
+          <button onClick={submit} disabled={saving} style={{ padding: "9px 24px", borderRadius: 8, border: "none", background: "#2563eb", color: "white", fontSize: 14, fontWeight: 500, cursor: saving ? "default" : "pointer", opacity: saving ? 0.7 : 1 }}>
+            {saving ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function exportCSV(items: VisaTypeItem[]) {
   const headers = ["Code", "Name", "Category", "Status", "Description", "Required Docs", "Processing Days", "Govt Fee USD", "Success Rate", "Active Cases", "USCIS URL", "Updated At"];
   const esc = (v: any) => {
@@ -437,6 +620,7 @@ export default function VisaTypesManager() {
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<VisaTypeItem | null>(null);
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -622,7 +806,7 @@ export default function VisaTypesManager() {
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                   {cards.map((card, i) => (
-                    <VisaTypeCard key={card.id} card={card} accent={ACCENTS[i % ACCENTS.length]} onView={setDetailId} />
+                    <VisaTypeCard key={card.id} card={card} accent={ACCENTS[i % ACCENTS.length]} onView={setDetailId} onEdit={setEditing} />
                   ))}
                 </div>
               </div>
@@ -646,6 +830,17 @@ export default function VisaTypesManager() {
           onClose={() => setShowCreate(false)}
           onCreated={(created) => {
             setItems((prev) => [created, ...prev]);
+            loadData();
+          }}
+        />
+      )}
+
+      {editing && (
+        <EditVisaModal
+          visa={editing}
+          onClose={() => setEditing(null)}
+          onSaved={(saved) => {
+            setItems((prev) => prev.map((it) => (it.id === saved.id ? { ...it, ...saved } : it)));
             loadData();
           }}
         />
