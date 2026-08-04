@@ -9,7 +9,7 @@ export interface User {
   phone:        string | null;
   country_code: string | null;
   // ── Auth ─────────────────────────────────────────────
-  auth_provider:    'email' | 'google' | 'microsoft' | 'apple';
+  auth_provider:    'email' | 'google' | 'microsoft' | 'apple' | 'linkedin';
   auth_provider_id: string | null;
   // ── Status ───────────────────────────────────────────
   is_active:   boolean;
@@ -66,7 +66,7 @@ export interface LoginBody {
 }
 
 export interface SSOBody {
-  provider:        'google' | 'microsoft' | 'apple';
+  provider:        'google' | 'microsoft' | 'apple' | 'linkedin';
   provider_token:  string;
   terms_accepted?: boolean;
 }
