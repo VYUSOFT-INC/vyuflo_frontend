@@ -10,6 +10,7 @@ import type {
   VisaTypeListParams,
   VisaTypeItem,
   CreateVisaTypePayload,
+  UpdateVisaTypePayload,
 } from "../../types/admin/visaTypes.types";
 
 /** GET /admin/visa-types — stats + paginated items in one response.
@@ -36,5 +37,18 @@ export const createVisaType = async (
   payload: CreateVisaTypePayload
 ): Promise<VisaTypeItem> => {
   const res = await axios.post("/admin/visa-types", payload);
+  return res.data;
+};
+
+/** PATCH /admin/visa-types/{id} — edit an existing visa type.
+ *  Backend accepts partial payload; only include changed fields.
+ *  Once saved, changes flow to: Visa Checklist (client-side), the
+ *  lawyer Review checklist, and HR Case Detail required-docs —
+ *  every consumer reads from the same /visa-types row. */
+export const updateVisaType = async (
+  id: string,
+  payload: UpdateVisaTypePayload,
+): Promise<VisaTypeItem> => {
+  const res = await axios.patch(`/admin/visa-types/${id}`, payload);
   return res.data;
 };
