@@ -27,7 +27,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 import { casesApi } from '../../../api/lawyer/cases.api';
 import type {
   CaseListItem,
@@ -35,6 +34,7 @@ import type {
   CaseStatus,
   CaseUrgency,
 } from '../../../types/lawyer/cases.types';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 /* ═══════════════════════════════════════════════════════════════════════
    MOCK FALLBACK — realistic immigration cases.
@@ -379,10 +379,8 @@ export default function CaseListPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <LawyerBackButton />
       <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 md:py-8">
-
-        {/* Back navigation — top-left, above the page header (desktop + mobile). */}
-        <LawyerBackButton />
 
         {/* Header */}
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">

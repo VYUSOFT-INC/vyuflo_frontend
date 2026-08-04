@@ -687,7 +687,7 @@ function Step3Details({ form, update }: {
 function Step4Attorney({ attorneys, loading, selectedId, onSelect }: {
   attorneys: Array<{
     user_id: string; full_name: string; email: string;
-    profile_picture_url: string | null; law_firm_name: string | null;
+    profile_photo_url: string | null; law_firm_name: string | null;
     specialisations: string[]; active_cases: number; is_accepting: boolean;
   }>;
   loading: boolean;
@@ -738,7 +738,7 @@ function Step4Attorney({ attorneys, loading, selectedId, onSelect }: {
         <div className="flex flex-col gap-[10px]">
           {attorneys.map(att => {
             const sel = att.user_id === selectedId;
-            const avatarSrc = getFileUrl(att.profile_picture_url);
+            const avatarSrc = getFileUrl(att.profile_photo_url);
             return (
               <button
                 key={att.user_id}

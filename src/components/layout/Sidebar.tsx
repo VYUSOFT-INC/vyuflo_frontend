@@ -11,13 +11,12 @@ import {
   Bell,
   Flag,
   Wrench,
-  FileText,
-  CreditCard,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { Avatar } from '../ui/Avatar';
 import { getUiSession, type UiSession } from '../../utils/uiSession';
 import { getFileUrl } from '../../utils/fileUrl';
+import { useMyProfile } from '../../hooks/employee/useProfile';
 import imgLogoIcon from '../../assets/icons/plane-icon.svg';
 import { getNavItems } from '../../config/navConfig';
 
@@ -47,6 +46,11 @@ const labelSpan = (collapsed: boolean) =>
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin-only contextual sub-navigation
+// System Settings has multiple hash-anchored sub-sections so it renders its
+// own contextual sub-nav.  Visa Types + Subscription & Pricing used to have
+// the same treatment (single-item "Admin Console" chip) but that hid the
+// rest of the admin sidebar — now removed so they behave like every other
+// admin page (full admin nav visible, current item highlighted).
 // ─────────────────────────────────────────────────────────────────────────────
 const settingsNavItems = [
   { hash: '#general',       Icon: Settings, label: 'General Settings'  },
@@ -56,8 +60,6 @@ const settingsNavItems = [
   { hash: '#feature-flags', Icon: Flag,     label: 'Feature Flags'     },
   { hash: '#maintenance',   Icon: Wrench,   label: 'Maintenance'       },
 ];
-const visaTypesNavItems    = [{ Icon: FileText,   label: 'Visa Types Manager'     }];
-const subscriptionNavItems = [{ Icon: CreditCard, label: 'Subscription & Pricing' }];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -93,16 +95,18 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
     return () => window.removeEventListener('ui-session-updated', handler);
   }, []);
 
+  const { data: profile } = useMyProfile();
+
   const navItems      = getNavItems(session?.roles);
   const fullName      = session ? `${session.first_name} ${session.last_name}`.trim() || 'User' : 'User';
-  const avatarUrl     = getFileUrl(session?.profile ?? null);
+  const avatarUrl     = getFileUrl(profile?.profile_picture_url ?? null);
   const sectionHeader = consoleLabel(session?.roles);
 
-  const isSettingsPage            = location.pathname.startsWith('/admin/settings');
-  const isVisaTypesPage           = location.pathname.startsWith('/admin/visa-types');
-  const isSubscriptionPricingPage = location.pathname.startsWith('/admin/subscription-pricing');
-  const isAdminSubPage            = isSettingsPage || isVisaTypesPage || isSubscriptionPricingPage;
-  const activeHash                = location.hash || '#general';
+  // Only System Settings still uses a contextual sub-nav (hash-anchored
+  // sections). Visa Types + Subscription & Pricing now show the full admin
+  // sidebar like every other admin page.
+  const isSettingsPage = location.pathname.startsWith('/admin/settings');
+  const activeHash     = location.hash || '#general';
 
   const handleLogout = () => {
     logout();
@@ -164,16 +168,16 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
         ].join(' ')}
       >
         {/* ── Logo ─────────────────────────────────────────────────────── */}
-        <div className={['flex items-center h-[72px] border-b border-[#f1f5f9] shrink-0 transition-all duration-300', collapsed ? 'lg:justify-center lg:px-0 px-6 justify-between' : 'px-6 justify-between'].join(' ')}>
-          <div
-            className={[
-              'flex items-center overflow-hidden transition-all duration-300',
-              collapsed ? 'lg:gap-0' : 'gap-2',
-            ].join(' ')}
-          >
+        <div className={['border-b border-[#f1f5f9] shrink-0 flex items-center justify-between transition-all duration-300', collapsed ? 'lg:px-3 lg:py-6 py-6 px-6' : 'py-6 px-6'].join(' ')}>
+          <div className={['flex items-center transition-all duration-300', collapsed ? 'lg:justify-center lg:gap-0' : 'gap-3'].join(' ')}>
             <div
-              className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.1),0px_2px_4px_-2px_rgba(0,0,0,0.1)]"
-              style={{ background: 'linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)' }}
+              className="rounded-[10px] flex items-center justify-center shrink-0"
+              style={{
+                width: 32,
+                height: 32,
+                background: 'linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-secondary) 100%)',
+                boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1)',
+              }}
             >
               <img src={imgLogoIcon} alt="Vyuflo" className="w-[15px] h-[18px] object-contain" />
             </div>
@@ -230,7 +234,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
 
         {/* ── Nav ──────────────────────────────────────────────────────── */}
         <nav className={['flex-1 py-6 flex flex-col gap-1 overflow-y-auto transition-all duration-300', collapsed ? 'lg:px-2 px-4' : 'px-4'].join(' ')}>
-          {!isAdminSubPage && (
+          {!isSettingsPage && (
             <>
               {sectionHeader && renderSectionHeader(sectionHeader)}
               {navItems.map(renderNavItem)}
@@ -255,38 +259,6 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
                   </NavLink>
                 );
               })}
-            </>
-          )}
-
-          {isVisaTypesPage && (
-            <>
-              {renderSectionHeader('Admin Console')}
-              {visaTypesNavItems.map(({ Icon, label }) => (
-                <div
-                  key={label}
-                  title={collapsed ? label : undefined}
-                  className={[NAV_BASE, navPad(collapsed), 'cursor-pointer', NAV_ACTIVE].join(' ')}
-                >
-                  <Icon size={20} className="shrink-0" aria-hidden="true" />
-                  <span className={labelSpan(collapsed)}>{label}</span>
-                </div>
-              ))}
-            </>
-          )}
-
-          {isSubscriptionPricingPage && (
-            <>
-              {renderSectionHeader('Admin Console')}
-              {subscriptionNavItems.map(({ Icon, label }) => (
-                <div
-                  key={label}
-                  title={collapsed ? label : undefined}
-                  className={[NAV_BASE, navPad(collapsed), 'cursor-pointer', NAV_ACTIVE].join(' ')}
-                >
-                  <Icon size={20} className="shrink-0" aria-hidden="true" />
-                  <span className={labelSpan(collapsed)}>{label}</span>
-                </div>
-              ))}
             </>
           )}
         </nav>

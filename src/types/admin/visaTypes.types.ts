@@ -72,3 +72,24 @@ export interface CreateVisaTypePayload {
   status:                     string;   // active | inactive | pending_review
   success_rate:               number;
 }
+
+// Payload for PATCH /admin/visa-types/{id}. All fields optional — only
+// changed ones are sent. Saves propagate to the Visa Checklist (client),
+// lawyer Review checklist, and HR Case Detail required-docs — every
+// consumer reads the same /visa-types row.
+export interface UpdateVisaTypePayload {
+  code?:                       string;
+  name?:                       string;
+  short_label?:                string;
+  description?:                string;
+  category?:                   string;
+  requires_employer_sponsor?:  boolean;
+  required_documents?:         string;   // JSON array string
+  typical_processing_days?:    number;
+  government_fee_usd?:         number;
+  uscis_url?:                  string;
+  display_order?:              number;
+  is_active?:                  boolean;
+  status?:                     string;
+  success_rate?:               number;
+}

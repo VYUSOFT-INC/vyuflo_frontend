@@ -10,6 +10,7 @@ import type {
   VisaTypeListParams,
   VisaTypeItem,
   CreateVisaTypePayload,
+  UpdateVisaTypePayload,
 } from "../../types/admin/visaTypes.types";
 
 /** GET /admin/visa-types — stats + paginated items in one response.
@@ -39,13 +40,14 @@ export const createVisaType = async (
   return res.data;
 };
 
-/** PATCH /admin/visa-types/{id} — update an existing visa type.
- *  Same payload shape as create; every field is optional so callers can
- *  send only the fields they're changing. required_documents (when sent)
- *  must be a JSON array STRING to match the CreateVisaTypePayload contract. */
+/** PATCH /admin/visa-types/{id} — edit an existing visa type.
+ *  Backend accepts partial payload; only include changed fields.
+ *  Once saved, changes flow to: Visa Checklist (client-side), the
+ *  lawyer Review checklist, and HR Case Detail required-docs —
+ *  every consumer reads from the same /visa-types row. */
 export const updateVisaType = async (
   id: string,
-  payload: Partial<CreateVisaTypePayload>
+  payload: UpdateVisaTypePayload,
 ): Promise<VisaTypeItem> => {
   const res = await axios.patch(`/admin/visa-types/${id}`, payload);
   return res.data;

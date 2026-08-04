@@ -1,14 +1,17 @@
-
 // src/pages/employee/SecureMessaging.tsx
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { Paperclip, Pencil, Search, Send, Smile, X, Download, Check, CheckCheck, ArrowLeft } from "lucide-react";
+import { ArrowLeft, Paperclip, Pencil, Search, Send, Smile, X, Download, Check, CheckCheck } from "lucide-react";
 import messageApi from "../../api/employee/message.api";
 import type { Conversation, Message } from "../../types/employee/message.types";
 import { getUiSession } from "../../utils/uiSession";
 import { getFileUrl } from "../../utils/fileUrl";
+import { useMyProfile } from "../../hooks/employee/useProfile"; // ← ADDED: adjust path if useProfile.ts lives elsewhere
+
 
 // ── Message sound + browser popup ────────────────────────────────────────────
 
+// Single shared AudioContext — created on first user gesture, reused for all sounds.
+// Browsers block AudioContext.resume() unless triggered by a user action first.
 let _audioCtx: AudioContext | null = null;
 
 function getAudioContext(): AudioContext | null {
@@ -22,6 +25,7 @@ function getAudioContext(): AudioContext | null {
   }
 }
 
+// Call this on ANY user click/tap in the component to unlock audio
 function unlockAudio() {
   const ctx = getAudioContext();
   if (ctx && ctx.state === "suspended") {
@@ -31,7 +35,10 @@ function unlockAudio() {
 
 function playMessageSound() {
   const ctx = getAudioContext();
-  if (!ctx || ctx.state === "suspended") return;
+  if (!ctx) return;
+  // If still suspended (no user gesture yet) — can't play, silent fail
+  if (ctx.state === "suspended") return;
+
   try {
     const osc  = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -102,6 +109,12 @@ const isSameDay = (a?: string, b?: string) =>
 
 const isImageFile = (name?: string | null) =>
   /\.(jpg|jpeg|png|gif|webp)$/i.test(name ?? "");
+
+// Detect group thread (more than 2 participants or thread_type === "group")
+const isGroupThread = (conv: Conversation | null): boolean => {
+  if (!conv) return false;
+  return (conv as any).thread_type === "group" || (conv as any).participant_count > 2;
+};
 
 // ── Avatar ────────────────────────────────────────────────────────────────────
 function Avatar({ name, url, online, size = 44 }: {
@@ -310,7 +323,7 @@ function NewConvModal({ onClose, onCreate, isHR }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-[380px] flex flex-col overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-2xl w-[380px] max-w-[92vw] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <h3 className="font-bold text-[15px] text-slate-900">New Conversation</h3>
           <button onClick={onClose} type="button" className="text-slate-400 hover:text-slate-700 transition">
@@ -373,6 +386,7 @@ function NewConvModal({ onClose, onCreate, isHR }: {
 const SecureMessaging: React.FC = () => {
   const session = getUiSession();
   const isHR    = session?.roles?.includes("hr") ?? false;
+  const { data: profile } = useMyProfile(); // ← ADDED: resolves current user's avatar live (not stored in ui_session)
 
   const currentUserId = useMemo((): string => {
     if (session?.user_id) return session.user_id;
@@ -392,7 +406,6 @@ const SecureMessaging: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user_id]);
 
-  // ── State ─────────────────────────────────────────────────────────────────
   const [conversations,  setConversations]  = useState<Conversation[]>([]);
   const [selectedConv,   setSelectedConv]   = useState<Conversation | null>(null);
   const [messages,       setMessages]       = useState<Message[]>([]);
@@ -407,6 +420,7 @@ const SecureMessaging: React.FC = () => {
   const [lightboxSrc,    setLightboxSrc]    = useState<string | null>(null);
   const [showEmoji,      setShowEmoji]      = useState(false);
   const [showNewConv,    setShowNewConv]    = useState(false);
+  // Mobile: track whether chat panel is visible (false = show sidebar)
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -414,9 +428,9 @@ const SecureMessaging: React.FC = () => {
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
   const activeIdRef  = useRef<string | null>(null);
 
-  // ── Derived ───────────────────────────────────────────────────────────────
-  const isGroup = (selectedConv as any)?.thread_type === "group";
+  const isGroup = isGroupThread(selectedConv);
 
+  // ── Filtered conversations ────────────────────────────────────────────────
   const filteredConvs = useMemo(() => conversations.filter(c => {
     const m = c.participant_name?.toLowerCase().includes(search.toLowerCase())
            || c.last_message?.toLowerCase().includes(search.toLowerCase());
@@ -440,30 +454,41 @@ const SecureMessaging: React.FC = () => {
     if (activeIdRef.current !== id) return;
     try {
       const d = await messageApi.listMessages(id);
+
+      // ── Detect new incoming messages since last poll ───────────────────────
       setMessages(prev => {
-        const prevIds  = new Set(prev.map(m => m.id));
-        const newMsgs  = d.filter(m => !prevIds.has(m.id));
-        const incoming = newMsgs.filter(m => m.sender_id !== currentUserId);
+        const prevIds   = new Set(prev.map(m => m.id));
+        const newMsgs   = d.filter(m => !prevIds.has(m.id));
+        const incoming  = newMsgs.filter(m => m.sender_id !== currentUserId);
 
         if (incoming.length > 0) {
+          // Sound — always play for new incoming messages
           playMessageSound();
-          const latest     = incoming[incoming.length - 1];
-          const senderName = (latest as any).sender_name || selectedConv?.participant_name || "New message";
-          const body       = latest.content || (latest.attachment_name ? `📎 ${latest.attachment_name}` : "Sent an attachment");
+
+          // Browser popup — only when tab is not focused
+          const latest = incoming[incoming.length - 1];
+          const senderName =
+            (latest as any).sender_name ||
+            selectedConv?.participant_name ||
+            "New message";
+          const body =
+            latest.content ||
+            (latest.attachment_name ? `📎 ${latest.attachment_name}` : "Sent an attachment");
           showMessagePopup(senderName, body, id);
         }
+
         return d;
       });
     } catch { /* silent */ }
   }, [currentUserId, selectedConv?.participant_name]);
 
   const selectConv = useCallback(async (conv: Conversation) => {
-    unlockAudio();
+    unlockAudio(); // ← unlock on conversation tap/click
     setSelectedConv(conv);
-    setMobileChatOpen(true);
     activeIdRef.current = conv.id;
     setMessages([]);
     setLoadingMsgs(true);
+    setMobileChatOpen(true); // open chat panel on mobile
     try {
       const d = await messageApi.listMessages(conv.id);
       setMessages(d);
@@ -475,12 +500,11 @@ const SecureMessaging: React.FC = () => {
   const handleBackToList = useCallback(() => {
     setMobileChatOpen(false);
     setSelectedConv(null);
-    activeIdRef.current = null;
   }, []);
 
   // ── Send ──────────────────────────────────────────────────────────────────
   const handleSend = useCallback(async () => {
-    unlockAudio();
+    unlockAudio(); // ← unlock on every send attempt
     if (!selectedConv || sending || (!text.trim() && !selectedFile)) return;
     setSending(true);
     try {
@@ -526,6 +550,7 @@ const SecureMessaging: React.FC = () => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Request browser notification permission on mount (needed for popups)
   useEffect(() => {
     if ("Notification" in window && Notification.permission === "default") {
       Notification.requestPermission();
@@ -559,7 +584,7 @@ const SecureMessaging: React.FC = () => {
         <div className="flex items-center gap-3">
           <Avatar
             name={`${session?.first_name ?? ""} ${session?.last_name ?? ""}`}
-            url={session?.profile}
+            url={profile?.profile_picture_url}
             size={40}
           />
           <span className="font-semibold text-[15px] text-slate-800">Chats</span>
@@ -662,14 +687,15 @@ const SecureMessaging: React.FC = () => {
         <>
           {/* Chat header */}
           <div className="h-[60px] bg-white border-b border-slate-200 px-4 flex items-center gap-3 shrink-0">
+            {/* Back button — mobile only */}
             <button
               type="button"
               onClick={handleBackToList}
-              aria-label="Back to chats"
-              className="md:hidden -ml-1 w-9 h-9 rounded-full flex items-center justify-center text-slate-600 hover:bg-slate-100 shrink-0"
+              className="md:hidden w-8 h-8 flex items-center justify-center text-slate-500 hover:text-slate-800 -ml-1 mr-1 shrink-0"
             >
               <ArrowLeft size={20} />
             </button>
+
             <Avatar
               name={selectedConv.participant_name}
               url={selectedConv.avatar_url}
@@ -699,16 +725,18 @@ const SecureMessaging: React.FC = () => {
 
             <div className="flex flex-col gap-1 max-w-[800px] mx-auto">
               {messages.map((msg, idx) => {
-                const isMine             = msg.sender_id === currentUserId;
-                const prev               = messages[idx - 1];
-                const next               = messages[idx + 1];
-                const showDate           = idx === 0 || !isSameDay(prev?.created_at, msg.created_at);
-                const isFirstFromSender  = !prev || prev.sender_id !== msg.sender_id || !isSameDay(prev.created_at, msg.created_at);
-                const isLastFromSender   = !next || next.sender_id !== msg.sender_id;
-                const hasImage           = msg.message_type === "file_attachment" && msg.document_id
-                                           && ((msg as any).is_image || isImageFile(msg.attachment_name));
-                const hasFile            = msg.message_type === "file_attachment" && msg.document_id && !hasImage;
-                const showSenderName     = isGroup && !isMine && isFirstFromSender;
+                const isMine            = msg.sender_id === currentUserId;
+                const prev              = messages[idx - 1];
+                const next              = messages[idx + 1];
+                const showDate          = idx === 0 || !isSameDay(prev?.created_at, msg.created_at);
+                const isFirstFromSender = !prev || prev.sender_id !== msg.sender_id || !isSameDay(prev.created_at, msg.created_at);
+                const isLastFromSender  = !next || next.sender_id !== msg.sender_id;
+                const hasImage          = msg.message_type === "file_attachment" && msg.document_id
+                                          && ((msg as any).is_image || isImageFile(msg.attachment_name));
+                const hasFile           = msg.message_type === "file_attachment" && msg.document_id && !hasImage;
+
+                // Sender name: show for group threads, non-mine, first in a run
+                const showSenderName = isGroup && !isMine && isFirstFromSender;
                 const senderName: string = (msg as any).sender_name ?? (msg as any).sender_full_name ?? "";
 
                 return (
@@ -737,7 +765,7 @@ const SecureMessaging: React.FC = () => {
                         className={`flex items-end gap-2 ${isMine ? "justify-end" : "justify-start"}`}
                         style={{ marginBottom: isLastFromSender ? "6px" : "1px" }}>
 
-                        {/* Receiver avatar — only on last message in a run */}
+                        {/* Receiver avatar — only on last message in a group */}
                         {!isMine && (
                           <div className="shrink-0 mb-1">
                             {isLastFromSender
@@ -749,6 +777,7 @@ const SecureMessaging: React.FC = () => {
 
                         {/* Bubble column */}
                         <div className={`flex flex-col max-w-[75%] sm:max-w-[65%] ${isMine ? "items-end" : "items-start"}`}>
+
                           <div
                             className={`px-3 pt-2 pb-1.5 rounded-2xl shadow-sm ${
                               isMine
@@ -757,9 +786,11 @@ const SecureMessaging: React.FC = () => {
                             }`}
                             style={isMine ? { background: "#ffffff" } : undefined}>
 
-                            {/* Sender name inside bubble — group threads only */}
+                            {/* Sender name INSIDE bubble — group threads only */}
                             {showSenderName && senderName && (
-                              <p className="text-[11px] font-semibold leading-tight mb-1" style={{ color: "var(--theme-primary)" }}>
+                              <p
+                                className="text-[11px] font-semibold leading-tight mb-1"
+                                style={{ color: "var(--theme-primary)" }}>
                                 {senderName}
                               </p>
                             )}
@@ -817,7 +848,7 @@ const SecureMessaging: React.FC = () => {
 
           {/* File preview strip */}
           {selectedFile && (
-            <div className="bg-white border-t border-slate-100 px-4 py-2 flex items-center gap-3 shrink-0">
+            <div className="bg-white border-t border-slate-100 px-4 py-2 flex items-center gap-3">
               {filePreviewUrl
                 ? <img src={filePreviewUrl} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0 border border-slate-200" />
                 : (
@@ -847,7 +878,7 @@ const SecureMessaging: React.FC = () => {
           )}
 
           {/* Compose bar */}
-          <div className="bg-white border-t border-slate-200 px-2 sm:px-3 py-2 flex items-end gap-1.5 sm:gap-2 shrink-0">
+          <div className="bg-white border-t border-slate-200 px-2 sm:px-3 py-2 flex items-end gap-1.5 sm:gap-2">
             {/* Emoji */}
             <div className="relative">
               <button type="button" onClick={() => setShowEmoji(v => !v)}
@@ -905,12 +936,11 @@ const SecureMessaging: React.FC = () => {
     </main>
   );
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div
-      className="flex overflow-hidden relative w-full"
-      style={{ fontFamily: "Inter, sans-serif", background: "#f8fafc", height: "calc(100dvh - 56px)" }}
-    >
+    <div className="flex overflow-hidden relative w-full"
+      style={{ fontFamily: "Inter, sans-serif", background: "#f8fafc", height: "calc(100dvh - 56px)" }}>
+
       {SidebarPanel}
       {ChatPanel}
 

@@ -17,7 +17,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 import { calendarApi } from '../../../api/lawyer/calendar.api';
 import {
   addLocalReminder,
@@ -39,6 +38,7 @@ import type {
   LinkedCaseSearchItem,
   CreateEventPayload,
 } from '../../../types/lawyer/calendar.types';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 /* ── MOCK FALLBACK DATA (used when backend returns empty) ───────────── */
 const MOCK_AGENDA: AgendaItem[] = [
@@ -184,10 +184,8 @@ export default function CalendarPage() {
   /* ── Render ──────────────────────────────────────────────────────── */
   return (
     <div className="min-h-screen bg-slate-50" style={{ fontFamily: "'Inter', sans-serif" }}>
+      <LawyerBackButton />
       <main className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-
-        {/* Back navigation — top-left, above the page header (desktop + mobile). */}
-        <LawyerBackButton />
 
         {/* ── Top header — title + date nav + Create Event ── */}
         <TopHeader

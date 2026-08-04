@@ -19,7 +19,6 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 import { billingApi } from '../../../api/lawyer/billing.api';
 import type {
   AddLineItemPayload,
@@ -30,6 +29,7 @@ import type {
   TimeEntry,
 } from '../../../types/lawyer/billing.types';
 import { InvoiceStatusBadge } from './InvoicesList';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 /* ════════════════════════════════════════════════════════════════════
    MOCK FALLBACK — remove when backend has real data
@@ -249,6 +249,7 @@ export default function InvoiceDetail() {
   if (error || !invoice) {
     return (
       <div className="p-6">
+      <LawyerBackButton />
         <button onClick={() => navigate('/lawyer/billing')} className="mb-4 text-xs text-indigo-600 hover:underline">
           ← Back to Billing
         </button>
@@ -272,9 +273,6 @@ export default function InvoiceDetail() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
-      {/* Back navigation — top-left, above the page header (desktop + mobile). */}
-      <LawyerBackButton className="!mb-0" />
-
       {/* Header */}
       <header>
         <button onClick={() => navigate('/lawyer/billing')} className="mb-2 text-xs text-indigo-600 hover:underline">

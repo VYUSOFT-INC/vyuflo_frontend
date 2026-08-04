@@ -1,6 +1,6 @@
 // src/pages/employee/Dashboard.tsx
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FileText, FileCheck2, Upload, Clock, Calendar, AlertTriangle, CheckCircle2,
@@ -12,18 +12,12 @@ import { PageHeader, PageContent } from '../../components/layout/Pageheader';
 import { useCurrentUser } from '../../hooks/useAuth';
 import { useDashboard } from '../../hooks/employee/useDashboard';
 import { DashboardTour } from '../../components/tour/DashboardTour';
-import type { TourUser } from '../../hooks/useDashboardTour';
 import { ComingSoonModal } from '../../components/common/ComingSoonModal';
 import type {
   CaseStageStatus, ActionItem, ActionPriority, ActionCategory,
   DocumentSummaryItem, DocStatus, Deadline, DeadlineUrgency,
   ActivityItem, ActivityType, CaseTeamMember,
 } from '../../types/employee/dashboard.types';
-
-import { requestedDocumentsApi } from '../../api/employee/requestedDocuments.api';
-import type { RequestedDocument } from '../../types/employee/documentRequests.types';
-import { rejectedDocumentsApi } from '../../api/employee/rejectedDocuments.api';
-import type { MyRejectedDocument } from '../../types/employee/rejectedDocuments.types';
 
 const PRIMARY = 'var(--theme-primary)';
 const PRIMARY_GRADIENT = 'linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)';
@@ -421,123 +415,14 @@ export default function Dashboard() {
   const [activityDrawer, setActivityDrawer] = useState(false);
   const [showConsultation, setShowConsultation] = useState(false);
 
-  const [requestedDocs, setRequestedDocs] = useState<RequestedDocument[]>([]);
-  const [rejectedDocs,  setRejectedDocs]  = useState<MyRejectedDocument[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    requestedDocumentsApi.getMyRequested().then((res) => {
-      if (!cancelled) setRequestedDocs(res.items || []);
-    });
-    rejectedDocumentsApi.getMyRejected().then((res) => {
-      if (!cancelled) setRejectedDocs(res.items || []);
-    });
-    return () => { cancelled = true; };
-  }, []);
-
-  const pickTs = (obj: Record<string, unknown>, keys: string[]): number => {
-    for (const k of keys) {
-      const v = obj[k];
-      if (typeof v === 'string' && v) {
-        const t = new Date(v).getTime();
-        if (!Number.isNaN(t)) return t;
-      }
-    }
-    return Number.MAX_SAFE_INTEGER;
-  };
-
   const firstName = user?.first_name ?? 'there';
 
-  const requestedAsActions = useMemo<Array<ActionItem & { _sortAt: number }>>(() => {
-    return requestedDocs
-      .map((r) => {
-        const priority: ActionPriority =
-          r.priority === 'urgent' ? 'urgent' :
-          r.priority === 'high'   ? 'high'   :
-          r.priority === 'low'    ? 'low'    :
-                                    'medium';
-        const daysLeft = r.due_date
-          ? Math.ceil((new Date(r.due_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-          : undefined;
-        const params = new URLSearchParams({
-          document_request_id: r.id,
-          document_type:       r.document_name,
-        });
-        if (r.application_id) params.set('application_id', r.application_id);
-        return {
-          id:          `req-${r.id}`,
-          title:       `Upload ${r.document_name}`,
-          description: r.details || 'Attorney has requested this document.',
-          priority,
-          category:    'document' as ActionCategory,
-          due_date:    r.due_date || undefined,
-          days_left:   daysLeft,
-          route:       `/documents/upload?${params.toString()}`,
-          completed:   false,
-          _sortAt:     pickTs(r as unknown as Record<string, unknown>, [
-            'requested_at', 'created_at', 'inserted_at', 'timestamp', 'updated_at',
-          ]),
-        };
-      })
-      .sort((a, b) => b._sortAt - a._sortAt);
-  }, [requestedDocs]);
-
-  const rejectedAsActions = useMemo<Array<ActionItem & { _sortAt: number }>>(() => {
-    return rejectedDocs
-      .map((r) => {
-        const rr = r.rejection_reason || '';
-        const priorityMatch = rr.match(/Severity:\s*(\w+)/i);
-        const dueMatch      = rr.match(/Due:\s*([\d-]+)/i);
-        const rawSev = (priorityMatch?.[1] || '').toLowerCase();
-        const priority: ActionPriority =
-          rawSev === 'critical' || rawSev === 'urgent' ? 'urgent' :
-          rawSev === 'high'                            ? 'high'   :
-          rawSev === 'low'                             ? 'low'    :
-                                                         'medium';
-        const dueDate = dueMatch?.[1];
-        const daysLeft = dueDate
-          ? Math.ceil((new Date(dueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-          : undefined;
-        return {
-          id:          `rej-${r.id}`,
-          title:       `Re-upload ${r.file_name}`,
-          description: rr || 'Your attorney sent this document back — please re-upload with the requested fixes.',
-          priority,
-          category:    'document' as ActionCategory,
-          due_date:    dueDate,
-          days_left:   daysLeft,
-          route:       `/documents/upload?rejected_document_id=${r.id}`,
-          completed:   false,
-          _sortAt:     pickTs(r as unknown as Record<string, unknown>, [
-            'rejected_at', 'updated_at', 'created_at', 'inserted_at', 'timestamp',
-          ]),
-        };
-      })
-      .sort((a, b) => b._sortAt - a._sortAt);
-  }, [rejectedDocs]);
-
   const pendingActions = useMemo(
-    () => {
-      const backend = (data?.action_items ?? []).filter(a => !a.completed);
-      const seen = new Set(backend.map((a) => a.id));
-      const attorneyDriven = [
-        ...rejectedAsActions,
-        ...requestedAsActions,
-      ]
-        .filter((a) => !seen.has(a.id))
-        .sort((a, b) => b._sortAt - a._sortAt)
-        .map(({ _sortAt: _drop, ...rest }) => {
-          void _drop;
-          return rest as ActionItem;
-        });
-      return [...attorneyDriven, ...backend];
-    },
-    [data, requestedAsActions, rejectedAsActions],
+    () => (data?.action_items ?? []).filter(a => !a.completed), [data],
   );
-
   const completedActions = useMemo(
     () => (data?.action_items ?? []).filter(a => a.completed), [data],
   );
-
   const filteredDocs = useMemo(() => {
     const docs = data?.documents ?? [];
     return docs.filter(d => docFilter === 'all' || d.status === docFilter);
@@ -926,6 +811,7 @@ export default function Dashboard() {
         )}
       </PageContent>
 
+      {/* Activity Drawer */}
       <Drawer open={activityDrawer} title="All Activity" subtitle="Complete timeline of your case"
         onClose={() => setActivityDrawer(false)}>
         <div className="divide-y divide-[#f1f5f9]">
@@ -935,6 +821,7 @@ export default function Dashboard() {
         </div>
       </Drawer>
 
+      {/* Coming Soon — Book Consultation */}
       <ComingSoonModal
         open={showConsultation}
         onClose={() => setShowConsultation(false)}
@@ -943,7 +830,9 @@ export default function Dashboard() {
         eta="Coming soon"
       />
 
-      <DashboardTour role="employee" user={user as TourUser | null} />
+      {/* ── TOUR — auto-starts for first-time users, DB-backed ── */}
+      {/* ── TOUR — auto-starts for first-time users, reads from ui_session cookie ── */}
+      <DashboardTour role="employee" />
     </div>
   );
 }

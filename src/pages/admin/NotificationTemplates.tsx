@@ -3,9 +3,8 @@
 // Cleaned: inline SVG icons → common/ + notification-templates/ folders
 
 import { useState, useEffect, useMemo } from "react";
-import AdminBackButton from "../../components/admin/AdminBackButton";
-import { fetchTemplates, toggleTemplate, deleteTemplate, createTemplate } from "../../api/admin/notificationTemplates.api";
-import type { NotificationTemplate, CreateTemplatePayload } from "../../types/admin/notificationTemplates.types";
+import { fetchTemplates, toggleTemplate, deleteTemplate, createTemplate, updateTemplate } from "../../api/admin/notificationTemplates.api";
+import type { NotificationTemplate, CreateTemplatePayload, UpdateTemplatePayload } from "../../types/admin/notificationTemplates.types";
 
 /* ── Icon imports ─────────────────────────────────────────────────── */
 // Common
@@ -20,6 +19,7 @@ import iconChannelEmail from "../../assets/icons/notification-templates/channel-
 import iconChannelInapp from "../../assets/icons/notification-templates/channel-inapp.svg";
 import iconChannelSms   from "../../assets/icons/notification-templates/channel-sms.svg";
 import iconChannelPush  from "../../assets/icons/notification-templates/channel-push.svg";
+import AdminBackButton from '../../components/admin/AdminBackButton';
 
 // ── Channel normalisation + config ────────────────────────────────
 type ChannelKey = "email" | "in_app" | "sms" | "push" | "other";
@@ -245,6 +245,159 @@ function CreateTemplateModal({
   );
 }
 
+/* ────────────────────────────────────────────────────────────────────
+ * Edit Template Modal — same layout as Create, but pre-filled from the
+ * row and saved via PATCH /notification-templates/{id}.
+ * ──────────────────────────────────────────────────────────────────── */
+function EditTemplateModal({
+  template, onClose, onSaved,
+}: {
+  template: NotificationTemplate;
+  onClose: () => void;
+  onSaved: (t: NotificationTemplate) => void;
+}) {
+  const [form, setForm] = useState<UpdateTemplatePayload>({
+    name:                   template.name || "",
+    description:            template.description ?? "",
+    channel:                template.channel || "email",
+    event_key:              template.event_key || "",
+    subject:                template.subject ?? "",
+    body_text:              template.body_text ?? "",
+    body_html:              template.body_html ?? "",
+    category:               template.category ?? "case_update",
+    available_placeholders: template.available_placeholders ?? "",
+    is_active:              template.is_active,
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const set = (k: keyof UpdateTemplatePayload) => (v: string | boolean) =>
+    setForm((p) => ({ ...p, [k]: v }));
+
+  const isEmail = form.channel === "email";
+  const canSave = (form.name || "").trim() && (form.event_key || "").trim() && (form.body_text || "").trim() && form.category && !saving;
+
+  const handleSave = async () => {
+    if (!canSave) return;
+    setErr(null);
+
+    // Placeholders must be valid JSON if provided; empty → "[]" to match create-modal contract.
+    let placeholders = (form.available_placeholders || "").trim();
+    if (placeholders === "") {
+      placeholders = "[]";
+    } else {
+      try {
+        JSON.parse(placeholders);
+      } catch {
+        setErr('Available Placeholders must be valid JSON, e.g. ["{{user_name}}","{{due_date}}"]');
+        return;
+      }
+    }
+
+    setSaving(true);
+    try {
+      const payload: UpdateTemplatePayload = {
+        ...form,
+        body_html: form.body_html || form.body_text || "",
+        available_placeholders: placeholders,
+      };
+      const saved = await updateTemplate(template.id, payload);
+      onSaved(saved);
+      onClose();
+    } catch {
+      setErr("Could not save changes. Check required fields and try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const labelStyle: React.CSSProperties = { display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 };
+  const inputStyle: React.CSSProperties = { width: "100%", padding: "10px 12px", border: "1.5px solid #d1d5db", borderRadius: 8, fontSize: 14, color: "#111827", outline: "none", boxSizing: "border-box", fontFamily: "inherit" };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, backdropFilter: "blur(2px)", padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, width: 560, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 12px 48px rgba(0,0,0,0.18)" }}>
+        <div style={{ padding: "24px 28px 16px", borderBottom: "1px solid #f3f4f6" }}>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: "#111827", margin: 0 }}>Edit Template</h2>
+          <p style={{ fontSize: 13.5, color: "#6b7280", margin: "6px 0 0" }}>Update content, category, or trigger — takes effect immediately.</p>
+        </div>
+
+        <div style={{ padding: "20px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
+          {err && <div style={{ background: "#FEF2F2", border: "1px solid #FCA5A5", color: "#B91C1C", borderRadius: 8, padding: "8px 12px", fontSize: 13 }}>{err}</div>}
+
+          <div>
+            <label style={labelStyle}>Template Name *</label>
+            <input style={inputStyle} value={form.name ?? ""} onChange={(e) => set("name")(e.target.value)} />
+          </div>
+          <div>
+            <label style={labelStyle}>Description</label>
+            <input style={inputStyle} value={form.description ?? ""} onChange={(e) => set("description")(e.target.value)} />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div>
+              <label style={labelStyle}>Channel *</label>
+              <select style={inputStyle} value={form.channel ?? "email"} onChange={(e) => set("channel")(e.target.value)}>
+                {CHANNEL_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Trigger Event *</label>
+              <input style={inputStyle} value={form.event_key ?? ""} onChange={(e) => set("event_key")(e.target.value)} />
+            </div>
+          </div>
+
+          {isEmail && (
+            <div>
+              <label style={labelStyle}>Subject</label>
+              <input style={inputStyle} value={form.subject ?? ""} onChange={(e) => set("subject")(e.target.value)} />
+            </div>
+          )}
+
+          <div>
+            <label style={labelStyle}>Body *</label>
+            <textarea style={{ ...inputStyle, minHeight: 96, resize: "vertical" }} value={form.body_text ?? ""} onChange={(e) => set("body_text")(e.target.value)} />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div>
+              <label style={labelStyle}>Category *</label>
+              <select style={inputStyle} value={form.category ?? "case_update"} onChange={(e) => set("category")(e.target.value)}>
+                {CATEGORY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Available Placeholders</label>
+              <input style={inputStyle} value={form.available_placeholders ?? ""} onChange={(e) => set("available_placeholders")(e.target.value)} />
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 4 }}>
+            <span style={{ fontSize: 14, fontWeight: 500, color: "#111827" }}>Active</span>
+            <ToggleSwitch on={!!form.is_active} onChange={() => set("is_active")(!form.is_active)} />
+          </div>
+        </div>
+
+        <div style={{ position: "sticky", bottom: 0, background: "#fff", padding: "16px 28px 24px", display: "flex", justifyContent: "flex-end", gap: 10, borderTop: "1px solid #f3f4f6" }}>
+          <button onClick={onClose} style={{ padding: "9px 20px", border: "1.5px solid #d1d5db", borderRadius: 8, background: "#fff", fontSize: 14, fontWeight: 500, color: "#374151", cursor: "pointer" }}>Cancel</button>
+          <button
+            onClick={handleSave}
+            disabled={!canSave}
+            style={{
+              padding: "9px 22px", border: "none", borderRadius: 8,
+              background: canSave ? "linear-gradient(135deg,#2563eb 0%,#9333ea 100%)" : "#A5B4FC",
+              fontSize: 14, fontWeight: 600, color: "#fff",
+              cursor: canSave ? "pointer" : "not-allowed",
+            }}
+          >
+            {saving ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const PAGE_SIZE = 10;
 
 export default function NotificationTemplates() {
@@ -258,6 +411,7 @@ export default function NotificationTemplates() {
   const [currentPage, setCurrentPage] = useState(1);
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState<NotificationTemplate | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -315,10 +469,8 @@ export default function NotificationTemplates() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#f9fafb", fontFamily: "'Inter', sans-serif" }}>
+      <AdminBackButton />
       <main className="p-4 sm:p-8" style={{ maxWidth: 1440, width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: 24 }}>
-
-        {/* Back navigation — top-left, above the page header (desktop + mobile). */}
-        <AdminBackButton className="!mb-0" />
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -449,7 +601,7 @@ export default function NotificationTemplates() {
                     </td>
                     <td style={{ padding: "16px 24px", textAlign: "right" }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, opacity: hoveredRow === tmpl.id ? 1 : 0, transition: "opacity 0.15s" }}>
-                        <button title="Edit" style={{ padding: 6, borderRadius: 4, border: "none", background: "transparent", cursor: "pointer" }}>
+                        <button title="Edit" onClick={() => setEditing(tmpl)} style={{ padding: 6, borderRadius: 4, border: "none", background: "transparent", cursor: "pointer" }}>
                           <img src={iconPencil} alt="" style={{ width: 14, height: 14 }} />
                         </button>
                         <button title="Duplicate" style={{ padding: 6, borderRadius: 4, border: "none", background: "transparent", cursor: "pointer" }}>
@@ -505,6 +657,16 @@ export default function NotificationTemplates() {
         <CreateTemplateModal
           onClose={() => setShowCreate(false)}
           onCreated={(t) => setTemplates((prev) => [t, ...prev])}
+        />
+      )}
+
+      {editing && (
+        <EditTemplateModal
+          template={editing}
+          onClose={() => setEditing(null)}
+          onSaved={(saved) =>
+            setTemplates((prev) => prev.map((t) => (t.id === saved.id ? saved : t)))
+          }
         />
       )}
     </div>

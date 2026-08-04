@@ -16,15 +16,11 @@ RUN npm run build
 # ---- Serve stage ----
 FROM nginx:1.27-alpine
 
-# Container listen port: 3000 for dev, 80 otherwise (passed as build-arg).
-ARG PORT=80
-ENV PORT=${PORT}
-
-# Official nginx image envsubst's *.template into /etc/nginx/conf.d/ on start
+# Replace the default nginx site with our SPA config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy the built static files (Vite outputs to /app/dist)
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-EXPOSE ${PORT}
+EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

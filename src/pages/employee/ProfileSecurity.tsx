@@ -1,4 +1,3 @@
-
 // // src/pages/employee/ProfileSecurity.tsx
 // // Shared for both employee + HR roles.
 // // Role is detected from ui_session cookie — Privacy section adapts accordingly.
@@ -7,21 +6,27 @@
 // import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 // import {
 //   Edit2, Upload, Trash2, Save, RotateCcw,
-//   CheckCircle, XCircle, Smartphone, Laptop, 
+//   CheckCircle, XCircle, Smartphone, Laptop,
 //   MapPin, Download,
-//   Mail, Phone, Building, Globe2, 
+//   Mail, Phone, Building, Globe2,
 //   Info, Check, X, FileText, Monitor, Clock, AlertTriangle,
-//   Lock, Globe,
+//   Lock, Globe, Bell,
 // } from "lucide-react";
 
-// import { useMyProfile, useLoginHistory } from "../../hooks/employee/useProfile";
-// import { updateMyProfile, signOutAllDevices, uploadProfilePicture } from "../../api/employee/profile.api";
+// import { useMyProfile, useLoginHistory,notifyProfileUpdated } from "../../hooks/employee/useProfile";
+// import { updateMyProfile, signOutAllDevices, uploadProfilePicture, removeProfilePicture } from "../../api/employee/profile.api";
 // import { useAuthStore } from "../../store/authStore";
 // import imgUserAvatar from "../../assets/icons/user-avatar.jpg";
 // import { getFileUrl } from "../../utils/fileUrl";
-// import { updateUiSessionProfile, getUiSession } from "../../utils/uiSession";
+// import {  getUiSession } from "../../utils/uiSession";
 // import { PageHeader, PageContent } from "../../components/layout/Pageheader";
 // import { ThemeColorStrip } from "../settings/ThemeColorStrip";
+// import {
+//   useNotificationSoundSettings,
+//   playSound,
+//   unlockAudio,
+// } from "../../hooks/employee/useNotificationSoundSettings";
+// import type { SoundStyle } from "../../hooks/employee/useNotificationSoundSettings";
 
 // // ── Country codes ─────────────────────────────────────────────────────────────
 // const COUNTRIES = [
@@ -34,9 +39,11 @@
 
 // type SectionId =
 //   | "profile" | "authentication" | "mfa" | "login-history"
-//   | "privacy"  | "devices"        | "session" | "security-alerts";
+//   | "privacy"  | "devices"        | "session" | "security-alerts"
+//   | "notifications";
 
 // // ── Shared small components ───────────────────────────────────────────────────
+
 // const Toggle = ({ checked, onChange }: { checked: boolean; onChange: () => void }) => (
 //   <button onClick={onChange}
 //     className="relative inline-flex h-[24px] w-[44px] items-center rounded-full transition-colors duration-200 focus:outline-none flex-shrink-0"
@@ -80,13 +87,17 @@
 // const cardPad  = "p-[20px] sm:p-[24px] lg:p-[32px]";
 // const cardPadX = "px-[20px] sm:px-[24px] lg:px-[32px]";
 
-// // ── Section: Personal Information ─────────────────────────────────────────────
+// // =============================================================================
+// // SECTION: Personal Information
+// // =============================================================================
+
 // const PersonalInfoSection = () => {
 //   const { data: profile, isLoading, refetch } = useMyProfile();
 //   const user = useAuthStore(s => s.user);
 //   const fileInputRef = useRef<HTMLInputElement>(null);
 //   const navigate     = useNavigate();
 //   const [searchParams] = useSearchParams();
+//   const [removing, setRemoving] = useState(false);
 
 //   const [editing,         setEditing]         = useState(false);
 //   const [saving,          setSaving]          = useState(false);
@@ -126,11 +137,22 @@
 //     if (file.size > 5 * 1024 * 1024) { setAvatarError("File must be under 5 MB."); return; }
 //     setAvatarUploading(true); setAvatarError(null);
 //     try {
-//       const result = await uploadProfilePicture(file);
+//       await uploadProfilePicture(file);
 //       await refetch();
-//       if (result?.profile_picture_url) updateUiSessionProfile(result.profile_picture_url);
+//       notifyProfileUpdated();   // ← tells Sidebar/SettingsSidebar to refetch too
 //     } catch { setAvatarError("Failed to upload photo."); }
 //     finally { setAvatarUploading(false); e.target.value = ""; }
+//   };
+
+//   const handleRemoveAvatar = async () => {
+//     if (!profile?.profile_picture_url) return;
+//     setRemoving(true); setAvatarError(null);
+//     try {
+//       await removeProfilePicture();
+//       await refetch();
+//       notifyProfileUpdated();   // ← same here
+//     } catch { setAvatarError("Failed to remove photo."); }
+//     finally { setRemoving(false); }
 //   };
 
 //   if (isLoading) return <SectionCard><div className="flex items-center justify-center py-[64px]"><Spinner size={28} className="text-indigo-600" /></div></SectionCard>;
@@ -171,8 +193,9 @@
 //                 style={{ background: "linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)" }}>
 //                 {avatarUploading ? <><Spinner size={13} /> Uploading…</> : <><Upload size={13} /> Upload New</>}
 //               </button>
-//               <button className="flex items-center gap-[6px] px-[12px] sm:px-[14px] h-[34px] sm:h-[36px] border border-[#e5e7eb] text-[#6b7280] text-[12px] sm:text-[13px] font-medium rounded-[8px] hover:bg-[#f9fafb] transition">
-//                 <Trash2 size={13} /> Remove
+//               <button onClick={handleRemoveAvatar} disabled={removing || !profile?.profile_picture_url}
+//                 className="flex items-center gap-[6px] px-[12px] sm:px-[14px] h-[34px] sm:h-[36px] border border-[#e5e7eb] text-[#6b7280] text-[12px] sm:text-[13px] font-medium rounded-[8px] hover:bg-[#f9fafb] transition disabled:opacity-60">
+//                 {removing ? <><Spinner size={13} className="text-[#6b7280]" /> Removing…</> : <><Trash2 size={13} /> Remove</>}
 //               </button>
 //             </div>
 //             {avatarError ? <p className="text-[12px] text-[#ef4444]">{avatarError}</p>
@@ -265,7 +288,10 @@
 //   );
 // };
 
-// // ── Section: Authentication ───────────────────────────────────────────────────
+// // =============================================================================
+// // SECTION: Authentication
+// // =============================================================================
+
 // const AuthMethodCard = ({ icon, iconBg, title, description, features, buttonLabel, active }: {
 //   icon: React.ReactNode; iconBg: string; title: string; description: string;
 //   features: { ok: boolean; text: string }[]; buttonLabel: string; active?: boolean;
@@ -274,7 +300,7 @@
 //     style={{ borderColor: active ? "var(--theme-border, #c7d2fe)" : "#e5e7eb" }}>
 //     <div className="flex flex-col sm:flex-row items-start gap-[12px] sm:gap-[16px]">
 //       <div className="flex items-start gap-[12px] flex-1 min-w-0">
-//         <div className={`w-[44px] h-[44px] sm:w-[48px] sm:h-[48px] rounded-[12px] flex items-center justify-center flex-shrink-0`}
+//         <div className="w-[44px] h-[44px] sm:w-[48px] sm:h-[48px] rounded-[12px] flex items-center justify-center flex-shrink-0"
 //           style={{ backgroundColor: iconBg }}>{icon}</div>
 //         <div className="min-w-0">
 //           <div className="flex items-center gap-[8px] flex-wrap">
@@ -307,7 +333,7 @@
 // );
 
 // const AuthenticationSection = () => {
-//   const user  = useAuthStore(s => s.user);
+//   const user = useAuthStore(s => s.user);
 //   return (
 //     <SectionCard>
 //       <div className={`${cardPad} border-b border-[#f3f4f6]`}>
@@ -332,7 +358,10 @@
 //   );
 // };
 
-// // ── Section: MFA ──────────────────────────────────────────────────────────────
+// // =============================================================================
+// // SECTION: MFA
+// // =============================================================================
+
 // const MFASection = () => (
 //   <SectionCard>
 //     <div className={`${cardPad} border-b border-[#f3f4f6]`}>
@@ -345,7 +374,6 @@
 //       <p className="text-[13px] sm:text-[14px] text-[#6b7280] mt-[4px]">Add a second verification method for extra security.</p>
 //     </div>
 //     <div className={`${cardPad} flex flex-col gap-[12px] sm:gap-[16px]`}>
-//       {/* Authenticator — recommended */}
 //       <div className="border-2 rounded-[12px] p-[16px] sm:p-[24px]" style={{ borderColor: "var(--theme-primary)", backgroundColor: "var(--theme-light)" }}>
 //         <div className="flex flex-col sm:flex-row items-start gap-[12px] sm:gap-[16px]">
 //           <div className="flex items-start gap-[12px] flex-1 min-w-0">
@@ -366,7 +394,6 @@
 //           </button>
 //         </div>
 //       </div>
-//       {/* SMS */}
 //       <div className="border border-[#e5e7eb] rounded-[12px] p-[16px] sm:p-[24px]">
 //         <div className="flex flex-col sm:flex-row items-start gap-[12px] sm:gap-[16px]">
 //           <div className="w-[44px] h-[44px] rounded-[12px] bg-[#f0fdf4] flex items-center justify-center flex-shrink-0">
@@ -386,7 +413,10 @@
 //   </SectionCard>
 // );
 
-// // ── Section: Login History ────────────────────────────────────────────────────
+// // =============================================================================
+// // SECTION: Login History
+// // =============================================================================
+
 // const LoginHistorySection = () => {
 //   const { data: history, isLoading, error } = useLoginHistory(20);
 //   const [signingOut, setSigningOut] = useState(false);
@@ -450,7 +480,10 @@
 //   );
 // };
 
-// // ── Section: Privacy — adapts to role ─────────────────────────────────────────
+// // =============================================================================
+// // SECTION: Privacy — adapts to role
+// // =============================================================================
+
 // const PrivacySection = ({ isHR }: { isHR: boolean }) => {
 //   const [toggles, setToggles] = useState(
 //     isHR
@@ -461,7 +494,6 @@
 
 //   return (
 //     <div className="flex flex-col gap-[16px] sm:gap-[20px]">
-//       {/* Profile Visibility */}
 //       <SectionCard>
 //         <div className={`${cardPad} border-b border-[#f3f4f6]`}>
 //           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-[8px]">
@@ -499,7 +531,6 @@
 //         </div>
 //       </SectionCard>
 
-//       {/* Data & Analytics */}
 //       <SectionCard>
 //         <div className={`${cardPad} border-b border-[#f3f4f6]`}>
 //           <h3 className="text-[15px] sm:text-[17px] font-semibold text-[#111827]">Data Sharing & Analytics</h3>
@@ -522,7 +553,6 @@
 //         </div>
 //       </SectionCard>
 
-//       {/* Data Retention */}
 //       <SectionCard>
 //         <div className={`${cardPad} border-b border-[#f3f4f6]`}>
 //           <h3 className="text-[15px] sm:text-[17px] font-semibold text-[#111827]">Data & Account</h3>
@@ -561,7 +591,10 @@
 //   );
 // };
 
-// // ── Section: Security Alerts ──────────────────────────────────────────────────
+// // =============================================================================
+// // SECTION: Security Alerts
+// // =============================================================================
+
 // const SecurityAlertsSection = () => {
 //   const [alerts, setAlerts] = useState({
 //     newDevice:       { email:true,  sms:true  },
@@ -581,10 +614,10 @@
 //       </div>
 //       <div className={cardPadX}>
 //         {([
-//           { key:"newDevice"       as AK, title:"New Device Login",           desc:"Alert when account is accessed from a new device." },
-//           { key:"failedLogin"     as AK, title:"Failed Login Attempts",      desc:"Alert when multiple failed logins occur." },
-//           { key:"passwordChanged" as AK, title:"Password Changed",           desc:"Alert immediately when your password changes." },
-//           { key:"unusualActivity" as AK, title:"Unusual Activity Detected",  desc:"Alert when suspicious behaviour is detected." },
+//           { key:"newDevice"       as AK, title:"New Device Login",          desc:"Alert when account is accessed from a new device." },
+//           { key:"failedLogin"     as AK, title:"Failed Login Attempts",     desc:"Alert when multiple failed logins occur." },
+//           { key:"passwordChanged" as AK, title:"Password Changed",          desc:"Alert immediately when your password changes." },
+//           { key:"unusualActivity" as AK, title:"Unusual Activity Detected", desc:"Alert when suspicious behaviour is detected." },
 //         ]).map(({ key, title, desc }) => (
 //           <div key={key} className="flex items-start sm:items-center justify-between py-[14px] border-b border-[#f3f4f6] last:border-0 gap-[12px]">
 //             <div className="flex-1 min-w-0">
@@ -614,8 +647,161 @@
 //   );
 // };
 
+// // =============================================================================
+// // SECTION: Notification Sounds
+// // =============================================================================
 
-// // ── Placeholder sections (expand when needed) ─────────────────────────────────
+// const SOUND_STYLES: { value: SoundStyle; label: string; desc: string; emoji: string }[] = [
+//   { value: "ding",   label: "Ding",   desc: "Two-tone descending", emoji: "🔔" },
+//   { value: "chime",  label: "Chime",  desc: "Soft ascending",      emoji: "🎵" },
+//   { value: "pop",    label: "Pop",    desc: "Short sharp pop",     emoji: "💬" },
+//   { value: "silent", label: "Silent", desc: "No sound",            emoji: "🔇" },
+// ];
+
+// const NotificationSoundsSection = () => {
+//   const { settings, update } = useNotificationSoundSettings();
+
+//   return (
+//     <div className="flex flex-col gap-[16px] sm:gap-[20px]">
+
+//       {/* Message Sounds */}
+//       <SectionCard>
+//         <div className={`${cardPad} border-b border-[#f3f4f6]`}>
+//           <div className="flex items-center gap-[10px]">
+//             <div className="w-[40px] h-[40px] rounded-[10px] flex items-center justify-center flex-shrink-0"
+//               style={{ backgroundColor: "var(--theme-light)", color: "var(--theme-primary)" }}>
+//               <Bell size={18} />
+//             </div>
+//             <div>
+//               <h2 className="text-[17px] sm:text-[20px] font-semibold text-[#111827]">Message Sounds</h2>
+//               <p className="text-[13px] text-[#6b7280]">Plays when a new message arrives in Secure Messaging</p>
+//             </div>
+//           </div>
+//         </div>
+
+//         <div className={`${cardPad} flex flex-col gap-[20px]`}>
+
+//           {/* Enable toggle */}
+//           <div className="flex items-center justify-between">
+//             <div>
+//               <p className="text-[14px] font-medium text-[#111827]">Enable Message Sound</p>
+//               <p className="text-[12px] text-[#6b7280] mt-[2px]">Sound plays when someone sends you a message</p>
+//             </div>
+//             <Toggle checked={settings.messageSound} onChange={() => update({ messageSound: !settings.messageSound })} />
+//           </div>
+
+//           {/* Sound style picker */}
+//           <div className={`flex flex-col gap-[10px] transition-opacity ${!settings.messageSound ? "opacity-40 pointer-events-none" : ""}`}>
+//             <p className="text-[13px] font-medium text-[#374151]">Sound Style</p>
+//             <div className="grid grid-cols-2 sm:grid-cols-4 gap-[8px]">
+//               {SOUND_STYLES.map(s => (
+//                 <button key={s.value} onClick={() => update({ messageSoundStyle: s.value })}
+//                   className={`flex flex-col items-center gap-[6px] p-[14px] rounded-[10px] border-2 transition text-center ${
+//                     settings.messageSoundStyle === s.value
+//                       ? "border-[var(--theme-primary)] bg-[var(--theme-light)]"
+//                       : "border-[#e5e7eb] hover:border-[#d1d5db]"
+//                   }`}>
+//                   <span className="text-[22px]">{s.emoji}</span>
+//                   <span className="text-[12px] font-semibold text-[#111827]">{s.label}</span>
+//                   <span className="text-[10px] text-[#6b7280]">{s.desc}</span>
+//                 </button>
+//               ))}
+//             </div>
+//           </div>
+
+//           {/* Volume slider */}
+//           <div className={`flex flex-col gap-[8px] transition-opacity ${!settings.messageSound ? "opacity-40 pointer-events-none" : ""}`}>
+//             <div className="flex items-center justify-between">
+//               <p className="text-[13px] font-medium text-[#374151]">Volume</p>
+//               <span className="text-[13px] font-bold" style={{ color: "var(--theme-primary)" }}>{settings.messageVolume}%</span>
+//             </div>
+//             <input type="range" min={0} max={100} step={5} value={settings.messageVolume}
+//               onChange={e => update({ messageVolume: Number(e.target.value) })}
+//               className="w-full h-[4px] rounded-full appearance-none cursor-pointer"
+//               style={{ background: `linear-gradient(to right, var(--theme-primary) ${settings.messageVolume}%, #e5e7eb ${settings.messageVolume}%)` }} />
+//             <div className="flex justify-between text-[11px] text-[#9ca3af]">
+//               <span>Off</span><span>Low</span><span>Medium</span><span>High</span>
+//             </div>
+//           </div>
+
+//           {/* Test */}
+//           <button onClick={() => { unlockAudio(); playSound("message"); }}
+//             disabled={!settings.messageSound || settings.messageSoundStyle === "silent"}
+//             className="flex items-center justify-center gap-[8px] h-[40px] px-[20px] border border-[#e5e7eb]
+//                        text-[13px] font-medium text-[#374151] rounded-[10px] hover:bg-[#f9fafb]
+//                        transition w-full sm:w-fit disabled:opacity-40">
+//             🔊 Test Message Sound
+//           </button>
+//         </div>
+//       </SectionCard>
+
+//       {/* Notification Sounds */}
+//       <SectionCard>
+//         <div className={`${cardPad} border-b border-[#f3f4f6]`}>
+//           <div className="flex items-center gap-[10px]">
+//             <div className="w-[40px] h-[40px] rounded-[10px] flex items-center justify-center flex-shrink-0 bg-[#f0fdf4]">
+//               <Bell size={18} className="text-[#22c55e]" />
+//             </div>
+//             <div>
+//               <h2 className="text-[17px] sm:text-[20px] font-semibold text-[#111827]">Notification Sounds</h2>
+//               <p className="text-[13px] text-[#6b7280]">Plays when a new case update or alert arrives</p>
+//             </div>
+//           </div>
+//         </div>
+
+//         <div className={`${cardPad} flex flex-col gap-[20px]`}>
+
+//           {/* Enable toggle */}
+//           <div className="flex items-center justify-between">
+//             <div>
+//               <p className="text-[14px] font-medium text-[#111827]">Enable Notification Sound</p>
+//               <p className="text-[12px] text-[#6b7280] mt-[2px]">Case updates, deadlines, and alerts</p>
+//             </div>
+//             <Toggle checked={settings.notifSound} onChange={() => update({ notifSound: !settings.notifSound })} />
+//           </div>
+
+//           {/* Volume slider */}
+//           <div className={`flex flex-col gap-[8px] transition-opacity ${!settings.notifSound ? "opacity-40 pointer-events-none" : ""}`}>
+//             <div className="flex items-center justify-between">
+//               <p className="text-[13px] font-medium text-[#374151]">Volume</p>
+//               <span className="text-[13px] font-bold" style={{ color: "var(--theme-primary)" }}>{settings.notifVolume}%</span>
+//             </div>
+//             <input type="range" min={0} max={100} step={5} value={settings.notifVolume}
+//               onChange={e => update({ notifVolume: Number(e.target.value) })}
+//               className="w-full h-[4px] rounded-full appearance-none cursor-pointer"
+//               style={{ background: `linear-gradient(to right, var(--theme-primary) ${settings.notifVolume}%, #e5e7eb ${settings.notifVolume}%)` }} />
+//             <div className="flex justify-between text-[11px] text-[#9ca3af]">
+//               <span>Off</span><span>Low</span><span>Medium</span><span>High</span>
+//             </div>
+//           </div>
+
+//           {/* Test */}
+//           <button onClick={() => { unlockAudio(); playSound("notif"); }}
+//             disabled={!settings.notifSound}
+//             className="flex items-center justify-center gap-[8px] h-[40px] px-[20px] border border-[#e5e7eb]
+//                        text-[13px] font-medium text-[#374151] rounded-[10px] hover:bg-[#f9fafb]
+//                        transition w-full sm:w-fit disabled:opacity-40">
+//             🔊 Test Notification Sound
+//           </button>
+//         </div>
+//       </SectionCard>
+
+//       {/* Info */}
+//       <div className="bg-[#eff6ff] border border-[#bfdbfe] rounded-[12px] p-[16px] flex items-start gap-[10px]">
+//         <span className="text-[18px] flex-shrink-0">💡</span>
+//         <p className="text-[12px] text-[#1e40af] leading-[18px]">
+//           Sound settings are saved locally on this device. If you switch browsers or devices
+//           you'll need to set them again. Audio unlocks after your first interaction with the app.
+//         </p>
+//       </div>
+//     </div>
+//   );
+// };
+
+// // =============================================================================
+// // SECTION: Connected Devices (placeholder)
+// // =============================================================================
+
 // const ConnectedDevicesPlaceholder = () => (
 //   <SectionCard>
 //     <div className={`${cardPad} border-b border-[#f3f4f6]`}>
@@ -643,6 +829,10 @@
 //     </div>
 //   </SectionCard>
 // );
+
+// // =============================================================================
+// // SECTION: Session (placeholder)
+// // =============================================================================
 
 // const SessionPlaceholder = () => {
 //   const [rememberMe, setRememberMe] = useState(true);
@@ -678,26 +868,32 @@
 //   );
 // };
 
-// // ── Section titles ────────────────────────────────────────────────────────────
-// const TITLES: Record<SectionId, { title: string; subtitle: string }> = {
-//   profile:           { title:"Profile",                        subtitle:"Manage your personal information and photo"         },
-//   authentication:    { title:"Authentication",                  subtitle:"Configure login methods and linked accounts"        },
-//   mfa:               { title:"Multi-Factor Authentication",     subtitle:"Add a second verification step for extra security"  },
-//   "login-history":   { title:"Login History",                   subtitle:"Review recent access to your account"               },
-//   privacy:           { title:"Privacy Settings",                subtitle:"Control visibility and data sharing"                },
-//   devices:           { title:"Connected Devices",               subtitle:"Manage devices with access to your account"         },
-//   session:           { title:"Session Settings",                subtitle:"Configure session timeout and concurrent logins"    },
-//   "security-alerts": { title:"Security Alerts",                 subtitle:"Get notified about important security events"       },
+// // =============================================================================
+// // Route → section mapping + page titles
+// // =============================================================================
+
+// const SECTION_TITLES: Record<SectionId, { title: string; subtitle: string }> = {
+//   profile:           { title:"Profile",                       subtitle:"Manage your personal information and photo"        },
+//   authentication:    { title:"Authentication",                 subtitle:"Configure login methods and linked accounts"       },
+//   mfa:               { title:"Multi-Factor Authentication",    subtitle:"Add a second verification step for extra security" },
+//   "login-history":   { title:"Login History",                  subtitle:"Review recent access to your account"              },
+//   privacy:           { title:"Privacy Settings",               subtitle:"Control visibility and data sharing"               },
+//   devices:           { title:"Connected Devices",              subtitle:"Manage devices with access to your account"        },
+//   session:           { title:"Session Settings",               subtitle:"Configure session timeout and concurrent logins"   },
+//   "security-alerts": { title:"Security Alerts",                subtitle:"Get notified about important security events"      },
+//   notifications:     { title:"Notification Sounds",            subtitle:"Customise sounds for messages and alerts"          },
 // };
 
-// // ── Main ──────────────────────────────────────────────────────────────────────
+// // =============================================================================
+// // Main export
+// // =============================================================================
+
 // export default function ProfileSecurity() {
 //   const location = useLocation();
 //   const session  = getUiSession();
 //   const isHR     = session?.roles?.includes("hr") ?? false;
 
 //   const getSection = (): SectionId => {
-//     // Works for both /profile/* (employee) and /employer/profile/* (HR)
 //     const p = location.pathname;
 //     if (p.endsWith("authentication"))  return "authentication";
 //     if (p.endsWith("mfa"))             return "mfa";
@@ -706,11 +902,12 @@
 //     if (p.endsWith("devices"))         return "devices";
 //     if (p.endsWith("session"))         return "session";
 //     if (p.endsWith("security-alerts")) return "security-alerts";
+//     if (p.endsWith("notifications"))   return "notifications";
 //     return "profile";
 //   };
 
 //   const activeSection = getSection();
-//   const { title, subtitle } = TITLES[activeSection];
+//   const { title, subtitle } = SECTION_TITLES[activeSection];
 
 //   const COMPONENTS: Record<SectionId, React.ReactNode> = {
 //     profile:           <PersonalInfoSection />,
@@ -721,6 +918,7 @@
 //     devices:           <ConnectedDevicesPlaceholder />,
 //     session:           <SessionPlaceholder />,
 //     "security-alerts": <SecurityAlertsSection />,
+//     notifications:     <NotificationSoundsSection />,
 //   };
 
 //   return (
@@ -734,8 +932,6 @@
 //     </div>
 //   );
 // }
-
-
 
 // src/pages/employee/ProfileSecurity.tsx
 // Shared for both employee + HR roles.
@@ -752,12 +948,12 @@ import {
   Lock, Globe, Bell,
 } from "lucide-react";
 
-import { useMyProfile, useLoginHistory } from "../../hooks/employee/useProfile";
-import { updateMyProfile, signOutAllDevices, uploadProfilePicture } from "../../api/employee/profile.api";
+import { useMyProfile, useLoginHistory,notifyProfileUpdated } from "../../hooks/employee/useProfile";
+import { updateMyProfile, signOutAllDevices, uploadProfilePicture, removeProfilePicture } from "../../api/employee/profile.api";
 import { useAuthStore } from "../../store/authStore";
 import imgUserAvatar from "../../assets/icons/user-avatar.jpg";
 import { getFileUrl } from "../../utils/fileUrl";
-import { updateUiSessionProfile, getUiSession } from "../../utils/uiSession";
+import {  getUiSession } from "../../utils/uiSession";
 import { PageHeader, PageContent } from "../../components/layout/Pageheader";
 import { ThemeColorStrip } from "../settings/ThemeColorStrip";
 import {
@@ -836,6 +1032,7 @@ const PersonalInfoSection = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate     = useNavigate();
   const [searchParams] = useSearchParams();
+  const [removing, setRemoving] = useState(false);
 
   const [editing,         setEditing]         = useState(false);
   const [saving,          setSaving]          = useState(false);
@@ -848,7 +1045,7 @@ const PersonalInfoSection = () => {
   const [language,    setLanguage]    = useState("en-US");
 
   const displayName  = (profile?.full_legal_name ?? `${user?.first_name ?? ""} ${user?.last_name ?? ""}`).trim() || "—";
-  const displayEmail = user?.email ?? "—";
+  const displayEmail = profile?.email ?? user?.email ?? "—";
   const avatarUrl    = getFileUrl(profile?.profile_picture_url) ?? imgUserAvatar;
 
   const seedForm = () => {
@@ -875,11 +1072,22 @@ const PersonalInfoSection = () => {
     if (file.size > 5 * 1024 * 1024) { setAvatarError("File must be under 5 MB."); return; }
     setAvatarUploading(true); setAvatarError(null);
     try {
-      const result = await uploadProfilePicture(file);
+      await uploadProfilePicture(file);
       await refetch();
-      if (result?.profile_picture_url) updateUiSessionProfile(result.profile_picture_url);
+      notifyProfileUpdated();   // ← tells Sidebar/SettingsSidebar to refetch too
     } catch { setAvatarError("Failed to upload photo."); }
     finally { setAvatarUploading(false); e.target.value = ""; }
+  };
+
+  const handleRemoveAvatar = async () => {
+    if (!profile?.profile_picture_url) return;
+    setRemoving(true); setAvatarError(null);
+    try {
+      await removeProfilePicture();
+      await refetch();
+      notifyProfileUpdated();   // ← same here
+    } catch { setAvatarError("Failed to remove photo."); }
+    finally { setRemoving(false); }
   };
 
   if (isLoading) return <SectionCard><div className="flex items-center justify-center py-[64px]"><Spinner size={28} className="text-indigo-600" /></div></SectionCard>;
@@ -920,8 +1128,9 @@ const PersonalInfoSection = () => {
                 style={{ background: "linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)" }}>
                 {avatarUploading ? <><Spinner size={13} /> Uploading…</> : <><Upload size={13} /> Upload New</>}
               </button>
-              <button className="flex items-center gap-[6px] px-[12px] sm:px-[14px] h-[34px] sm:h-[36px] border border-[#e5e7eb] text-[#6b7280] text-[12px] sm:text-[13px] font-medium rounded-[8px] hover:bg-[#f9fafb] transition">
-                <Trash2 size={13} /> Remove
+              <button onClick={handleRemoveAvatar} disabled={removing || !profile?.profile_picture_url}
+                className="flex items-center gap-[6px] px-[12px] sm:px-[14px] h-[34px] sm:h-[36px] border border-[#e5e7eb] text-[#6b7280] text-[12px] sm:text-[13px] font-medium rounded-[8px] hover:bg-[#f9fafb] transition disabled:opacity-60">
+                {removing ? <><Spinner size={13} className="text-[#6b7280]" /> Removing…</> : <><Trash2 size={13} /> Remove</>}
               </button>
             </div>
             {avatarError ? <p className="text-[12px] text-[#ef4444]">{avatarError}</p>
@@ -1018,12 +1227,19 @@ const PersonalInfoSection = () => {
 // SECTION: Authentication
 // =============================================================================
 
-const AuthMethodCard = ({ icon, iconBg, title, description, features, buttonLabel, active }: {
+// ── CHANGED: added `recommended` — a themed variant (border + "Recommended"
+// badge) so MFASection can reuse this component instead of hand-rolling its
+// own near-identical card markup. `features` is optional now since MFA's
+// cards don't use the feature-bullet list.
+const AuthMethodCard = ({ icon, iconBg, title, description, features, buttonLabel, active, recommended }: {
   icon: React.ReactNode; iconBg: string; title: string; description: string;
-  features: { ok: boolean; text: string }[]; buttonLabel: string; active?: boolean;
+  features?: { ok: boolean; text: string }[]; buttonLabel: string; active?: boolean; recommended?: boolean;
 }) => (
-  <div className={`border rounded-[12px] p-[16px] sm:p-[24px] ${active ? "bg-[#f8fafc]" : ""}`}
-    style={{ borderColor: active ? "var(--theme-border, #c7d2fe)" : "#e5e7eb" }}>
+  <div className={`rounded-[12px] p-[16px] sm:p-[24px] ${recommended ? "border-2" : "border"} ${active ? "bg-[#f8fafc]" : recommended ? "" : ""}`}
+    style={{
+      borderColor: recommended ? "var(--theme-primary)" : active ? "var(--theme-border, #c7d2fe)" : "#e5e7eb",
+      backgroundColor: recommended ? "var(--theme-light)" : undefined,
+    }}>
     <div className="flex flex-col sm:flex-row items-start gap-[12px] sm:gap-[16px]">
       <div className="flex items-start gap-[12px] flex-1 min-w-0">
         <div className="w-[44px] h-[44px] sm:w-[48px] sm:h-[48px] rounded-[12px] flex items-center justify-center flex-shrink-0"
@@ -1036,16 +1252,23 @@ const AuthMethodCard = ({ icon, iconBg, title, description, features, buttonLabe
                 <Check size={10} strokeWidth={3} /> Active
               </span>
             )}
+            {recommended && (
+              <span className="text-[11px] font-semibold rounded-full px-[8px] py-[2px]" style={{ color: "var(--theme-dark)", backgroundColor: "var(--theme-light)" }}>
+                Recommended
+              </span>
+            )}
           </div>
           <p className="text-[12px] sm:text-[13px] text-[#6b7280] mt-[4px]">{description}</p>
-          <ul className="mt-[8px] flex flex-wrap gap-[8px]">
-            {features.map(f => (
-              <li key={f.text} className="flex items-center gap-[5px] text-[11px] sm:text-[12px] text-[#6b7280]">
-                {f.ok ? <Check size={11} className="text-[#10b981]" strokeWidth={3} /> : <X size={11} className="text-[#ef4444]" strokeWidth={3} />}
-                {f.text}
-              </li>
-            ))}
-          </ul>
+          {features && features.length > 0 && (
+            <ul className="mt-[8px] flex flex-wrap gap-[8px]">
+              {features.map(f => (
+                <li key={f.text} className="flex items-center gap-[5px] text-[11px] sm:text-[12px] text-[#6b7280]">
+                  {f.ok ? <Check size={11} className="text-[#10b981]" strokeWidth={3} /> : <X size={11} className="text-[#ef4444]" strokeWidth={3} />}
+                  {f.text}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
       <button className={`w-full sm:w-auto flex-shrink-0 h-[38px] px-[14px] text-[12px] sm:text-[13px] font-medium rounded-[10px] transition whitespace-nowrap ${
@@ -1086,6 +1309,8 @@ const AuthenticationSection = () => {
 
 // =============================================================================
 // SECTION: MFA
+// ── CHANGED: both cards now reuse AuthMethodCard instead of duplicating its
+// icon/title/badge/button layout with slightly different one-off styling.
 // =============================================================================
 
 const MFASection = () => (
@@ -1100,47 +1325,30 @@ const MFASection = () => (
       <p className="text-[13px] sm:text-[14px] text-[#6b7280] mt-[4px]">Add a second verification method for extra security.</p>
     </div>
     <div className={`${cardPad} flex flex-col gap-[12px] sm:gap-[16px]`}>
-      <div className="border-2 rounded-[12px] p-[16px] sm:p-[24px]" style={{ borderColor: "var(--theme-primary)", backgroundColor: "var(--theme-light)" }}>
-        <div className="flex flex-col sm:flex-row items-start gap-[12px] sm:gap-[16px]">
-          <div className="flex items-start gap-[12px] flex-1 min-w-0">
-            <div className="w-[44px] h-[44px] rounded-[12px] flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "var(--theme-light)" }}>
-              <Smartphone size={20} style={{ color: "var(--theme-primary)" }} />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-[8px] flex-wrap">
-                <h3 className="text-[14px] sm:text-[15px] font-semibold text-[#111827]">Authenticator App</h3>
-                <span className="text-[11px] font-semibold rounded-full px-[8px] py-[2px]" style={{ color: "var(--theme-dark)", backgroundColor: "var(--theme-light)" }}>Recommended</span>
-              </div>
-              <p className="text-[12px] sm:text-[13px] text-[#6b7280] mt-[4px]">Google Authenticator, Authy, or Microsoft Authenticator</p>
-            </div>
-          </div>
-          <button className="w-full sm:w-auto flex-shrink-0 h-[38px] px-[14px] text-white text-[12px] sm:text-[13px] font-medium rounded-[10px] hover:opacity-90 transition"
-            style={{ background: "linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)" }}>
-            Setup Now
-          </button>
-        </div>
-      </div>
-      <div className="border border-[#e5e7eb] rounded-[12px] p-[16px] sm:p-[24px]">
-        <div className="flex flex-col sm:flex-row items-start gap-[12px] sm:gap-[16px]">
-          <div className="w-[44px] h-[44px] rounded-[12px] bg-[#f0fdf4] flex items-center justify-center flex-shrink-0">
-            <Phone size={20} className="text-[#10b981]" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="text-[14px] sm:text-[15px] font-semibold text-[#111827]">SMS Text Message</h3>
-            <p className="text-[12px] sm:text-[13px] text-[#6b7280] mt-[4px]">Receive codes via text message</p>
-          </div>
-          <button className="w-full sm:w-auto flex-shrink-0 h-[38px] px-[14px] text-white text-[12px] sm:text-[13px] font-medium rounded-[10px] hover:opacity-90 transition"
-            style={{ background: "linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)" }}>
-            Add Phone
-          </button>
-        </div>
-      </div>
+      <AuthMethodCard recommended
+        icon={<Smartphone size={20} style={{ color: "var(--theme-primary)" }} />}
+        iconBg="var(--theme-light)"
+        title="Authenticator App"
+        description="Google Authenticator, Authy, or Microsoft Authenticator"
+        buttonLabel="Setup Now" />
+      <AuthMethodCard
+        icon={<Phone size={20} className="text-[#10b981]" />}
+        iconBg="#f0fdf4"
+        title="SMS Text Message"
+        description="Receive codes via text message"
+        buttonLabel="Add Phone" />
     </div>
   </SectionCard>
 );
 
 // =============================================================================
 // SECTION: Login History
+// ── This is also now the content behind the "devices" route — see the
+// COMPONENTS map at the bottom. The old ConnectedDevicesPlaceholder showed a
+// static "Current Device" card with strictly less information than this
+// section already provides for real (device, browser, OS, location, active
+// badge), so it added nothing and has been removed rather than left as a
+// second, lesser copy of the same feature.
 // =============================================================================
 
 const LoginHistorySection = () => {
@@ -1525,38 +1733,6 @@ const NotificationSoundsSection = () => {
 };
 
 // =============================================================================
-// SECTION: Connected Devices (placeholder)
-// =============================================================================
-
-const ConnectedDevicesPlaceholder = () => (
-  <SectionCard>
-    <div className={`${cardPad} border-b border-[#f3f4f6]`}>
-      <h2 className="text-[17px] sm:text-[20px] font-semibold text-[#111827]">Connected Devices</h2>
-      <p className="text-[13px] sm:text-[14px] text-[#6b7280] mt-[4px]">Manage devices that have access to your account.</p>
-    </div>
-    <div className={`${cardPad} flex flex-col gap-[12px]`}>
-      <div className="border border-[#e5e7eb] rounded-[12px] p-[16px] sm:p-[20px] flex items-start gap-[14px]">
-        <div className="w-[44px] h-[44px] rounded-[12px] flex items-center justify-center flex-shrink-0"
-          style={{ backgroundColor:"var(--theme-light)", color:"var(--theme-primary)" }}>
-          <Monitor size={20} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-[8px]">
-            <p className="text-[14px] font-semibold text-[#111827]">Current Device</p>
-            <span className="text-[10px] font-medium px-[7px] py-[2px] rounded-full bg-[#d1fae5] text-[#065f46]">Active Now</span>
-          </div>
-          <p className="text-[12px] text-[#6b7280] mt-[4px]">This browser session</p>
-        </div>
-      </div>
-      <div className="bg-[#fffbeb] border border-[#fde68a] rounded-[10px] px-[16px] py-[12px] flex items-center gap-[10px]">
-        <AlertTriangle size={15} className="text-[#f59e0b] flex-shrink-0" />
-        <p className="text-[12px] text-[#92400e]">If you see an unrecognised device, change your password immediately.</p>
-      </div>
-    </div>
-  </SectionCard>
-);
-
-// =============================================================================
 // SECTION: Session (placeholder)
 // =============================================================================
 
@@ -1604,7 +1780,10 @@ const SECTION_TITLES: Record<SectionId, { title: string; subtitle: string }> = {
   mfa:               { title:"Multi-Factor Authentication",    subtitle:"Add a second verification step for extra security" },
   "login-history":   { title:"Login History",                  subtitle:"Review recent access to your account"              },
   privacy:           { title:"Privacy Settings",               subtitle:"Control visibility and data sharing"               },
-  devices:           { title:"Connected Devices",              subtitle:"Manage devices with access to your account"        },
+  // ── CHANGED: this route now shows the real Login History content (see
+  // COMPONENTS below) instead of the old static placeholder, so the title
+  // reflects that rather than promising a separate "devices" feature.
+  devices:           { title:"Connected Devices & Sessions",   subtitle:"Review recent access and sign out other sessions"  },
   session:           { title:"Session Settings",               subtitle:"Configure session timeout and concurrent logins"   },
   "security-alerts": { title:"Security Alerts",                subtitle:"Get notified about important security events"      },
   notifications:     { title:"Notification Sounds",            subtitle:"Customise sounds for messages and alerts"          },
@@ -1635,13 +1814,16 @@ export default function ProfileSecurity() {
   const activeSection = getSection();
   const { title, subtitle } = SECTION_TITLES[activeSection];
 
+  // ── CHANGED: "devices" now reuses LoginHistorySection — the old
+  // ConnectedDevicesPlaceholder was a static duplicate showing less real
+  // information than this section already provides.
   const COMPONENTS: Record<SectionId, React.ReactNode> = {
     profile:           <PersonalInfoSection />,
     authentication:    <AuthenticationSection />,
     mfa:               <MFASection />,
     "login-history":   <LoginHistorySection />,
     privacy:           <PrivacySection isHR={isHR} />,
-    devices:           <ConnectedDevicesPlaceholder />,
+    devices:           <LoginHistorySection />,
     session:           <SessionPlaceholder />,
     "security-alerts": <SecurityAlertsSection />,
     notifications:     <NotificationSoundsSection />,

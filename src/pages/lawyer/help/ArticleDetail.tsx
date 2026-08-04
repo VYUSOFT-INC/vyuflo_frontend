@@ -17,9 +17,9 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 import { helpSupportApi } from '../../../api/lawyer/helpSupport.api';
 import type { HelpArticle } from '../../../types/lawyer/helpSupport.types';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 const MOCK_ARTICLE: HelpArticle = {
   id: 'art-001',
@@ -79,6 +79,7 @@ export default function ArticleDetail() {
   if (loading) {
     return (
       <div className="p-6">
+      <LawyerBackButton />
         <div className="h-96 animate-pulse rounded-xl bg-gray-100" />
       </div>
     );
@@ -99,9 +100,6 @@ export default function ArticleDetail() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4 sm:p-6">
-      {/* Back navigation — top-left, above the article header (desktop + mobile). */}
-      <LawyerBackButton className="!mb-0" />
-
       {/* Back */}
       <button onClick={() => navigate('/lawyer/help')} className="text-xs text-indigo-600 hover:underline">
         ← Back to Help

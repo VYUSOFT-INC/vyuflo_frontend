@@ -17,13 +17,13 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 import { helpSupportApi } from '../../../api/lawyer/helpSupport.api';
 import type {
   HelpNotification,
   HelpNotificationListResponse,
   NotificationCategory,
 } from '../../../types/lawyer/helpSupport.types';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 const MOCK_NOTIFICATIONS: HelpNotificationListResponse = {
   items: [
@@ -185,9 +185,7 @@ export default function HelpNotifications() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
-      {/* Back navigation — top-left, above the page header (desktop + mobile). */}
-      <LawyerBackButton className="!mb-0" />
-
+      <LawyerBackButton />
       {/* Header */}
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>

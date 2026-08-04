@@ -10,19 +10,21 @@ export default defineConfig(({ mode }) => {
     server: {
       host: true,
       port: 5174,
-      allowedHosts: ['.ngrok-free.dev', '.ngrok-free.app'],
+      // allowedHosts: ['.ngrok-free.dev', '.ngrok-free.app'],
+      allowedHosts: true,
       proxy: {
         '/api': {
           target: env.VITE_PROXY_TARGET,
           changeOrigin: true,
           secure: false,
         },
-        '/static': {
-          target: 'https://lying-cruelly-scanner.ngrok-free.dev/',
-          changeOrigin: true,
-          secure: false,
-        },
+        // '/static': {
+        //   target: env.VITE_PROXY_TARGET,
+        //   changeOrigin: true,
+        //   secure: false,
+        // },
       },
     },
   }
 })
+

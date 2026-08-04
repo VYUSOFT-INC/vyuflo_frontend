@@ -9,7 +9,7 @@ export interface User {
   phone:        string | null;
   country_code: string | null;
   // ── Auth ─────────────────────────────────────────────
-  auth_provider:    'email' | 'google' | 'microsoft' | 'apple';
+  auth_provider:    'email' | 'google' | 'microsoft' | 'apple' | 'linkedin';
   auth_provider_id: string | null;
   // ── Status ───────────────────────────────────────────
   is_active:   boolean;
@@ -39,6 +39,10 @@ export interface TokenPayload {
   profile:         string | null;
   theme_color: string | null;
   user:User
+  tour_employee_seen: boolean;
+  tour_hr_seen:       boolean;
+  tour_attorney_seen: boolean;
+  tour_admin_seen:    boolean;
   // onboarding_step:number
 }
 
@@ -62,7 +66,7 @@ export interface LoginBody {
 }
 
 export interface SSOBody {
-  provider:        'google' | 'microsoft' | 'linkedin';
+  provider:        'google' | 'microsoft' | 'apple' | 'linkedin';
   provider_token:  string;
   terms_accepted?: boolean;
 }

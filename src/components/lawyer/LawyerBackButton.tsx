@@ -44,7 +44,10 @@ export default function LawyerBackButton({
   };
 
   return (
-    <div className={`mb-3 md:mb-4 ${className}`}>
+    // Left-padding-only wrapper — mx-auto was causing flex-column parents
+    // (lawyer Settings, some admin pages) to center the chip horizontally.
+    // Fixed left inset matches most lawyer page containers' padding.
+    <div className={`px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 mb-1 ${className}`}>
       <button
         type="button"
         onClick={handleClick}

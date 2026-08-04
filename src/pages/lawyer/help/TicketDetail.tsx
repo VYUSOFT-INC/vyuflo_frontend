@@ -18,10 +18,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 import { helpSupportApi } from '../../../api/lawyer/helpSupport.api';
 import type { Ticket, TicketReply } from '../../../types/lawyer/helpSupport.types';
 import { PriorityBadge, StatusBadge } from './MyTickets';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 const MOCK_TICKET: Ticket = {
   id:             'mock-tkt-001',
@@ -152,6 +152,7 @@ export default function TicketDetail() {
   if (!ticket) {
     return (
       <div className="p-6">
+      <LawyerBackButton />
         <button onClick={() => navigate('/lawyer/help/tickets')} className="mb-4 text-xs text-indigo-600 hover:underline">
           ← Back to My Tickets
         </button>
@@ -166,9 +167,6 @@ export default function TicketDetail() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
-      {/* Back navigation — top-left, above the page header (desktop + mobile). */}
-      <LawyerBackButton className="!mb-0" />
-
       {/* Just-submitted celebration banner (Screen 35) */}
       {justSubmitted && (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center">

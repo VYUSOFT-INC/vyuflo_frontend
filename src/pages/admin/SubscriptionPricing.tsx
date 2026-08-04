@@ -4,7 +4,6 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import AdminBackButton from "../../components/admin/AdminBackButton";
 import {
   fetchPricingStats, fetchPlans, fetchActiveSubscriptions, fetchCoupons,
   createPlan, updatePlan, togglePlan, createCoupon, cancelSubscription, exportSubscriptions,
@@ -14,6 +13,7 @@ import {
 /* ── Icon imports ─────────────────────────────────────────────────── */
 import iconCheck from "../../assets/icons/subscription-pricing/feature-check.svg";
 import iconX     from "../../assets/icons/subscription-pricing/feature-x.svg";
+import AdminBackButton from '../../components/admin/AdminBackButton';
 
 // ── UI helpers ────────────────────────────────────────────────────
 function CheckIcon() { return <img src={iconCheck} alt="" style={{ width: 14, height: 11 }} />; }
@@ -146,9 +146,7 @@ export default function SubscriptionPricing() {
 
   return (
     <main className="p-4 sm:p-8" style={{ fontFamily: "'Inter',sans-serif", minHeight: "100vh", background: "#f9fafb", overflowY: "auto", display: "flex", flexDirection: "column", gap: 32 }}>
-
-      {/* Back navigation — top-left, above the page header (desktop + mobile). */}
-      <AdminBackButton className="!mb-0" />
+      <AdminBackButton />
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>

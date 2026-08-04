@@ -54,6 +54,26 @@ const documentsApi = {
     return res.data;
   },
 
+  // GET /documents/hub — all of the current user's documents across every
+  // case (scoped server-side to their own user_id), optionally filtered by
+  // a search term. Used by the "From Hub" picker.
+  listHub: async (params?: { search?: string }): Promise<Document[]> => {
+    const res = await axios.get("/documents/hub", { params });
+    return Array.isArray(res.data) ? res.data : res.data.items ?? [];
+  },
+
+  // POST /documents/:id/reuse — attach an existing Hub document to a new
+  // case WITHOUT re-uploading (duplicates the file server-side so the two
+  // rows are independent — safe to delete one without breaking the other).
+  reuse: async (sourceDocumentId: string, applicationId: string): Promise<Document> => {
+    const form = new FormData();
+    form.append("application_id", applicationId);
+    const res = await axios.post(`/documents/${sourceDocumentId}/reuse`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return res.data;
+  },
+
   // DELETE /documents/:id
   delete: async (id: string): Promise<void> => {
     await axios.delete(`/documents/${id}`);

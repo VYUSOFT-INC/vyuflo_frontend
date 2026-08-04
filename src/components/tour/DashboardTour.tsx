@@ -1,22 +1,20 @@
 // src/components/tour/DashboardTour.tsx
 //
-// Role-aware spotlight tour used by all 4 dashboards.
-// Tour state is stored in the DB (user_profiles.tour_*_seen) — not localStorage.
+// Role-aware spotlight tour for all 4 dashboards.
+// Usage:
+//   <DashboardTour role="employee" />
+//   <DashboardTour role="hr" />
+//   <DashboardTour role="attorney" />
+//   <DashboardTour role="admin" />
 //
-// Usage in each dashboard:
-//   const { data: user } = useCurrentUser();
-//   <DashboardTour role="employee" user={user} />   ← employee dashboard
-//   <DashboardTour role="hr"       user={user} />   ← HR dashboard
-//   <DashboardTour role="attorney" user={user} />   ← attorney dashboard
-//   <DashboardTour role="admin"    user={user} />   ← admin dashboard
-//
-// Re-trigger programmatically (e.g. from a ? header button):
+// Re-trigger programmatically:
 //   window.dispatchEvent(new Event('visaflow:start-tour'))
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { X, ChevronRight, ChevronLeft, HelpCircle } from 'lucide-react';
 import { useDashboardTour, type TourRole } from '../../hooks/useDashboardTour';
 import { STEPS_BY_ROLE, type TourStep } from './tourSteps';
+import { getUiSession } from '../../utils/uiSession';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -30,7 +28,7 @@ function getRect(id: string): DOMRect | null {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SPOTLIGHT OVERLAY
+// SPOTLIGHT
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface SpotlightProps {
@@ -83,41 +81,35 @@ function Spotlight({ rect, step, stepIndex, total, steps, onNext, onBack, onSkip
   return (
     <>
       {/* Dark overlay with cutout */}
-      <div
-        style={{
-          position: 'fixed', inset: 0, zIndex: 9998,
-          backgroundColor: 'rgba(0,0,0,0.55)',
-          WebkitMaskImage: `path('${maskPath}')`,
-          WebkitMaskComposite: 'xor',
-          maskImage: `path('${maskPath}')`,
-          maskComposite: 'exclude',
-          transition: 'all 0.25s ease',
-          pointerEvents: 'none',
-        }}
-      />
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 9998,
+        backgroundColor: 'rgba(0,0,0,0.55)',
+        WebkitMaskImage: `path('${maskPath}')`,
+        WebkitMaskComposite: 'xor',
+        maskImage: `path('${maskPath}')`,
+        maskComposite: 'exclude',
+        transition: 'all 0.25s ease',
+        pointerEvents: 'none',
+      }} />
 
       {/* Spotlight ring */}
-      <div
-        style={{
-          position: 'fixed', top, left, width, height,
-          zIndex: 9999,
-          border: '2px solid rgba(99,102,241,0.75)',
-          borderRadius: 14,
-          boxShadow: '0 0 0 3px rgba(99,102,241,0.2)',
-          transition: 'all 0.25s ease',
-          pointerEvents: 'none',
-        }}
-      />
+      <div style={{
+        position: 'fixed', top, left, width, height,
+        zIndex: 9999,
+        border: '2px solid rgba(99,102,241,0.75)',
+        borderRadius: 14,
+        boxShadow: '0 0 0 3px rgba(99,102,241,0.2)',
+        transition: 'all 0.25s ease',
+        pointerEvents: 'none',
+      }} />
 
-      {/* Tooltip card */}
-      <div
-        style={{
-          position: 'fixed', zIndex: 10000, width: TOOLTIP_W, ...tipStyle,
-          backgroundColor: '#fff', borderRadius: 14, padding: '16px 18px',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.18)', border: '1px solid #e2e8f0',
-          fontFamily: 'Inter, sans-serif',
-        }}
-      >
+      {/* Tooltip */}
+      <div style={{
+        position: 'fixed', zIndex: 10000, width: TOOLTIP_W, ...tipStyle,
+        backgroundColor: '#fff', borderRadius: 14, padding: '16px 18px',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.18)', border: '1px solid #e2e8f0',
+        fontFamily: 'Inter, sans-serif',
+      }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
           <div>
@@ -131,15 +123,11 @@ function Spotlight({ rect, step, stepIndex, total, steps, onNext, onBack, onSkip
               {step.title}
             </p>
           </div>
-          <button
-            onClick={onSkip}
-            style={{
-              width: 26, height: 26, borderRadius: 8, border: 'none',
-              background: '#f1f5f9', cursor: 'pointer', display: 'flex',
-              alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#64748b',
-            }}
-            aria-label="Skip tour"
-          >
+          <button onClick={onSkip} style={{
+            width: 26, height: 26, borderRadius: 8, border: 'none',
+            background: '#f1f5f9', cursor: 'pointer', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#64748b',
+          }} aria-label="Skip tour">
             <X size={13} />
           </button>
         </div>
@@ -163,40 +151,31 @@ function Spotlight({ rect, step, stepIndex, total, steps, onNext, onBack, onSkip
         {/* Nav buttons */}
         <div style={{ display: 'flex', gap: 8 }}>
           {!isFirst && (
-            <button
-              onClick={onBack}
-              style={{
-                flex: 1, height: 34, borderRadius: 9, border: '1px solid #e2e8f0',
-                background: '#fff', fontSize: 12, fontWeight: 600, color: '#64748b',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-              }}
-            >
+            <button onClick={onBack} style={{
+              flex: 1, height: 34, borderRadius: 9, border: '1px solid #e2e8f0',
+              background: '#fff', fontSize: 12, fontWeight: 600, color: '#64748b',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+            }}>
               <ChevronLeft size={13} /> Back
             </button>
           )}
-          <button
-            onClick={onNext}
-            style={{
-              flex: 2, height: 34, borderRadius: 9, border: 'none',
-              background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-              fontSize: 12, fontWeight: 600, color: '#fff',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-            }}
-          >
+          <button onClick={onNext} style={{
+            flex: 2, height: 34, borderRadius: 9, border: 'none',
+            background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+            fontSize: 12, fontWeight: 600, color: '#fff',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+          }}>
             {isLast ? 'Finish tour' : 'Next'} {!isLast && <ChevronRight size={13} />}
           </button>
         </div>
 
         {/* Skip link */}
         {!isLast && (
-          <button
-            onClick={onSkip}
-            style={{
-              display: 'block', width: '100%', marginTop: 8,
-              textAlign: 'center', fontSize: 11, color: '#94a3b8',
-              background: 'none', border: 'none', cursor: 'pointer', letterSpacing: '-0.3px',
-            }}
-          >
+          <button onClick={onSkip} style={{
+            display: 'block', width: '100%', marginTop: 8,
+            textAlign: 'center', fontSize: 11, color: '#94a3b8',
+            background: 'none', border: 'none', cursor: 'pointer', letterSpacing: '-0.3px',
+          }}>
             Skip tour
           </button>
         )}
@@ -209,54 +188,77 @@ function Spotlight({ rect, step, stepIndex, total, steps, onNext, onBack, onSkip
 // MAIN COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface TourUser {
-  tour_employee_seen?: boolean;
-  tour_hr_seen?:       boolean;
-  tour_attorney_seen?: boolean;
-  tour_admin_seen?:    boolean;
-}
-
 interface DashboardTourProps {
   role: TourRole;
-  user: TourUser | undefined | null;
 }
 
-export function DashboardTour({ role, user }: DashboardTourProps) {
+export function DashboardTour({ role }: DashboardTourProps) {
   const steps = STEPS_BY_ROLE[role] ?? [];
 
-  const [active, setActive] = useState(false);
-  const [step,   setStep]   = useState(0);
-  const [rect,   setRect]   = useState<DOMRect | null>(null);
-  const rafRef = useRef<number | null>(null);
+  const [active,   setActive]   = useState(false);
+  const [step,     setStep]     = useState(0);
+  const [rect,     setRect]     = useState<DOMRect | null>(null);
+  // Only show ? button after tour has been seen at least once
+  const [tourSeen, setTourSeen] = useState(false);
+  const rafRef     = useRef<number | null>(null);
+  const startTourRef = useRef<() => void>(() => {});
 
   const startTour = useCallback(() => {
     setStep(0);
     setActive(true);
   }, []);
 
-  const { markSeen } = useDashboardTour(role, user, startTour);
+  // Keep ref in sync — prevents stale closure in useDashboardTour
+  useEffect(() => {
+    startTourRef.current = startTour;
+  }, [startTour]);
+
+  // Stable wrapper passed to hook — ref ensures it's never stale
+  const stableStartTour = useCallback(() => {
+    startTourRef.current();
+  }, []);
+
+  const { markSeen } = useDashboardTour(role, stableStartTour);
+
+  // Read initial seen state from cookie — controls ? button visibility
+  useEffect(() => {
+    const session = getUiSession();
+    const flagMap: Record<string, string> = {
+      employee: 'tour_employee_seen',
+      hr:       'tour_hr_seen',
+      attorney: 'tour_attorney_seen',
+      admin:    'tour_admin_seen',
+    };
+    if (session?.[flagMap[role] as keyof typeof session]) {
+      setTourSeen(true);
+    }
+  }, [role]);
 
   const endTour = useCallback(() => {
     setActive(false);
+    setTourSeen(true);
     markSeen();
   }, [markSeen]);
 
-  // Allow external re-trigger from any ? button
+  // Allow manual re-trigger via PageHeader ? button
   useEffect(() => {
     const handler = () => startTour();
     window.addEventListener('visaflow:start-tour', handler);
     return () => window.removeEventListener('visaflow:start-tour', handler);
   }, [startTour]);
 
-  // Keep spotlight rect in sync with the current DOM element (rAF loop)
+  // rAF loop — keeps spotlight synced to element position
+  // Only sets rect when element exists — handles late-rendering dashboards
   useEffect(() => {
     if (!active || steps.length === 0) return;
 
     const sync = () => {
       const r = getRect(steps[step].id);
-      setRect(r);
-      const el = document.querySelector(`[data-tour="${steps[step].id}"]`);
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      if (r) {
+        setRect(r);
+        const el = document.querySelector(`[data-tour="${steps[step].id}"]`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
       rafRef.current = requestAnimationFrame(sync);
     };
 
@@ -273,22 +275,29 @@ export function DashboardTour({ role, user }: DashboardTourProps) {
 
   return (
     <>
-      {/* Floating ? button — always visible so users can replay */}
-      <button
-        onClick={startTour}
-        title="Take the tour"
-        aria-label="Start dashboard tour"
-        style={{
-          position: 'fixed', bottom: 24, right: 24, zIndex: 9997,
-          width: 40, height: 40, borderRadius: '50%',
-          background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-          border: 'none', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 4px 14px rgba(99,102,241,0.4)', color: '#fff',
-        }}
-      >
-        <HelpCircle size={18} />
-      </button>
+      {/*
+        ? replay button:
+        - Hidden on first visit (tour auto-starts, no need for button)
+        - Appears after tour is completed or skipped
+        - Hidden while tour is actively running
+      */}
+      {tourSeen && !active && (
+        <button
+          onClick={startTour}
+          title="Replay tour"
+          aria-label="Replay dashboard tour"
+          style={{
+            position: 'fixed', bottom: 24, right: 24, zIndex: 9997,
+            width: 40, height: 40, borderRadius: '50%',
+            background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+            border: 'none', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 4px 14px rgba(99,102,241,0.4)', color: '#fff',
+          }}
+        >
+          <HelpCircle size={18} />
+        </button>
+      )}
 
       {active && rect && (
         <Spotlight

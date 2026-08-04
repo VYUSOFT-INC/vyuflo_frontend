@@ -17,10 +17,9 @@
 //   • GET /documents/queue/stats    — stat tiles still derived from list
 //   ✅ PATCH /documents/{id}/status — NOW LIVE (bulk Mark In Progress wires through)
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
-import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 import { documentsApi } from '../../../api/lawyer/documents.api';
 import { intakeApi }    from '../../../api/lawyer/intake.api';
 import type {
@@ -29,6 +28,8 @@ import type {
   QueueStats,
 } from '../../../types/lawyer/documents.types';
 import { STATUS_LABELS, STATUS_COLORS } from '../../../types/lawyer/documents.types';
+
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 /* ── Status filter options ──────────────────────────────────────────── */
 const STATUS_FILTER_OPTIONS: { value: 'all' | DocumentStatus; label: string }[] = [
@@ -49,6 +50,31 @@ const DATE_RANGE_OPTIONS: { value: 'all' | 'today' | 'last_7_days' | 'last_30_da
 ];
 
 const PAGE_SIZE = 10;
+
+/* ── Grouped row shape (one row per case) ───────────────────────────── */
+interface CaseGroup {
+  key:            string;
+  application_id: string | null;
+  client_name:    string;
+  case_id:        string;
+  docs:           Document[];
+  last_updated:   string;
+}
+
+/** Pick the single "dominant" status a group should display, in priority order. */
+function groupPrimaryStatus(docs: Document[]): DocumentStatus {
+  const order: DocumentStatus[] = [
+    'action_required',
+    'rejected',
+    'pending',
+    'in_progress',
+    'approved',
+  ];
+  for (const s of order) {
+    if (docs.some((d) => d.status === s)) return s;
+  }
+  return docs[0]?.status ?? 'pending';
+}
 
 /* ── Mock fallback (used when backend returns empty so UI stays visible) */
 function buildMockDocs(): Document[] {
@@ -128,136 +154,87 @@ export default function DocumentQueue() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Selection (for bulk actions)
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+
   // Pagination
   const [page, setPage] = useState(1);
 
   /* ── Load documents ──────────────────────────────────────────────────
-   * Flow:
-   *   Employee submits documents → HR assigns application to lawyer →
-   *   documents surface here. If the employee hasn't uploaded anything yet
-   *   we still surface the application as a placeholder row so the lawyer
-   *   sees "this case is waiting for uploads" instead of a hidden empty
-   *   inbox. Opening the placeholder shows an empty state.
-   *
    * Strategy:
-   *  1. Fetch HR-assigned applications (source of truth for what's in the
-   *     lawyer's queue).
-   *  2. For each assigned application, fetch its real uploaded documents.
-   *  3. If an application has real docs → include those docs (enriched with
-   *     client_name + case_id). No placeholder row for that app.
-   *  4. If an application has NO docs → include a synthetic placeholder row
-   *     so the application is still visible in the queue.
-   *  5. Also fold in /documents/filter results (attorney-scoped) if any
-   *     land there without going through per-app enumeration.
-   *  6. Keep mock rows for dev.
+   *  1. ALWAYS fetch assigned apps first — they carry client_name +
+   *     visa_type which the /documents endpoints don't join. Without this
+   *     the UI would show "Unknown client" for every row.
+   *  2. Try GET /documents/filter (Attorney-Documents — auto-scoped to lawyer).
+   *     Enrich each returned doc with client_name + case_id from the map.
+   *  3. If filter is empty/unavailable, fall back to per-app /documents fetch
+   *     (which does the join manually).
+   *  4. If everything is still empty, fall back to mock so UI is visible.
    * ─────────────────────────────────────────────────────────────────── */
   const load = async () => {
     setLoading(true);
     setError(null);
     try {
-      // Step 1 — assigned applications (worklist)
-      let apps: Awaited<ReturnType<typeof intakeApi.listAssignedApplications>> = [];
-      try {
-        apps = await intakeApi.listAssignedApplications();
-      } catch {
-        // intake API unavailable — apps stays empty
-      }
-      const appById = new Map(apps.map((a) => [a.application_id, a]));
+      // Step 0 — always load the client name map first
+      const apps = await intakeApi.listAssignedApplications().catch(() => []);
+      const clientByAppId = new Map(
+        apps.map((a) => [
+          a.application_id,
+          {
+            client_name: a.client_name,
+            case_id:
+              `#VF-${a.application_id.slice(0, 4).toUpperCase()}` +
+              (a.visa_type ? ` · ${a.visa_type}` : ''),
+          },
+        ]),
+      );
 
-      // Helper — turn any raw Document into an enriched row (client_name +
-      // case_id from parent app) so the table doesn't show "Unknown client".
       const enrich = (doc: Document): Document => {
-        const app = doc.application_id ? appById.get(doc.application_id) : undefined;
-        if (!app) return doc;
+        const meta = doc.application_id ? clientByAppId.get(doc.application_id) : undefined;
         return {
           ...doc,
-          client_name: doc.client_name || app.client_name,
-          case_id:
-            doc.case_id ||
-            `#VF-${app.application_id.slice(0, 4).toUpperCase()}` +
-              (app.visa_type ? ` · ${app.visa_type}` : ''),
+          client_name: doc.client_name || meta?.client_name || doc.client_name,
+          case_id:     doc.case_id     || meta?.case_id     || doc.case_id,
         };
       };
 
-      // Step 2 — PRIMARY source: attorney-scoped filter endpoint. Backend
-      // now correctly returns all docs on applications assigned to this
-      // attorney (list_documents_filtered fix).
-      let filterDocs: Document[] = [];
+      // Step 1 — try filter endpoint (preferred, single call)
       try {
         const res = await documentsApi.filterDocuments({});
-        if (res.items?.length) filterDocs = res.items;
+        if (res.items?.length) {
+          setDocs(res.items.map(enrich));
+          return;
+        }
       } catch {
-        // filter endpoint not yet wired — fall back to per-app
+        // filter not yet wired or errored — try legacy fallback
       }
 
-      // Step 3 — FALLBACK: per-app fetch (only used if /filter returned
-      // nothing). Some environments haven't got the backend fix yet.
-      let perAppDocs: Document[] = [];
-      if (filterDocs.length === 0 && apps.length > 0) {
-        const results = await Promise.all(
-          apps.map((app) =>
-            documentsApi
-              .listDocuments({ application_id: app.application_id })
-              .then((res) => ({ app, items: res.items ?? [] }))
-              .catch(() => ({ app, items: [] })),
-          ),
-        );
-        perAppDocs = results.flatMap(({ items }) => items);
+      // Step 2 — legacy: per-app /documents
+      if (apps.length === 0) {
+        setDocs(buildMockDocs());
+        return;
       }
 
-      // Merge + dedupe + enrich, and drop any docs the user deleted
-      // this session (sessionStorage-backed) so they don't reappear
-      // after a soft-delete backend response.
-      const deletedIds = documentsApi.getLocallyDeletedIds();
-      const seen = new Set<string>();
-      const realDocs: Document[] = [];
-      [...filterDocs, ...perAppDocs].forEach((d) => {
-        if (seen.has(d.id)) return;
-        if (deletedIds.has(d.id)) return;
-        seen.add(d.id);
-        realDocs.push(enrich(d));
-      });
-
-      // Step 4 — placeholder rows ONLY for assigned apps that have zero
-      // real docs across BOTH sources.
-      const appsWithRealDocs = new Set(
-        realDocs.map((d) => d.application_id).filter(Boolean) as string[],
+      const results = await Promise.all(
+        apps.map((app) =>
+          documentsApi
+            .listDocuments({ application_id: app.application_id })
+            .then((res) => ({ app, items: res.items ?? [] }))
+            .catch(() => ({ app, items: [] })),
+        ),
       );
-      const placeholderRows: Document[] = apps
-        .filter((app) => !appsWithRealDocs.has(app.application_id))
-        .map((app) => {
-          const status: DocumentStatus =
-            app.status === 'intake_completed'   ? 'approved'    :
-            app.status === 'intake_in_progress' ? 'in_progress' :
-                                                  'pending';
-          const visaCode = app.visa_type_label || app.visa_type || 'Application';
-          return {
-            id:                `intake-${app.application_id}`,
-            user_id:           app.user_id || app.client_id || app.application_id,
-            application_id:    app.application_id,
-            document_type_id:  'intake-package',
-            name:              'Awaiting client uploads',
-            file_size_bytes:   0,
-            file_type:         'pdf',
-            status,
-            document_type:     `${visaCode} Application`,
-            category:          'immigration',
-            uploaded_at:       app.assigned_at,
-            verified_at:       null,
-            rejection_reason:  null,
-            total_pages:       null,
-            ocr_status:        'not_started',
-            version:           1,
-            client_name:       app.client_name,
-            case_id:           `#VF-${app.application_id.slice(0, 4).toUpperCase()}` +
-                               (app.visa_type ? ` · ${app.visa_type}` : ''),
-          } as unknown as Document;
-        });
 
-      const merged: Document[] = [...realDocs, ...placeholderRows];
+      const all: Document[] = results.flatMap(({ app, items }) =>
+        items.map((doc) => ({
+          ...doc,
+          client_name: doc.client_name || app.client_name,
+          case_id:     `#VF-${app.application_id.slice(0, 4).toUpperCase()}` +
+                       (app.visa_type ? ` · ${app.visa_type}` : ''),
+        })),
+      );
 
-      // Append mock rows so the queue is never empty during dev.
-      setDocs([...merged, ...buildMockDocs()]);
+      setDocs(all.length ? all : buildMockDocs());
     } catch (e: unknown) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ax = e as any;
@@ -310,83 +287,61 @@ export default function DocumentQueue() {
     return arr;
   }, [filtered, sortBy]);
 
-  /* ── Group by application ────────────────────────────────────────────
-   * User feedback: showing one row per uploaded document meant the same
-   * client appeared 3+ times in a row. Group by application so each
-   * client/case is a single expandable row that shows all its docs when
-   * clicked. Placeholder rows (id starts with `intake-`) and mock rows
-   * stay single because they have no siblings on the same application.
-   * ────────────────────────────────────────────────────────────────── */
-  type Group = {
-    key:            string;   // application_id or synthetic
-    client_name:    string;
-    case_id:        string;
-    docs:           Document[];
-    latest_uploaded_at: string;
-    /** Aggregated status for the header row: worst-first — action_required
-     *  > pending > in_progress > rejected > approved. */
-    aggregate_status: DocumentStatus;
-    counts: { pending: number; in_progress: number; action_required: number; approved: number; rejected: number };
-  };
-
-  const grouped = useMemo<Group[]>(() => {
-    const map = new Map<string, Group>();
-    sorted.forEach((d) => {
-      const key = d.application_id || `orphan:${d.id}`;
-      let g = map.get(key);
-      if (!g) {
-        g = {
+  /* ── Group by case (application_id | case_id) ─────────────────────── */
+  const groups = useMemo<CaseGroup[]>(() => {
+    const map = new Map<string, CaseGroup>();
+    for (const d of sorted) {
+      const key = d.application_id || d.case_id || `orphan-${d.id}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.docs.push(d);
+        // Track the newest upload as the group's last updated
+        if (new Date(d.uploaded_at).getTime() > new Date(existing.last_updated).getTime()) {
+          existing.last_updated = d.uploaded_at;
+        }
+      } else {
+        map.set(key, {
           key,
+          application_id: d.application_id || null,
           client_name: d.client_name || 'Unknown client',
-          case_id:     d.case_id || '',
-          docs:        [],
-          latest_uploaded_at: d.uploaded_at,
-          aggregate_status: d.status,
-          counts: { pending: 0, in_progress: 0, action_required: 0, approved: 0, rejected: 0 },
-        };
-        map.set(key, g);
+          case_id: d.case_id || `#VF-${(d.application_id || d.id).slice(0, 4).toUpperCase()}`,
+          docs: [d],
+          last_updated: d.uploaded_at,
+        });
       }
-      g.docs.push(d);
-      if (new Date(d.uploaded_at) > new Date(g.latest_uploaded_at)) {
-        g.latest_uploaded_at = d.uploaded_at;
-      }
-      // Count by status
-      const s = d.status as DocumentStatus;
-      if (s in g.counts) g.counts[s as keyof typeof g.counts] += 1;
-    });
-
-    // Aggregate status priority
-    const priority: DocumentStatus[] = ['action_required', 'pending', 'in_progress', 'rejected', 'approved'];
-    map.forEach((g) => {
-      const found = priority.find((p) => g.counts[p as keyof typeof g.counts] > 0);
-      if (found) g.aggregate_status = found;
-    });
-
-    // Sort groups by latest upload date desc
+    }
+    // Sort groups by newest doc within group (respects the sortBy pass above).
     return [...map.values()].sort(
-      (a, b) => new Date(b.latest_uploaded_at).getTime() - new Date(a.latest_uploaded_at).getTime(),
+      (a, b) => new Date(b.last_updated).getTime() - new Date(a.last_updated).getTime(),
     );
   }, [sorted]);
 
-  /* ── Pagination slice — page over GROUPS, not individual docs ────── */
-  const totalPages = Math.max(1, Math.ceil(grouped.length / PAGE_SIZE));
+  /* ── Pagination slice (page groups, not docs) ─────────────────────── */
+  const totalPages = Math.max(1, Math.ceil(groups.length / PAGE_SIZE));
   const pageStart = (page - 1) * PAGE_SIZE;
-  const paginatedGroups = grouped.slice(pageStart, pageStart + PAGE_SIZE);
+  const paginated = groups.slice(pageStart, pageStart + PAGE_SIZE);
   useEffect(() => { if (page > totalPages) setPage(1); }, [totalPages, page]);
 
-  /* Click a group row → jump straight to the Review page opened on the
-   * newest doc in that case. The Review page's left rail already lists every
-   * doc on the case, so the lawyer can click through docs from there (the
-   * "old flow" the user asked for). Placeholder rows (intake-…, id starts
-   * with 'intake-') go to the Case Detail's documents tab instead. */
-  const openGroup = (g: Group) => {
-    // Pick the newest real doc; fallback to the first one in the array.
-    const sorted = [...g.docs].sort(
-      (a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime(),
-    );
-    const target = sorted.find((d) => !d.id.startsWith('intake-')) ?? sorted[0];
+  /* ── Row click handler ─────────────────────────────────────────────
+   * Group row → open the newest document's review page for that case.
+   * The Review page shows a "Case Documents" rail so the attorney can
+   * page through every doc for the case without coming back here.
+   */
+  const openGroup = (g: CaseGroup) => {
+    // Prefer a still-actionable doc so the review page opens on something
+    // useful. Fall back to whatever is first.
+    const priority: DocumentStatus[] = [
+      'action_required', 'rejected', 'pending', 'in_progress', 'approved',
+    ];
+    let target: Document | undefined;
+    for (const s of priority) {
+      target = g.docs.find((d) => d.status === s);
+      if (target) break;
+    }
+    target = target || g.docs[0];
     if (!target) return;
-    handleRowAction(target);
+    const suffix = g.application_id ? `?application_id=${g.application_id}` : '';
+    navigate(`/lawyer/documents/${target.id}/review${suffix}`);
   };
 
   /* ── KPI stats (derived) ──────────────────────────────────────────── */
@@ -402,32 +357,62 @@ export default function DocumentQueue() {
     };
   }, [docs]);
 
-  /* ── Row action handler ───────────────────────────────────────────── */
-  // ✅ Route matches App.tsx: /lawyer/documents/:documentId/review
-  //
-  // Placeholder rows (intake-<app_id>) have no real document behind them, so
-  // route them to the Case Detail page instead where the empty-state / awaiting
-  // uploads UI already lives.
-  const handleRowAction = (doc: Document) => {
-    if (doc.id.startsWith('intake-')) {
-      navigate(`/lawyer/cases/${doc.application_id}?tab=documents`);
-      return;
+  /* ── Selection helpers ────────────────────────────────────────────── */
+  /** Every doc across every group currently paginated (used for select-all). */
+  const paginatedDocIds = useMemo(
+    () => paginated.flatMap((g) => g.docs.map((d) => d.id)),
+    [paginated],
+  );
+  const toggleSelectAll = () => {
+    if (paginatedDocIds.length > 0 && paginatedDocIds.every((id) => selected.has(id))) {
+      const next = new Set(selected);
+      paginatedDocIds.forEach((id) => next.delete(id));
+      setSelected(next);
+    } else {
+      const next = new Set(selected);
+      paginatedDocIds.forEach((id) => next.add(id));
+      setSelected(next);
     }
-    // Pass application_id via URL — ReviewPage uses it as a fallback when
-    // the doc-detail endpoint 403s (which nulls out doc.application_id in
-    // state via placeholder). Ensures Request Additional Document has a
-    // valid UUID to send.
-    const qs = doc.application_id ? `?application_id=${doc.application_id}` : '';
-    navigate(`/lawyer/documents/${doc.id}/review${qs}`);
+  };
+  /** Toggle every doc inside a group at once (used from the group header). */
+  const toggleGroupSelect = (g: CaseGroup) => {
+    const ids = g.docs.map((d) => d.id);
+    const allSel = ids.every((id) => selected.has(id));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allSel) ids.forEach((id) => next.delete(id));
+      else        ids.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  /* ── Bulk actions ─────────────────────────────────────────────────── */
+  // ✅ Backend NOW supports PATCH /documents/{id}/status — wire it through
+  const handleMarkInProgress = async () => {
+    if (selected.size === 0) { alert('Select at least one document.'); return; }
+    setBulkBusy(true);
+    try {
+      await Promise.all(
+        [...selected].map((id) =>
+          documentsApi.updateDocumentStatus(id, { status: 'in_progress' }),
+        ),
+      );
+    } catch (e) {
+      console.error(e);
+      // Fall through — we still apply the optimistic UI update.
+    } finally {
+      // Optimistic local update + clear selection (runs even if backend hiccups)
+      setDocs((curr) => curr.map((d) => (selected.has(d.id) ? { ...d, status: 'in_progress' } : d)));
+      setSelected(new Set());
+      setBulkBusy(false);
+    }
   };
 
   /* ── Render ──────────────────────────────────────────────────────── */
   return (
     <div className="min-h-screen bg-slate-50">
+      <LawyerBackButton />
       <main className="mx-auto max-w-[1280px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
-
-        {/* Back navigation — top-left, above the page header (desktop + mobile). */}
-        <LawyerBackButton />
 
         {/* Header */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -494,8 +479,15 @@ export default function DocumentQueue() {
               <option value="status">Sort: Status</option>
             </Select>
           </div>
-          {/* Bulk actions removed — with group rows, per-doc selection UI
-              lives inside the Review page instead. */}
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleMarkInProgress}
+              disabled={selected.size === 0 || bulkBusy}
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {bulkBusy ? 'Saving…' : 'Mark In Progress'}
+            </button>
+          </div>
         </div>
 
         {/* Table */}
@@ -517,7 +509,14 @@ export default function DocumentQueue() {
                 <table className="w-full min-w-[800px] text-left text-sm">
                   <thead className="border-b border-gray-100 bg-gray-50/60">
                     <tr className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                      <th className="w-8 px-4 py-3" />
+                      <th className="w-8 px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={paginatedDocIds.length > 0 && paginatedDocIds.every((id) => selected.has(id))}
+                          onChange={toggleSelectAll}
+                          className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                      </th>
                       <th className="px-4 py-3">Client / Case ID</th>
                       <th className="px-4 py-3">Documents</th>
                       <th className="px-4 py-3">Last Updated</th>
@@ -526,84 +525,14 @@ export default function DocumentQueue() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {paginatedGroups.map((g) => (
-                      <tr
+                    {paginated.map((g) => (
+                      <GroupRow
                         key={g.key}
-                        className="cursor-pointer hover:bg-gray-50"
-                        onClick={() => openGroup(g)}
-                      >
-                        {/* Empty gutter (used to hold expand arrow) */}
-                        <td className="px-4 py-3" />
-
-                        {/* ── CLIENT / CASE ID + VISA (all highlighted) ── */}
-                        <td className="px-4 py-3">
-                          <div className="text-base font-bold text-gray-900 leading-tight">
-                            {g.client_name}
-                          </div>
-                          {g.case_id && (
-                            <div className="mt-1 text-sm font-semibold text-gray-700 leading-tight">
-                              {g.case_id}
-                            </div>
-                          )}
-                        </td>
-
-                        <td className="px-4 py-3 text-sm text-gray-700">
-                          {g.docs.length === 1
-                            ? '1 document'
-                            : `${g.docs.length} documents`}
-                          <div className="mt-0.5 flex flex-wrap gap-1 text-[10px]">
-                            {g.counts.action_required > 0 && (
-                              <span className="rounded-full bg-red-100 px-1.5 py-0.5 font-medium text-red-700">
-                                {g.counts.action_required} action
-                              </span>
-                            )}
-                            {g.counts.pending > 0 && (
-                              <span className="rounded-full bg-blue-100 px-1.5 py-0.5 font-medium text-blue-700">
-                                {g.counts.pending} pending
-                              </span>
-                            )}
-                            {g.counts.in_progress > 0 && (
-                              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 font-medium text-amber-700">
-                                {g.counts.in_progress} in progress
-                              </span>
-                            )}
-                            {g.counts.approved > 0 && (
-                              <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 font-medium text-emerald-700">
-                                {g.counts.approved} approved
-                              </span>
-                            )}
-                            {g.counts.rejected > 0 && (
-                              <span className="rounded-full bg-gray-200 px-1.5 py-0.5 font-medium text-gray-700">
-                                {g.counts.rejected} rejected
-                              </span>
-                            )}
-                          </div>
-                        </td>
-
-                        <td className="px-4 py-3 text-xs text-gray-500">
-                          {new Date(g.latest_uploaded_at).toLocaleDateString('en-US', {
-                            month: 'short', day: 'numeric', year: 'numeric',
-                          })}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          <span
-                            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                            style={{
-                              backgroundColor: (STATUS_COLORS[g.aggregate_status]?.bg) ?? '#f3f4f6',
-                              color:            (STATUS_COLORS[g.aggregate_status]?.text) ?? '#374151',
-                            }}
-                          >
-                            {STATUS_LABELS[g.aggregate_status] ?? g.aggregate_status}
-                          </span>
-                        </td>
-
-                        <td className="px-4 py-3 text-right text-xs">
-                          <span className="font-semibold text-indigo-600 hover:text-indigo-700">
-                            Open →
-                          </span>
-                        </td>
-                      </tr>
+                        group={g}
+                        selectedIds={selected}
+                        onToggleGroupSelect={() => toggleGroupSelect(g)}
+                        onOpen={() => openGroup(g)}
+                      />
                     ))}
                   </tbody>
                 </table>
@@ -613,8 +542,8 @@ export default function DocumentQueue() {
               <div className="flex flex-col items-center justify-between gap-3 border-t border-gray-100 px-4 py-3 sm:flex-row sm:px-6">
                 <p className="text-xs text-gray-500">
                   Showing <span className="font-semibold text-gray-700">{pageStart + 1}</span> to{' '}
-                  <span className="font-semibold text-gray-700">{Math.min(pageStart + PAGE_SIZE, grouped.length)}</span> of{' '}
-                  <span className="font-semibold text-gray-700">{grouped.length}</span> cases · {sorted.length} docs
+                  <span className="font-semibold text-gray-700">{Math.min(pageStart + PAGE_SIZE, groups.length)}</span> of{' '}
+                  <span className="font-semibold text-gray-700">{groups.length}</span> case{groups.length === 1 ? '' : 's'}
                 </p>
                 <div className="flex items-center gap-2">
                   <button
@@ -653,7 +582,7 @@ function StatCard({
 }: {
   label: string;
   value: number;
-  icon: ReactNode;
+  icon: React.ReactNode;
   iconBg: string;
 }) {
   return (
@@ -668,6 +597,81 @@ function StatCard({
         </div>
       </div>
     </div>
+  );
+}
+
+/* ── Grouped-by-case row (one row per case, no inline expansion) ────
+ * Click anywhere on the row → open the newest actionable document's
+ * review page for that case. From there, the sibling rail on Review
+ * lets the attorney page through every doc for the same case, so
+ * the queue itself doesn't need to render document sub-rows.  */
+function GroupRow({
+  group,
+  selectedIds,
+  onToggleGroupSelect,
+  onOpen,
+}: {
+  group: CaseGroup;
+  selectedIds: Set<string>;
+  onToggleGroupSelect: () => void;
+  onOpen: () => void;
+}) {
+  const docCount = group.docs.length;
+  const primary  = groupPrimaryStatus(group.docs);
+  const cfg      = STATUS_COLORS[primary] ?? STATUS_COLORS.pending;
+
+  const bucketCount = group.docs.filter((d) => d.status === primary).length;
+  const bucketLabel = STATUS_LABELS[primary]?.toLowerCase() ?? primary;
+
+  const allDocsSelected =
+    docCount > 0 && group.docs.every((d) => selectedIds.has(d.id));
+
+  return (
+    <tr
+      className={`cursor-pointer hover:bg-gray-50 ${allDocsSelected ? 'bg-indigo-50/40' : ''}`}
+      onClick={onOpen}
+    >
+      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+        <input
+          type="checkbox"
+          checked={allDocsSelected}
+          onChange={onToggleGroupSelect}
+          className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+        />
+      </td>
+      <td className="px-4 py-3">
+        <p className="text-sm font-semibold text-gray-900">
+          {group.client_name || 'Unknown client'}
+        </p>
+        <p className="text-xs text-gray-500">{group.case_id}</p>
+      </td>
+      <td className="px-4 py-3">
+        <p className="text-sm text-gray-700">
+          {docCount} document{docCount === 1 ? '' : 's'}
+        </p>
+        <span className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${cfg.bg} ${cfg.text}`}>
+          {bucketCount} {bucketLabel}
+        </span>
+      </td>
+      <td className="px-4 py-3">
+        <p className="text-sm text-gray-700">{formatDate(group.last_updated)}</p>
+        <p className="text-xs text-gray-400">{formatTime(group.last_updated)}</p>
+      </td>
+      <td className="px-4 py-3">
+        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${cfg.bg} ${cfg.text}`}>
+          <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+          {STATUS_LABELS[primary] ?? primary}
+        </span>
+      </td>
+      <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+        <button
+          onClick={onOpen}
+          className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+        >
+          Open →
+        </button>
+      </td>
+    </tr>
   );
 }
 
@@ -710,7 +714,7 @@ function Select({
 }: {
   value: string;
   onChange: (v: string) => void;
-  children: ReactNode;
+  children: React.ReactNode;
 }) {
   return (
     <select
@@ -723,5 +727,10 @@ function Select({
   );
 }
 
-/* Helper functions (formatDate/formatTime) were removed along with the
-   per-doc Row component — the grouped table doesn't need them. */
+/* ── Helpers ────────────────────────────────────────────────────────── */
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}

@@ -6,13 +6,13 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 import { billingApi } from '../../../api/lawyer/billing.api';
 import type {
   BillingClient,
   BillingClientListResponse,
   ClientType,
 } from '../../../types/lawyer/billing.types';
+import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
 /* ── Mock fallback ─────────────────────────────────────────────────────── */
 const MOCK_CLIENTS: BillingClientListResponse = {
@@ -74,9 +74,7 @@ export default function BillingClientsList() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
-      {/* Back navigation — top-left, above the page header (desktop + mobile). */}
-      <LawyerBackButton className="!mb-0" />
-
+      <LawyerBackButton />
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <button onClick={() => navigate('/lawyer/billing')} className="mb-2 text-xs text-indigo-600 hover:underline">
