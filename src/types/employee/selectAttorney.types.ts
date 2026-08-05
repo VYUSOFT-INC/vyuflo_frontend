@@ -87,6 +87,7 @@ export interface AttorneyFilters {
   visaTypes:     string[];
   languages:     string[];
   minRating:     number;
+  minFeeDollars: number | null;
   maxFeeDollars: number | null;
   availability:  AttorneyAvailability;
   sortBy:        AttorneySortBy;
@@ -98,6 +99,7 @@ export const DEFAULT_FILTERS: AttorneyFilters = {
   visaTypes:     [],
   languages:     [],
   minRating:     0,
+  minFeeDollars: null,
   maxFeeDollars: null,
   availability:  "All",
   sortBy:        "rating",
@@ -125,6 +127,7 @@ export interface FetchAttorneysParams {
   visa_types?:    string[];
   languages?:     string[];
   min_rating?:    number;
+  min_fee_cents?: number;
   max_fee_cents?: number;
   availability?:  string;
   sort_by?:       string;

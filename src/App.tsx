@@ -356,7 +356,8 @@ import SecureMessaging       from './pages/employee/SecureMessaging';
 import NotificationsCenterV2 from './pages/employee/NotificationsCenterV2';
 import ProfileSecurity       from './pages/employee/ProfileSecurity';
 import PaymentsScreen        from './pages/employee/PaymentsScreen';
-import SelectAttorney        from './pages/employee/SelectAttorney'; 
+import SelectAttorney        from './pages/employee/SelectAttorney';
+import AttorneyDetail        from './pages/employee/AttorneyDetail';
 import BookConsultation      from './pages/employee/BookConsultation';
 import ConnectEmployer       from './pages/employee/ConnectEmployer';
 
@@ -389,6 +390,7 @@ import AdminHelpSupport       from './pages/admin/HelpSupport';
 import AdminNotificationsPage from './pages/admin/AdminNotificationsPage';
 
 // ── lawyer (attorney) pages ──────────────────────────────────────────────────
+import NewCasePage from './pages/lawyer/cases/NewCasePage';
 import IntakeLanding      from './pages/lawyer/intake/IntakeLanding';
 import IntakeWizard       from './pages/lawyer/intake/IntakeWizard';
 import ClientIntakePortal from './pages/lawyer/intake/ClientIntakePortal';
@@ -512,8 +514,9 @@ export default function App() {
               <Route path="/messages"                         element={<SecureMessaging />} />
               <Route path="/notifications"                    element={<NotificationsCenterV2 />} />
                <Route path="/payments"                         element={<PaymentsScreen />} /> 
-              <Route path="/consultations"                    element={<SelectAttorney />} /> 
-              <Route path="/consultations/book/:attorneyId"   element={<BookConsultation />} /> 
+              <Route path="/consultations"                      element={<SelectAttorney />} />
+              <Route path="/consultations/attorney/:attorneyId" element={<AttorneyDetail />} />
+              <Route path="/consultations/book/:attorneyId"     element={<BookConsultation />} />
               <Route path="/profile"                          element={<ProfileSecurity />} />
               <Route path="/profile/authentication"           element={<ProfileSecurity />} />
               <Route path="/profile/mfa"                      element={<ProfileSecurity />} />
@@ -578,6 +581,7 @@ export default function App() {
             <Route path="/lawyer" element={<Navigate to="/lawyer/dashboard" replace />} />
             <Route element={<DashboardLayout />}>
               <Route path="/lawyer/dashboard"                     element={<LawyerDashboardPage />} />
+              <Route path="/lawyer/cases/new" element={<NewCasePage />} />
               <Route path="/lawyer/intake"                        element={<IntakeLanding />} />
               <Route path="/lawyer/cases"                         element={<CaseListPage />} />
               <Route path="/lawyer/cases/:caseId"                 element={<CaseDetailPage />} />
