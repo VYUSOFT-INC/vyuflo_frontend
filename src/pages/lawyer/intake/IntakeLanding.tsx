@@ -17,6 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import { intakeApi } from '../../../api/lawyer/intake.api';
 import type { AssignedApplication, IntakeStatus } from '../../../types/lawyer/intake.types';
 import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
+import { readLocalCases, seedToAssignedApp } from '../../../lib/lawyerLocalCases';
 // Note: "View Profile" button is added to each card. It navigates to
 // /lawyer/clients/{client_id}. Until backend includes `client_id` in the
 // /lawyer/applications response, the button is shown but disabled with a
@@ -56,7 +57,17 @@ export default function IntakeLanding() {
     setError(null);
     try {
       const res = await intakeApi.listAssignedApplications();
-      setApps(res);
+      // Merge locally-created cases (from New Case wizard) so they
+      // appear here alongside HR-assigned intakes. De-duped by application_id.
+      const localApps = readLocalCases().map(seedToAssignedApp);
+      const seen = new Set<string>();
+      const merged: AssignedApplication[] = [];
+      for (const a of [...localApps, ...(res || [])]) {
+        if (seen.has(a.application_id)) continue;
+        seen.add(a.application_id);
+        merged.push(a);
+      }
+      setApps(merged);
     } catch (e: unknown) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ax = e as any;
