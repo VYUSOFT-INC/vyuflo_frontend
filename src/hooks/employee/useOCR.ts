@@ -12,6 +12,7 @@ function mapSavedField(f: {
   confidence_score: number | null;
   needs_review: boolean;
   is_confirmed: boolean;
+  is_mandatory?: boolean;
 }): OCRField {
   return {
     id:               f.id,
@@ -20,6 +21,7 @@ function mapSavedField(f: {
     confidence_score: f.confidence_score ?? 0,
     needs_review:     f.needs_review,
     is_confirmed:     f.is_confirmed,
+    is_mandatory:     f.is_mandatory ?? false,
     is_editing:       false,
     edit_value:       f.extracted_value ?? "",
   };
@@ -28,6 +30,14 @@ function mapSavedField(f: {
 function calcAvg(fields: OCRField[]): number {
   if (!fields.length) return 0;
   return Math.round(fields.reduce((s, f) => s + f.confidence_score, 0) / fields.length);
+}
+
+// Fields marked mandatory (by admin config) that are still empty —
+// checks edit_value first since that's what the user is actively typing.
+function getMissingMandatory(fields: OCRField[]): string[] {
+  return fields
+    .filter(f => f.is_mandatory && !(f.edit_value || f.extracted_value || "").trim())
+    .map(f => f.field_name);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -41,10 +51,15 @@ export function useOCR(documentId: string | undefined) {
   const [typeMismatch,  setTypeMismatch] = useState(false);
   const [expectedType,  setExpectedType] = useState<string | null>(null);
 
+  const missingMandatoryFields = getMissingMandatory(fields);
+
   // ── Main load function — called once file blob is ready ───────────────────
-  // No expected-type param anymore. The backend resolves it server-side from
-  // Document.document_type_id -> DocumentType.ocr_slug and returns
-  // type_mismatch / expected_type directly — nothing to guess here.
+  // NOTE: known gap — the fresh OCR-extract path (Step 2 below) hits
+  // /documents/:id/ocr-extract, which runs run_extraction() directly and
+  // never learned about DocumentFieldConfiguration. is_mandatory will be
+  // false for everything on a document's very first view. It becomes
+  // accurate once fields reload from the DB (the "db" branch below), which
+  // does go through the updated get_ocr_fields().
   const loadFields = useCallback(async (blob: Blob, fileName: string) => {
     if (!documentId) return;
     setIsLoading(true);
@@ -69,25 +84,20 @@ export function useOCR(documentId: string | undefined) {
         ? fileName
         : `document_${Date.now()}.jpg`;
 
-      // Goes through the shared authenticated axios instance — NOT raw
-      // fetch(). fetch() only sent cookies via credentials:"include", but
-      // this backend expects a Bearer token in the Authorization header,
-      // which only the axios interceptor attaches. That mismatch was the
-      // entire cause of the 401s on this one call while every other
-      // ocrApi/documentsApi call succeeded.
       const data = await ocrApi.extract(documentId, blob, safeName);
 
       setDetectedType(data.document_type);
       setExpectedType(data.expected_type ?? null);
-      setTypeMismatch(data.type_mismatch);   // ← comes straight from the backend, no local matching
+      setTypeMismatch(data.type_mismatch);
 
       const mapped: OCRField[] = data.fields.map((f, i) => ({
-        id:               `f-${i}`,   // temp local ID — replaced with real UUID after saveFields()
+        id:               `f-${i}`,
         field_name:       f.field_name,
         extracted_value:  f.extracted_value,
         confidence_score: f.confidence_score,
         needs_review:     f.needs_review,
         is_confirmed:     false,
+        is_mandatory:     f.is_mandatory ?? false,
         is_editing:       false,
         edit_value:       f.extracted_value,
       }));
@@ -106,6 +116,15 @@ export function useOCR(documentId: string | undefined) {
   // ── Submit / Update ───────────────────────────────────────────────────────
   const submitFields = useCallback(async () => {
     if (!documentId || !fields.length) return;
+
+    // Block submission client-side if any mandatory field is still empty.
+    // This is the primary UX guard; the backend (save_or_update_ocr_fields)
+    // enforces the same rule server-side as the real, unbypassable check.
+    const missing = getMissingMandatory(fields);
+    if (missing.length > 0) {
+      setError(`Please fill in required field(s): ${missing.join(", ")}`);
+      return;
+    }
 
     const snapshot = fields;
 
@@ -137,6 +156,10 @@ export function useOCR(documentId: string | undefined) {
         console.warn("[useOCR] confirmDocument failed:", e);
       }
     } catch (e) {
+      // Surface backend validation errors (e.g. "Cannot save — missing
+      // required field(s): ...") instead of only logging them.
+      const message = e instanceof Error ? e.message : "Failed to save fields.";
+      setError(message);
       console.warn("[useOCR] submitFields failed:", e);
     }
   }, [documentId, fields]);
@@ -181,7 +204,8 @@ export function useOCR(documentId: string | undefined) {
     source,
     detectedType,
     typeMismatch,
-    expectedType,       // ← exposed for the banner if you want it, doc?.document_type is fine too
+    expectedType,
+    missingMandatoryFields,
     loadFields,
     submitFields,
     confirmField,
