@@ -22,6 +22,63 @@ import type { ClientProfileResponse } from '../../../types/lawyer/clients.types'
 import type { AssignedApplication } from '../../../types/lawyer/intake.types';
 import type { Document } from '../../../types/lawyer/documents.types';
 import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
+import { readLocalCases, seedToAssignedApp } from '../../../lib/lawyerLocalCases';
+
+/** True when this profile came from a locally-created wizard seed (not backend). */
+function isLocalProfile(profile: ClientProfileResponse): boolean {
+  return readLocalCases().some(
+    (c) => c.client_user_id === profile.client_id || c.id === profile.client_id,
+  );
+}
+
+/** Build a minimal ClientProfileResponse from a local (wizard-created) case
+ *  so lawyers can still open "View Profile" for cases they created
+ *  themselves — even though those clients aren't in the HR-assigned list
+ *  yet. */
+function buildLocalProfile(clientId: string): ClientProfileResponse | null {
+  const seeds = readLocalCases().filter(
+    (c) => c.client_user_id === clientId || c.id === clientId,
+  );
+  if (seeds.length === 0) return null;
+
+  // Newest seed drives the hero. Older ones show as extra cases in the tab.
+  const primary = seeds[0];
+  const firstName = (primary.client_name.split(' ')[0] || '').trim();
+  const lastName  = (primary.client_name.split(' ').slice(1).join(' ') || '').trim();
+  const initials  = `${firstName[0] ?? ''}${lastName[0] ?? ''}`.toUpperCase() || '?';
+
+  return {
+    client_id:              primary.client_user_id,
+    full_name:              primary.client_name,
+    initials,
+    email:                  primary.client_email,
+    phone:                  null,
+    nationality:            null,
+    country_of_residence:   null,
+    date_of_birth:          null,
+    gender:                 null,
+    timezone:               null,
+    preferred_language:     null,
+    profile_picture_url:    null,
+    current_visa_status:    primary.visa_type_code ?? null,
+    onboarding_completed:   null,
+    onboarding_step:        null,
+    client_since:           primary.created_at,
+    updated_at:             primary.created_at,
+    total_cases:            seeds.length,
+    active_cases:           seeds.length,
+    active_case: {
+      application_id:  primary.id,
+      case_number:     primary.case_reference,
+      visa_type_code:  primary.visa_type_code,
+      visa_type_name:  primary.visa_type_label,
+      status:          'in_progress',
+      current_stage:   'Intake — you created this case',
+      progress_percent: 10,
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any;
+}
 
 type Tab = 'overview' | 'cases' | 'documents' | 'messages' | 'notes';
 
@@ -47,6 +104,16 @@ export default function ClientProfilePage() {
     (async () => {
       if (!clientId) { setError('Missing client ID.'); setLoading(false); return; }
       setLoading(true); setError(null);
+
+      // Fast path — client from a locally-created case (New Case wizard).
+      // Backend doesn't know about these yet, so `/lawyer/applications`
+      // returns 403. Serve a minimal profile from localStorage instead.
+      const localProfile = buildLocalProfile(clientId);
+      if (localProfile) {
+        if (!cancelled) { setProfile(localProfile); setLoading(false); }
+        return;
+      }
+
       try {
         const data = await clientsApi.getClientProfile(clientId);
         if (!cancelled) setProfile(data);
@@ -454,6 +521,21 @@ function CasesTab({ profile }: { profile: ClientProfileResponse }) {
     let cancelled = false;
     (async () => {
       setLoading(true); setError(null);
+
+      // For locally-created profiles (New Case wizard), scope strictly to
+      // the seeds matching this client_user_id — don't hit the HR-assigned
+      // worklist (which would leak other clients' cases via name match).
+      if (isLocalProfile(profile)) {
+        const seedsForThisClient = readLocalCases().filter(
+          (c) => c.client_user_id === profile.client_id,
+        );
+        if (!cancelled) {
+          setApps(seedsForThisClient.map(seedToAssignedApp));
+          setLoading(false);
+        }
+        return;
+      }
+
       try {
         const all = await intakeApi.listAssignedApplications();
         const mine = all.filter((a) => matchesClient(a, profile));
@@ -609,6 +691,22 @@ function DocumentsTab({ profile }: { profile: ClientProfileResponse }) {
     let cancelled = false;
     (async () => {
       setInitLoading(true);
+
+      // Locally-created profile → strictly scope to wizard-seeded cases
+      // and skip the doc fetch (no docs uploaded yet for these cases).
+      if (isLocalProfile(profile)) {
+        const seedsForThisClient = readLocalCases().filter(
+          (c) => c.client_user_id === profile.client_id,
+        );
+        const localApps = seedsForThisClient.map(seedToAssignedApp);
+        if (!cancelled) {
+          setOpenIds(new Set(localApps.slice(0, 1).map((a) => a.application_id)));
+          setGroups(localApps.map((a) => ({ app: a, docs: [], loading: false, error: null })));
+          setInitLoading(false);
+        }
+        return;
+      }
+
       try {
         const all = await intakeApi.listAssignedApplications();
         const mine = all.filter((a) => matchesClient(a, profile));

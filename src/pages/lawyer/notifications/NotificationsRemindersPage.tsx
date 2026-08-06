@@ -20,6 +20,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { notifRemindersApi } from '../../../api/lawyer/notifReminders.api';
+import { helpSupportApi } from '../../../api/lawyer/helpSupport.api';
 import { listLocalReminders } from '../../../utils/localReminders';
 import type {
   NotificationUpdate,
@@ -27,7 +28,38 @@ import type {
   ReminderItem,
   RemindersTab,
 } from '../../../types/lawyer/notifReminders.types';
+import type { HelpNotification } from '../../../types/lawyer/helpSupport.types';
 import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
+
+/* Adapt a HelpNotification (used by /lawyer/help/notifications) into
+ * the NotificationUpdate shape used by this screen so both flow into
+ * the same "All Updates" tab. */
+function helpNotifToUpdate(n: HelpNotification): NotificationUpdate {
+  // Derive a friendly badge label from notification_type: "case_update" → "Case Update"
+  const badge = (n.notification_type || 'update')
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+  return {
+    id:                n.id,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    notification_type: (n.notification_type as any) ?? 'update',
+    badge_label:       badge,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    category:          n.category as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    priority:          n.priority as any,
+    title:             n.title,
+    body:              n.body,
+    client_name:       null,
+    visa_type_code:    null,
+    case_reference:    n.case_reference || null,
+    created_at:        n.created_at,
+    is_read:           n.is_read,
+    is_dismissed:      n.is_dismissed,
+    show_unread_dot:   !n.is_read,
+  };
+}
 
 /* ════════════════════════════════════════════════════════════════════
    MOCK FALLBACK (same shape as backend) — kept inline like other modules.
@@ -278,10 +310,35 @@ export default function NotificationsRemindersPage() {
         .catch(() => setDeadlines(MOCK_DEADLINES))
         .finally(() => setLoading(false));
     } else {
-      notifRemindersApi.listUpdates({ limit: 30 })
-        .then((r) => setUpdates(r.items?.length ? r.items : MOCK_UPDATES))
-        .catch(() => setUpdates(MOCK_UPDATES))
-        .finally(() => setLoading(false));
+      // Merge order (later wins on id collision):
+      //   1. MOCK_UPDATES                    — demo seed (lowest priority)
+      //   2. /help/notifications items        — same feed the Help screen shows
+      //   3. /notifications/updates items    — dedicated updates endpoint
+      // Both real endpoints run in parallel; whichever returns rows contributes.
+      Promise.all([
+        notifRemindersApi.listUpdates({ limit: 30 }).catch(() => null),
+        helpSupportApi.listNotifications({ limit: 30 }).catch(() => null),
+      ]).then(([updatesRes, helpRes]) => {
+        const updates = updatesRes?.items ?? [];
+        const helpNotifs = (helpRes?.items ?? []).map(helpNotifToUpdate);
+        const combined = [...updates, ...helpNotifs];
+
+        if (combined.length === 0) {
+          setUpdates(MOCK_UPDATES);
+        } else {
+          // De-dupe by id, keep newest by created_at first.
+          const seen = new Set<string>();
+          const merged: NotificationUpdate[] = [];
+          for (const n of combined.sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+          )) {
+            if (seen.has(n.id)) continue;
+            seen.add(n.id);
+            merged.push(n);
+          }
+          setUpdates(merged);
+        }
+      }).finally(() => setLoading(false));
     }
   }, [activeTab, includePast]);
 

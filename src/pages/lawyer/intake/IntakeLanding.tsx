@@ -231,6 +231,11 @@ function ApplicationCard({
   const cfg = statusConfig[app.status];
   const navigate = useNavigate();
 
+  // Lawyer-created cases (via New Case wizard) come from localStorage —
+  // their application_id starts with "mock-case-" (see lawyerLocalCases.ts).
+  // Detect that so we can visually distinguish them from HR-assigned ones.
+  const isSelfCreated = app.application_id?.startsWith("mock-case-") ?? false;
+
   // Use the application_id we ALREADY have — no pre-fetch needed.
   // The profile page looks this up in the assigned-applications list
   // (its own security boundary) and aggregates the data from there.
@@ -239,9 +244,29 @@ function ApplicationCard({
   };
 
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md sm:flex-row sm:items-start">
+    <div className={`relative flex flex-col gap-4 rounded-xl border p-5 shadow-sm transition-shadow hover:shadow-md sm:flex-row sm:items-start overflow-hidden ${
+      isSelfCreated
+        ? 'border-2 border-amber-300 bg-gradient-to-br from-amber-50/60 via-orange-50/40 to-white ring-1 ring-amber-100'
+        : 'border-gray-200 bg-white'
+    }`}>
+      {/* Left accent stripe — slim amber/orange stripe for self-created */}
+      {isSelfCreated && (
+        <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-amber-400 via-orange-500 to-amber-600" />
+      )}
+
+      {/* Corner ribbon for self-created cases */}
+      {isSelfCreated && (
+        <div className="absolute top-0 right-0 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[9px] font-bold uppercase tracking-wider px-3 py-1 rounded-bl-lg shadow-sm">
+          ⭐ Self-created
+        </div>
+      )}
+
       {/* Avatar */}
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 text-sm font-semibold text-indigo-700">
+      <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
+        isSelfCreated
+          ? 'bg-gradient-to-br from-amber-100 to-orange-100 text-amber-800 ring-2 ring-amber-200'
+          : 'bg-gradient-to-br from-indigo-100 to-purple-100 text-indigo-700'
+      }`}>
         {initials(app.client_name)}
       </div>
 
@@ -252,14 +277,18 @@ function ApplicationCard({
             <p className="text-base font-semibold text-gray-900">{app.client_name || 'Unknown client'}</p>
             <p className="truncate text-xs text-gray-500">{app.client_email || '—'}</p>
           </div>
-          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cfg.bg} ${cfg.text}`}>
+          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+            isSelfCreated ? 'mt-6 ' : ''
+          }${cfg.bg} ${cfg.text}`}>
             {cfg.label}
           </span>
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
           {app.visa_type && (
-            <span className="rounded-md bg-indigo-50 px-2 py-0.5 font-mono font-semibold text-indigo-700">{app.visa_type}</span>
+            <span className={`rounded-md px-2 py-0.5 font-mono font-semibold ${
+              isSelfCreated ? 'bg-amber-100 text-amber-800' : 'bg-indigo-50 text-indigo-700'
+            }`}>{app.visa_type}</span>
           )}
           {app.visa_type_label && <span className="text-gray-600">{app.visa_type_label}</span>}
         </div>
@@ -287,14 +316,14 @@ function ApplicationCard({
           <button
             onClick={onAction}
             disabled={starting}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity ${
+            className={`group flex flex-1 items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all cursor-pointer ${
               app.status === 'intake_completed'
-                ? 'bg-emerald-600 hover:bg-emerald-700'
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700'
                 : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-90'
             } disabled:cursor-not-allowed disabled:opacity-60`}
           >
             {starting ? 'Starting…' : cfg.action}
-            {!starting && <span>→</span>}
+            {!starting && <span className="opacity-80 group-hover:translate-x-0.5 transition-transform">→</span>}
           </button>
 
           {/* View Profile — uses client_id if available, else application_id */}

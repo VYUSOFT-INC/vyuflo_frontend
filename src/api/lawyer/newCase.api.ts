@@ -5,6 +5,7 @@
 // testable before backend deploys.
 
 import axios from "../axios";
+import { visaChecklistApi, type BackendVisaType } from "../../api/employee/visaChecklist.api";
 import type {
   ConsultedClient,
   NewCaseCreateRequest,
@@ -13,43 +14,68 @@ import type {
 } from "../../types/lawyer/newCase.types";
 import { DEFAULT_VISA_TYPES } from "../../types/lawyer/newCase.types";
 
-/** Categorise a backend visa code into one of the 4 tabs. */
+/** Categorise a backend visa code into one of the 4 wizard tabs. */
 function categoriseVisa(code: string): VisaTypeOption["category"] {
   const c = code.toUpperCase();
-  if (["H-1B","L-1A","L-1B","O-1","TN","E-2","E-3","P-1","R-1"].includes(c)) return "work";
-  if (["F-1","M-1","J-1"].includes(c))                                      return "student";
-  if (["H-4","L-2","F-2","J-2"].includes(c))                                return "dependent";
+  if (["H-1B","L-1A","L-1B","O-1","TN","E-2","E-3","P-1","R-1","EB-1","EB-2","EB-3","EB-5"].includes(c)) return "work";
+  if (["F-1","M-1","J-1"].includes(c))                                    return "student";
+  if (["H-4","L-2","F-2","J-2"].includes(c))                              return "dependent";
   return "other";
 }
 
 /**
- * Load visa types from backend `/visa-types` and merge with defaults so
- * we always have a full grid. Falls back to defaults entirely on error.
+ * Map a backend `category` string to one of our 4 wizard tabs.
+ * Backend uses: employment | student | visitor | permanent_resident |
+ * exchange | dependent | (others). Ours: work | student | dependent | other.
+ */
+function mapBackendCategory(raw: string | undefined | null, code: string): VisaTypeOption["category"] {
+  const c = (raw ?? "").toLowerCase();
+  if (c === "employment" || c === "work")             return "work";
+  if (c === "student")                                 return "student";
+  if (c === "dependent")                               return "dependent";
+  if (c === "exchange" || c === "visitor" || c === "permanent_resident" || c === "family" || c === "humanitarian" || c === "other") return "other";
+  // Category missing / unknown → fall back to code-based inference
+  return categoriseVisa(code);
+}
+
+/** Icon lookup by code — uses DEFAULT_VISA_TYPES preset first, then falls back. */
+function iconForCode(code: string): string {
+  return DEFAULT_VISA_TYPES.find((d) => d.code === code.toUpperCase())?.icon ?? "📄";
+}
+
+/**
+ * Adapt a backend visa-type row into the wizard's `VisaTypeOption` shape.
+ */
+function adaptBackendVisa(v: BackendVisaType): VisaTypeOption {
+  const code = v.code ?? v.name ?? "";
+  const preset = DEFAULT_VISA_TYPES.find((d) => d.code === code.toUpperCase());
+  return {
+    id:          v.id ?? code,
+    code,
+    name:        v.short_label || v.name || code,
+    description: v.description || preset?.description || "",
+    category:    mapBackendCategory(v.category, code),
+    duration:    v.processing_time_label
+                  ?? (typeof v.typical_processing_days === "number" ? `${v.typical_processing_days} days` : preset?.duration ?? "—"),
+    doc_count:   v.required_documents_count ?? (Array.isArray(v.required_documents) ? v.required_documents.length : 0) ?? preset?.doc_count ?? 0,
+    icon:        iconForCode(code),
+  };
+}
+
+/**
+ * Load visa types from backend. Uses the SAME catalog helper the Visa
+ * Checklist screen uses (which internally tries /visa-types then
+ * /admin/visa-types), so anything the Admin console adds shows up here
+ * automatically. Falls back to the local default catalog on error / empty.
  */
 export async function listVisaTypesForWizard(): Promise<VisaTypeOption[]> {
   try {
-    const res = await axios.get("/visa-types");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const items: any[] = Array.isArray(res.data) ? res.data
-      : res.data?.items ?? res.data?.visa_types ?? [];
-
+    const items = await visaChecklistApi.listVisaTypes();
     if (!items.length) return DEFAULT_VISA_TYPES;
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return items.map((v: any) => {
-      const code = v.code ?? v.visa_code ?? v.name ?? "";
-      const preset = DEFAULT_VISA_TYPES.find(d => d.code === code);
-      return {
-        id:          v.id ?? code,
-        code,
-        name:        v.name ?? v.title ?? code,
-        description: v.description ?? preset?.description ?? "",
-        category:    (v.category as VisaTypeOption["category"]) ?? preset?.category ?? categoriseVisa(code),
-        duration:    v.processing_time ?? v.duration ?? preset?.duration ?? "—",
-        doc_count:   v.doc_count ?? v.required_document_count ?? preset?.doc_count ?? 0,
-        icon:        v.icon ?? preset?.icon ?? "📄",
-      } as VisaTypeOption;
-    });
+    // Only surface active visa types.
+    return items
+      .filter((v) => v.is_active !== false)
+      .map(adaptBackendVisa);
   } catch {
     return DEFAULT_VISA_TYPES;
   }
