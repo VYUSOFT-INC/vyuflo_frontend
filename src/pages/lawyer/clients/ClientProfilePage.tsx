@@ -155,7 +155,19 @@ export default function ClientProfilePage() {
  * HERO CARD
  * ════════════════════════════════════════════════════════════════════ */
 function HeroCard({ profile }: { profile: ClientProfileResponse }) {
+  const navigate = useNavigate();
   const hasPic = Boolean(profile.profile_picture_url);
+
+  const openMessageThread = () => {
+    // Same deep-link contract as the Case Detail "Message client" button.
+    // SecureMessaging reads userId (with clientId fallback) and name (last
+    // resort match if participant_id is missing).
+    const params = new URLSearchParams({
+      userId: profile.client_id,
+      name:   profile.full_name || '',
+    });
+    navigate(`/lawyer/messages?${params.toString()}`);
+  };
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5 sm:p-6">
@@ -210,7 +222,10 @@ function HeroCard({ profile }: { profile: ClientProfileResponse }) {
 
         {/* Actions */}
         <div className="flex flex-wrap gap-2 sm:shrink-0">
-          <button className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50">
+          <button
+            onClick={openMessageThread}
+            className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 cursor-pointer"
+          >
             ✉ Send Message
           </button>
         </div>
@@ -541,6 +556,53 @@ function DocumentsTab({ profile }: { profile: ClientProfileResponse }) {
   const [groups, setGroups] = useState<CaseDocGroup[]>([]);
   const [initLoading, setInitLoading] = useState(true);
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
+  // Which case is the lawyer currently uploading to? holds application_id or null
+  const [uploadFor, setUploadFor] = useState<AssignedApplication | null>(null);
+
+  /** Refetch a single case's documents (used after upload). */
+  const refetchCaseDocs = async (applicationId: string) => {
+    try {
+      const res = await documentsApi.filterDocuments({ application_id: applicationId });
+      const items = res.items ?? [];
+      setGroups((prev) => prev.map((g) =>
+        g.app.application_id === applicationId
+          ? { ...g, docs: items, loading: false, error: null }
+          : g,
+      ));
+    } catch (e) {
+      // silent — user can retry from the queue
+      console.warn('[ClientProfile] refetchCaseDocs failed', e);
+    }
+  };
+
+  const handleLawyerUpload = async (payload: {
+    file: File;
+    document_type: string;
+    category: string;
+  }) => {
+    if (!uploadFor) return;
+    try {
+      await documentsApi.uploadDocument({
+        file:           payload.file,
+        application_id: uploadFor.application_id,
+        document_type:  payload.document_type,
+        category:       payload.category,
+      });
+      await refetchCaseDocs(uploadFor.application_id);
+      // Make sure the case group is expanded so user sees their new doc
+      setOpenIds((prev) => {
+        const next = new Set(prev);
+        next.add(uploadFor.application_id);
+        return next;
+      });
+      setUploadFor(null);
+    } catch (e) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ax = e as any;
+      const msg = ax?.response?.data?.detail || ax?.message || 'Upload failed.';
+      alert(`Could not upload document: ${msg}`);
+    }
+  };
 
   // Load the client's cases first, then hydrate each with its docs.
   useEffect(() => {
@@ -700,11 +762,173 @@ function DocumentsTab({ profile }: { profile: ClientProfileResponse }) {
                     ))}
                   </ul>
                 )}
+
+                {/* Per-case upload button — always at the bottom of each case */}
+                <div className="flex justify-end border-t border-gray-100 bg-white px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => setUploadFor(g.app)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-purple-300 bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700 hover:bg-purple-100 cursor-pointer"
+                    title="Upload a lawyer document to this case"
+                  >
+                    ⬆ Upload Document
+                  </button>
+                </div>
               </div>
             )}
           </div>
         );
       })}
+
+      {/* Upload modal — lawyer uploads a document to a specific case */}
+      {uploadFor && (
+        <LawyerUploadModal
+          clientName={profile.full_name}
+          caseLabel={uploadFor.visa_type_label || uploadFor.visa_type || 'Case'}
+          onClose={() => setUploadFor(null)}
+          onSubmit={handleLawyerUpload}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════
+ * LAWYER UPLOAD MODAL — attorney uploads their own doc to a case
+ * (mirrors the modal on DocumentReviewPage — same backend contract)
+ * ════════════════════════════════════════════════════════════════════ */
+function LawyerUploadModal({
+  clientName,
+  caseLabel,
+  onClose,
+  onSubmit,
+}: {
+  clientName?: string;
+  caseLabel?:  string;
+  onClose:  () => void;
+  onSubmit: (payload: { file: File; document_type: string; category: string }) => Promise<void> | void;
+}) {
+  const [file,       setFile]       = useState<File | null>(null);
+  const [docType,    setDocType]    = useState('');
+  // Backend enforces category ∈ {education, employment, identity, legal, other, personal}.
+  const [category,   setCategory]   = useState('legal');
+  const [submitting, setSubmitting] = useState(false);
+  const [showErrors, setShowErrors] = useState(false);
+
+  const fileValid = file !== null;
+  const typeValid = docType.trim().length >= 2;
+  const canSubmit = fileValid && typeValid && !submitting;
+
+  const handleSubmit = async () => {
+    if (!canSubmit) { setShowErrors(true); return; }
+    setSubmitting(true);
+    try {
+      await onSubmit({
+        file:          file!,
+        document_type: docType.trim(),
+        category,
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl flex flex-col overflow-hidden">
+        <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-slate-100">
+          <div className="min-w-0">
+            <h3 className="text-[15px] font-bold text-slate-900 tracking-[-0.3px]">
+              Upload Document
+            </h3>
+            {(clientName || caseLabel) && (
+              <p className="text-[12px] text-slate-500 mt-0.5">
+                For <span className="font-medium text-slate-700">{clientName}</span>
+                {caseLabel && <> · <span className="font-medium text-slate-700">{caseLabel}</span></>}
+              </p>
+            )}
+          </div>
+          <button onClick={onClose} className="p-1 rounded-md text-slate-400 hover:bg-slate-100" aria-label="Close">✕</button>
+        </div>
+
+        <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+          {/* File */}
+          <div>
+            <label className="block text-[12px] font-semibold text-slate-700 mb-1">
+              File <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="file"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+              className="block w-full text-xs file:mr-3 file:rounded-md file:border-0 file:bg-purple-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-purple-700 hover:file:bg-purple-100"
+            />
+            {file && (
+              <p className="mt-1 text-[11px] text-slate-500">
+                {file.name} · {(file.size / 1024).toFixed(1)} KB
+              </p>
+            )}
+            {showErrors && !fileValid && (
+              <p className="mt-1 text-[11px] text-red-600">Please choose a file to upload.</p>
+            )}
+          </div>
+
+          {/* Document type / title */}
+          <div>
+            <label className="block text-[12px] font-semibold text-slate-700 mb-1">
+              Document Name / Title <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={docType}
+              onChange={(e) => setDocType(e.target.value)}
+              placeholder="e.g. Drafted Petition, Cover Letter, Legal Memo"
+              className="w-full min-w-0 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-100"
+            />
+            {showErrors && !typeValid && (
+              <p className="mt-1 text-[11px] text-red-600">Please enter a document name (at least 2 characters).</p>
+            )}
+          </div>
+
+          {/* Category */}
+          <div>
+            <label className="block text-[12px] font-semibold text-slate-700 mb-1">Category</label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-100"
+            >
+              <option value="legal">Legal (memo, petition, cover letter, filing)</option>
+              <option value="employment">Employment</option>
+              <option value="identity">Identity</option>
+              <option value="education">Education</option>
+              <option value="personal">Personal</option>
+              <option value="other">Other (evidence, correspondence, misc.)</option>
+            </select>
+          </div>
+
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            This file will be attached to the case and visible in Case Documents + Document Queue.
+          </p>
+        </div>
+
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-100 px-5 py-4 sm:flex-row sm:justify-end">
+          <button
+            onClick={onClose}
+            disabled={submitting}
+            className="rounded-lg px-6 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 sm:border sm:border-slate-200"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="rounded-lg bg-purple-600 px-6 py-2 text-sm font-semibold text-white shadow-sm hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50 sm:font-medium"
+          >
+            {submitting ? 'Uploading…' : '⬆ Upload'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

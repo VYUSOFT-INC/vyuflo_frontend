@@ -35,6 +35,7 @@ import type {
   CaseUrgency,
 } from '../../../types/lawyer/cases.types';
 import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
+import { readLocalCases, seedToListItem } from '../../../lib/lawyerLocalCases';
 
 /* ═══════════════════════════════════════════════════════════════════════
    MOCK FALLBACK — realistic immigration cases.
@@ -320,12 +321,17 @@ export default function CaseListPage() {
       casesApi
         .listMyCases(status || undefined)
         .then((assigned) => {
-          /* Merge real (first) + mocks (after), de-duped by id. */
-          const realIds = new Set((assigned || []).map((c) => c.id));
-          const merged: CaseListItem[] = [
-            ...(assigned || []),
-            ...MOCK_CASES.filter((m) => !realIds.has(m.id)),
-          ];
+          /* Merge order: locally-created cases (from New Case wizard) FIRST
+             so they show at top, then real HR-assigned cases, then mocks.
+             De-duped by id. */
+          const localCases = readLocalCases().map(seedToListItem);
+          const seenIds = new Set<string>();
+          const merged: CaseListItem[] = [];
+          for (const c of [...localCases, ...(assigned || []), ...MOCK_CASES]) {
+            if (seenIds.has(c.id)) continue;
+            seenIds.add(c.id);
+            merged.push(c);
+          }
 
           /* Local filter pass — backend worklist only supports status_filter;
              search/visa/urgency/mine are applied client-side here. */
@@ -392,8 +398,8 @@ export default function CaseListPage() {
           </div>
           <button
             type="button"
-            onClick={() => navigate('/lawyer/intake')}
-            className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            onClick={() => navigate('/lawyer/cases/new')}
+            className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 cursor-pointer"
           >
             + New Case (Intake)
           </button>

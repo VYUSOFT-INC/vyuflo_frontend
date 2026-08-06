@@ -13,17 +13,7 @@
 //   │  └──────────┘  └──────────┘  └──────────┘  └──────────┘                          │
 //   ├─────────────────────────────────────────┬─────────────────────────────────────────┤
 //   │  Today's Schedule                       │  Critical Deadlines                     │
-//   │  09:30 AM  Client Consultation          │  RFE Response: Rodriguez     Today      │
-//   │  11:00 AM  Court Hearing Prep           │  LCA Filing: TechCorp        2 Days     │
-//   │  02:00 PM  LCA Application Review       │  Prevailing Wage Request     4 Days     │
-//   │  04:30 PM  Partner Sync                 │  [ View All Deadlines ]                 │
-//   │  Recent Cases (5-row table + View All)  │                                         │
-//   │                                         │  Monthly Billing                        │
-//   │                                         │  $12,450  ↑ 8%                          │
-//   │                                         │  Target: $15,000              83%       │
-//   │                                         │  ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░                     │
-//   │                                         │  Billed 35.5  ·  Unbilled 47.5          │
-//   │                                         │  [ Go to Billing → ]                    │
+//   │  Recent Cases (5-row table + View All)  │  Recent Documents (last 5 uploads)      │
 //   └─────────────────────────────────────────┴─────────────────────────────────────────┘
 //
 // APIs (all authenticated, JWT via axios interceptor):
@@ -32,25 +22,21 @@
 //   GET /lawyer-dashboard/recent-cases — pagination target for "View All"
 //   GET /calendar/agenda               — Today's Schedule
 //   GET /calendar/deadlines            — Critical Deadlines
-//
-// Production concerns handled:
-//   ✅ Skeleton loaders per panel (no all-or-nothing blank state)
-//   ✅ Empty states with friendly copy
-//   ✅ Error state with retry (never blocks the whole page)
-//   ✅ Auto-refresh KPI cards every 60s, pauses when tab hidden
-//   ✅ Mobile responsive (single column stack below sm:)
-//   ✅ Themed via CSS custom properties — --theme-primary etc.
-//   ✅ Row clicks + View All buttons route to real detail pages
+//   GET /documents/filter              — Recent Documents (attorney-scoped)
+//   GET /lawyer/applications           — enrich docs with client_name (backend
+//                                         /documents/filter doesn't join clients)
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Briefcase, Clock, AlertTriangle, UserPlus, Calendar, ArrowRight,
-  ChevronRight, Search, TrendingUp, TrendingDown, DollarSign, CheckCircle2,
-  Video, MapPin,
+  Briefcase, Clock, AlertTriangle, UserPlus, Calendar,
+  ChevronRight, Search, TrendingUp, TrendingDown, CheckCircle2,
+  Video, MapPin, FileText, FileImage, FileArchive,
 } from 'lucide-react';
 
-import { dashboardApi } from '../../../api/lawyer/dashboard.api';
+import { dashboardApi }  from '../../../api/lawyer/dashboard.api';
+import { documentsApi }  from '../../../api/lawyer/documents.api';
+import { intakeApi }     from '../../../api/lawyer/intake.api';
 import NotificationBellDropdown from '../../../components/lawyer/NotificationBellDropdown';
 import type {
   LawyerDashboardResponse,
@@ -58,6 +44,7 @@ import type {
   DeadlineItem,
   RecentCaseItem,
 } from '../../../types/lawyer/dashboard.types';
+import type { Document } from '../../../types/lawyer/documents.types';
 
 /* ─────────────────────────────────────────────────────────────────────
    Formatters
@@ -82,7 +69,6 @@ function fmtDateGreeting(iso: string): string {
 
 function fmtTime(iso: string): string {
   if (!iso) return '';
-  // Accept both "HH:MM" and full ISO
   if (/^\d{2}:\d{2}/.test(iso)) {
     const [h, m] = iso.split(':').map(Number);
     const d = new Date(); d.setHours(h, m, 0, 0);
@@ -249,11 +235,11 @@ function AgendaRow({ item }: { item: AgendaItem }) {
   const type = (item.event_type || '').toLowerCase();
   const accent =
     item.accent_color ??
-    (type === 'hearing'      ? '#a855f7' :   // purple
-     type === 'consultation' ? '#3b82f6' :   // blue
-     type === 'review'       ? '#f97316' :   // orange
-     type === 'internal'     ? '#22c55e' :   // green
-                               '#6366f1');   // fallback indigo
+    (type === 'hearing'      ? '#a855f7' :
+     type === 'consultation' ? '#3b82f6' :
+     type === 'review'       ? '#f97316' :
+     type === 'internal'     ? '#22c55e' :
+                               '#6366f1');
 
   const isZoom     = /zoom/i.test(item.location || '');
   const isInPerson = !isZoom && !!item.location;
@@ -356,6 +342,60 @@ function RecentCaseRow({ item, onOpen }: { item: RecentCaseItem; onOpen: (appId:
   );
 }
 
+/* ─────────────────────────────────────────────────────────────────────
+   Recent Documents row
+   ───────────────────────────────────────────────────────────────────── */
+
+function RecentDocRow({ doc, onClick }: { doc: Document; onClick: () => void }) {
+  const ft = (doc.file_type || '').toLowerCase();
+  const Icon =
+    ft === 'pdf'                                    ? FileText  :
+    (ft === 'jpg' || ft === 'jpeg' || ft === 'png') ? FileImage :
+                                                      FileArchive;
+
+  const statusCfg: Record<string, { bg: string; text: string; label: string }> = {
+    approved:        { bg: '#dcfce7', text: '#15803d', label: 'Approved'    },
+    rejected:        { bg: '#fee2e2', text: '#b91c1c', label: 'Rejected'    },
+    action_required: { bg: '#ffedd5', text: '#c2410c', label: 'Action'      },
+    in_progress:     { bg: '#dbeafe', text: '#1d4ed8', label: 'In progress' },
+    pending:         { bg: '#f1f5f9', text: '#475569', label: 'Pending'     },
+  };
+  const cfg = statusCfg[doc.status] || { bg: '#f1f5f9', text: '#475569', label: doc.status };
+
+  const timeAgo = (() => {
+    const t = Date.parse(doc.uploaded_at);
+    if (Number.isNaN(t)) return '';
+    const diff = Math.floor((Date.now() - t) / 1000);
+    if (diff < 60)    return 'just now';
+    if (diff < 3600)  return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+  })();
+
+  return (
+    <li
+      onClick={onClick}
+      className="cursor-pointer flex items-center gap-3 rounded-xl border border-slate-100 bg-white hover:bg-slate-50 hover:border-slate-200 transition px-3 py-2.5"
+    >
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+        <Icon size={16} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[13px] font-semibold text-slate-900">{doc.name}</p>
+        <p className="mt-0.5 truncate text-[11px] text-slate-500">
+          {doc.client_name || 'Unknown client'}{doc.case_id ? ` · ${doc.case_id}` : ''} · {timeAgo}
+        </p>
+      </div>
+      <span
+        className="shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
+        style={{ background: cfg.bg, color: cfg.text }}
+      >
+        {cfg.label}
+      </span>
+    </li>
+  );
+}
+
 /* ═════════════════════════════════════════════════════════════════════
    PAGE
    ═════════════════════════════════════════════════════════════════════ */
@@ -363,12 +403,13 @@ function RecentCaseRow({ item, onOpen }: { item: RecentCaseItem; onOpen: (appId:
 export default function LawyerDashboardPage() {
   const navigate = useNavigate();
 
-  const [data,      setData]      = useState<LawyerDashboardResponse | null>(null);
-  const [agenda,    setAgenda]    = useState<AgendaItem[]>([]);
-  const [deadlines, setDeadlines] = useState<DeadlineItem[]>([]);
-  const [loading,   setLoading]   = useState(true);
-  const [error,     setError]     = useState<string | null>(null);
-  const [search,    setSearch]    = useState('');
+  const [data,       setData]       = useState<LawyerDashboardResponse | null>(null);
+  const [agenda,     setAgenda]     = useState<AgendaItem[]>([]);
+  const [deadlines,  setDeadlines]  = useState<DeadlineItem[]>([]);
+  const [recentDocs, setRecentDocs] = useState<Document[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState<string | null>(null);
+  const [search,     setSearch]     = useState('');
 
   // Ref used to make polling read the latest tab-visibility state
   const activeRef = useRef(true);
@@ -377,10 +418,12 @@ export default function LawyerDashboardPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const [dashRes, agendaRes, deadlinesRes] = await Promise.allSettled([
+    const [dashRes, agendaRes, deadlinesRes, docsRes, appsRes] = await Promise.allSettled([
       dashboardApi.getDashboard(),
       dashboardApi.getTodaysAgenda(),
       dashboardApi.getCriticalDeadlines(),
+      documentsApi.filterDocuments({}),         // recently uploaded docs (attorney-scoped)
+      intakeApi.listAssignedApplications(),     // needed to enrich docs with client_name
     ]);
 
     if (dashRes.status === 'fulfilled') {
@@ -396,6 +439,33 @@ export default function LawyerDashboardPage() {
 
     if (agendaRes.status    === 'fulfilled') setAgenda(agendaRes.value);
     if (deadlinesRes.status === 'fulfilled') setDeadlines(deadlinesRes.value);
+
+    // Recent Documents — enrich each doc with client_name from the assigned
+    // apps list (backend /documents/filter doesn't join clients), sort by
+    // uploaded_at desc, take the top 5. Empty on failure so the block just
+    // shows the empty-state card instead of crashing.
+    if (docsRes.status === 'fulfilled') {
+      const items = docsRes.value.items ?? [];
+      const apps  = appsRes.status === 'fulfilled' ? appsRes.value : [];
+      const clientByAppId = new Map(
+        apps.map((a) => [a.application_id, {
+          client_name: a.client_name,
+          case_id: `#VF-${a.application_id.slice(0, 4).toUpperCase()}` + (a.visa_type ? ` · ${a.visa_type}` : ''),
+        }]),
+      );
+      const enriched = items.map((d) => {
+        const meta = d.application_id ? clientByAppId.get(d.application_id) : undefined;
+        return {
+          ...d,
+          client_name: d.client_name || meta?.client_name || d.client_name,
+          case_id:     d.case_id     || meta?.case_id     || d.case_id,
+        };
+      });
+      enriched.sort((a, b) =>
+        new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime(),
+      );
+      setRecentDocs(enriched.slice(0, 5));
+    }
 
     setLoading(false);
   }, []);
@@ -428,7 +498,6 @@ export default function LawyerDashboardPage() {
   }, [data]);
 
   const kpi = data?.kpi_cards;
-  const mb  = data?.monthly_billing;
 
   const recentCases = data?.recent_cases?.items ?? [];
 
@@ -470,7 +539,7 @@ export default function LawyerDashboardPage() {
 
       <main className="mx-auto max-w-[1280px] px-4 sm:px-8 py-6 sm:py-8 flex flex-col gap-6">
 
-        {/* ── ERROR BANNER (soft; content below still tries to render) ── */}
+        {/* ── ERROR BANNER ─────────────────────────────────────────── */}
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 flex items-center justify-between gap-3">
             <p className="text-[13px] text-red-700">⚠ {error}</p>
@@ -663,69 +732,43 @@ export default function LawyerDashboardPage() {
               </div>
             </Card>
 
-            {/* Monthly Billing */}
+            {/* Recent Documents — last 5 uploads across attorney's assigned
+                 cases. Click a row → jumps to that doc's Review page. */}
             <Card>
-              <CardHeader title="Monthly Billing" subtitle="Current month at a glance" />
+              <CardHeader
+                title="Recent Documents"
+                subtitle="Latest uploads across your cases"
+                action={
+                  <button
+                    onClick={() => navigate('/lawyer/documents/queue')}
+                    className="text-[12px] font-semibold text-[var(--theme-primary,#4f46e5)] hover:underline inline-flex items-center gap-1"
+                  >
+                    View All <ChevronRight size={12} />
+                  </button>
+                }
+              />
               <div className="px-5 pb-5">
-                {loading && !mb ? (
-                  <div className="space-y-3"><Skeleton h={40} /><Skeleton h={20} /><Skeleton h={40} /></div>
+                {loading && recentDocs.length === 0 ? (
+                  <div className="space-y-3"><Skeleton h={44} /><Skeleton h={44} /><Skeleton h={44} /></div>
+                ) : recentDocs.length === 0 ? (
+                  <EmptyState
+                    icon={<FileText size={20} />}
+                    title="No documents yet"
+                    desc="New uploads from your clients will show up here."
+                  />
                 ) : (
-                  <>
-                    <div className="flex items-baseline justify-between gap-2">
-                      <p className="text-[26px] font-bold text-slate-900 tracking-[-0.5px]">
-                        {fmtDollarsFromCents(mb?.monthly_billed_cents ?? 0)}
-                      </p>
-                      {mb && (
-                        <span
-                          className={`inline-flex items-center gap-1 text-[12px] font-semibold px-2 py-0.5 rounded-md ${
-                            mb.mom_positive ? 'text-emerald-700 bg-emerald-50' : 'text-red-700 bg-red-50'
-                          }`}
-                        >
-                          {mb.mom_positive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                          {mb.mom_positive ? '+' : ''}{mb.mom_change_pct}%
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="mt-3">
-                      <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1.5">
-                        <span>Target: {fmtDollarsFromCents(mb?.target_cents ?? 0)}</span>
-                        <span className="font-semibold text-slate-700">{mb?.target_pct ?? 0}%</span>
-                      </div>
-                      <div className="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all"
-                          style={{
-                            width: `${Math.min(100, Math.max(0, mb?.target_pct ?? 0))}%`,
-                            backgroundImage:
-                              'linear-gradient(90deg, var(--theme-primary,#4f46e5), var(--theme-gradient-end,#7c3aed))',
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-4 grid grid-cols-2 gap-3">
-                      <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2.5">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-500">Billed Hours</p>
-                        <p className="text-[16px] font-bold text-slate-900 mt-0.5">{(mb?.billed_hours ?? 0).toFixed(1)}</p>
-                      </div>
-                      <div className="rounded-xl bg-orange-50 border border-orange-100 px-3 py-2.5">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-orange-600">Unbilled</p>
-                        <p className="text-[16px] font-bold text-orange-700 mt-0.5">{(mb?.unbilled_hours ?? 0).toFixed(1)}</p>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => navigate('/lawyer/billing')}
-                      className="mt-4 w-full h-10 rounded-xl text-white text-[13px] font-semibold shadow-sm transition hover:opacity-90 inline-flex items-center justify-center gap-1.5"
-                      style={{
-                        backgroundImage:
-                          'linear-gradient(135deg, var(--theme-primary,#4f46e5) 0%, var(--theme-gradient-end,#7c3aed) 100%)',
-                      }}
-                    >
-                      <DollarSign size={14} /> Go to Billing <ArrowRight size={13} />
-                    </button>
-                  </>
+                  <ul className="flex flex-col gap-2">
+                    {recentDocs.map((d) => (
+                      <RecentDocRow
+                        key={d.id}
+                        doc={d}
+                        onClick={() => {
+                          const suffix = d.application_id ? `?application_id=${d.application_id}` : '';
+                          navigate(`/lawyer/documents/${d.id}/review${suffix}`);
+                        }}
+                      />
+                    ))}
+                  </ul>
                 )}
               </div>
             </Card>

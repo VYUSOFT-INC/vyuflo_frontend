@@ -33,6 +33,7 @@ const ocrApi = {
       extracted_value:  string;
       confidence_score: number;
       needs_review:     boolean;
+      is_mandatory?: boolean;
     }[];
   }> => {
     const form = new FormData();

@@ -32,7 +32,11 @@ function RatingStars({ rating }: { rating: number }) {
   );
 }
 
-function AttorneyCard({ attorney, onSelect }: { attorney: AttorneyProfile; onSelect: (id: string) => void }) {
+function AttorneyCard({ attorney, onSelect, onViewDetails }: {
+  attorney: AttorneyProfile;
+  onSelect: (id: string) => void;
+  onViewDetails: (id: string) => void;
+}) {
   const firstName   = attorney.user?.first_name ?? "";
   const lastName    = attorney.user?.last_name  ?? "";
   const initials    = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || "?";
@@ -40,39 +44,43 @@ function AttorneyCard({ attorney, onSelect }: { attorney: AttorneyProfile; onSel
   const badges      = attorney.badges ?? [];
 
   return (
-    <div className="bg-white border border-[#E5E7EB] rounded-[12px] p-[20px] flex flex-col gap-[16px] hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] transition-shadow duration-200">
-      <div className="flex items-start gap-[16px]">
+    <div className="group relative bg-white border border-[#E5E7EB] rounded-[14px] p-[16px] flex flex-col gap-[10px] hover:shadow-[0_8px_24px_rgba(79,70,229,0.12)] hover:border-[#C7D2FE] hover:-translate-y-0.5 transition-all duration-200 overflow-hidden">
+      {/* Gradient accent bar at top (visible on hover) */}
+      <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-[#4F46E5] via-[#7C3AED] to-[#EC4899] opacity-0 group-hover:opacity-100 transition-opacity" />
+
+      <div className="flex items-start gap-[12px]">
         {attorney.profile_photo_url ? (
           <img src={attorney.profile_photo_url} alt={firstName}
-            className="w-[64px] h-[64px] rounded-full object-cover flex-shrink-0" />
+            className="w-[56px] h-[56px] rounded-full object-cover flex-shrink-0 ring-2 ring-white shadow-[0_2px_8px_rgba(0,0,0,0.08)]" />
         ) : (
-          <div className="w-[64px] h-[64px] rounded-full flex items-center justify-center flex-shrink-0 text-white text-[18px] font-semibold"
-            style={{ backgroundColor: avatarColor }}>
+          <div className="w-[56px] h-[56px] rounded-full flex items-center justify-center flex-shrink-0 text-white text-[18px] font-bold ring-2 ring-white shadow-[0_2px_8px_rgba(0,0,0,0.12)]"
+            style={{ background: `linear-gradient(135deg, ${avatarColor}, ${avatarColor}CC)` }}>
             {initials}
           </div>
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-[8px]">
-            <div>
-              <h3 className="text-[15px] font-semibold text-[#111827] leading-tight">
-                {firstName} {lastName}, Esq.
+            <div className="min-w-0">
+              <h3 className="text-[17px] font-bold text-[#111827] leading-tight tracking-tight truncate">
+                {firstName} {lastName}
+                <span className="text-[#6B7280] font-medium">, Esq.</span>
               </h3>
-              <p className="text-[12px] text-[#6B7280] mt-[2px]">
+              <p className="text-[12px] text-[#6B7280] mt-[2px] truncate">
                 {attorney.visa_types_list[0] ?? attorney.law_firm_name ?? "Immigration Attorney"}
               </p>
             </div>
             <div className="flex-shrink-0 text-right">
-              <p className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Fee/hr</p>
-              <p className="text-[18px] font-bold text-[#111827] leading-tight">
+              <p className="text-[9px] text-[#9CA3AF] uppercase tracking-wider font-semibold">Fee/hr</p>
+              <p className="text-[18px] font-bold bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] bg-clip-text text-transparent leading-tight">
                 {formatFee(attorney.consultation_fee_cents)}
               </p>
             </div>
           </div>
           {badges.length > 0 && (
-            <div className="flex flex-wrap gap-[6px] mt-[8px]">
+            <div className="flex flex-wrap gap-[5px] mt-[6px]">
               {badges.map(badge => (
                 <span key={badge}
-                  className={`text-[10px] font-medium px-[8px] py-[3px] rounded-full ${BADGE_STYLES[badge] ?? "bg-[#F3F4F6] text-[#374151]"}`}>
+                  className={`text-[10px] font-semibold px-[8px] py-[2px] rounded-full ${BADGE_STYLES[badge] ?? "bg-[#F3F4F6] text-[#374151]"}`}>
                   {badge}
                 </span>
               ))}
@@ -81,50 +89,53 @@ function AttorneyCard({ attorney, onSelect }: { attorney: AttorneyProfile; onSel
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-[8px] bg-[#F9FAFB] rounded-[8px] p-[12px]">
+      {/* Rating strip — inline compact */}
+      <div className="flex items-center gap-[6px]">
+        <RatingStars rating={attorney.rating} />
+        <span className="text-[12px] font-bold text-[#111827]">{attorney.rating.toFixed(1)}</span>
+        <span className="text-[11px] text-[#6B7280]">({attorney.review_count} reviews)</span>
+      </div>
+
+      <div className="grid grid-cols-3 gap-[6px] bg-gradient-to-br from-[#F9FAFB] to-[#F3F4F6] rounded-[8px] px-[10px] py-[8px] border border-[#F3F4F6]">
         <div className="text-center">
-          <p className="text-[13px] font-semibold text-[#111827]">{attorney.success_rate}%</p>
-          <p className="text-[10px] text-[#9CA3AF] mt-[1px]">Success Rate</p>
+          <p className="text-[14px] font-bold text-[#10B981] leading-tight">{attorney.success_rate}%</p>
+          <p className="text-[9px] text-[#6B7280] font-medium">Success</p>
         </div>
         <div className="text-center border-x border-[#E5E7EB]">
-          <p className="text-[13px] font-semibold text-[#111827]">{attorney.years_experience ?? "—"} Yrs</p>
-          <p className="text-[10px] text-[#9CA3AF] mt-[1px]">Experience</p>
+          <p className="text-[14px] font-bold text-[#4F46E5] leading-tight">{attorney.years_experience ?? "—"}<span className="text-[10px] font-semibold"> Yrs</span></p>
+          <p className="text-[9px] text-[#6B7280] font-medium">Experience</p>
         </div>
         <div className="text-center">
-          <p className="text-[13px] font-semibold text-[#111827]">
+          <p className="text-[14px] font-bold text-[#111827] leading-tight">
             {attorney.total_cases >= 1000 ? `${(attorney.total_cases/1000).toFixed(1)}k+` : `${attorney.total_cases}+`}
           </p>
-          <p className="text-[10px] text-[#9CA3AF] mt-[1px]">Cases</p>
+          <p className="text-[9px] text-[#6B7280] font-medium">Cases</p>
         </div>
       </div>
 
-      <div className="flex flex-col gap-[6px]">
-        <div className="flex items-center gap-[6px]">
-          <RatingStars rating={attorney.rating} />
-          <span className="text-[12px] font-semibold text-[#111827]">{attorney.rating.toFixed(1)}</span>
-          <span className="text-[12px] text-[#6B7280]">({attorney.review_count} reviews)</span>
-        </div>
+      {/* Location + languages on one row when possible */}
+      <div className="flex flex-col gap-[4px]">
         {attorney.location_display && (
           <div className="flex items-center gap-[6px]">
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
-              <path d="M8 1.5C5.515 1.5 3.5 3.515 3.5 6c0 3.75 4.5 8.5 4.5 8.5S12.5 9.75 12.5 6c0-2.485-2.015-4.5-4.5-4.5zm0 6.1a1.6 1.6 0 110-3.2 1.6 1.6 0 010 3.2z" fill="#9CA3AF"/>
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+              <path d="M8 1.5C5.515 1.5 3.5 3.515 3.5 6c0 3.75 4.5 8.5 4.5 8.5S12.5 9.75 12.5 6c0-2.485-2.015-4.5-4.5-4.5zm0 6.1a1.6 1.6 0 110-3.2 1.6 1.6 0 010 3.2z" fill="#6B7280"/>
             </svg>
-            <span className="text-[12px] text-[#6B7280]">{attorney.location_display}</span>
+            <span className="text-[11px] text-[#4B5563] truncate">{attorney.location_display}</span>
           </div>
         )}
         {attorney.languages_list.length > 0 && (
           <div className="flex items-center gap-[6px]">
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
-              <circle cx="8" cy="8" r="6" stroke="#9CA3AF" strokeWidth="1.5"/>
-              <path d="M8 2c0 0-2 3-2 6s2 6 2 6M8 2c0 0 2 3 2 6s-2 6-2 6M2 8h12" stroke="#9CA3AF" strokeWidth="1.2" strokeLinecap="round"/>
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="6" stroke="#6B7280" strokeWidth="1.5"/>
+              <path d="M8 2c0 0-2 3-2 6s2 6 2 6M8 2c0 0 2 3 2 6s-2 6-2 6M2 8h12" stroke="#6B7280" strokeWidth="1.2" strokeLinecap="round"/>
             </svg>
-            <span className="text-[12px] text-[#6B7280]">{attorney.languages_list.join(", ")}</span>
+            <span className="text-[11px] text-[#4B5563] truncate">{attorney.languages_list.join(", ")}</span>
           </div>
         )}
         {attorney.visa_types_list.length > 0 && (
           <div className="flex flex-wrap gap-[4px] mt-[2px]">
-            {attorney.visa_types_list.map(vt => (
-              <span key={vt} className="text-[10px] bg-[#EEF2FF] text-[#4338CA] px-[7px] py-[2px] rounded-[4px] font-medium">
+            {attorney.visa_types_list.slice(0, 5).map(vt => (
+              <span key={vt} className="text-[10px] bg-gradient-to-r from-[#EEF2FF] to-[#F3E8FF] text-[#4338CA] border border-[#E0E7FF] px-[7px] py-[1px] rounded-[5px] font-semibold">
                 {vt}
               </span>
             ))}
@@ -132,14 +143,15 @@ function AttorneyCard({ attorney, onSelect }: { attorney: AttorneyProfile; onSel
         )}
       </div>
 
-      <div className="flex items-center gap-[10px] pt-[4px] border-t border-[#F3F4F6]">
+      <div className="flex items-center gap-[8px] pt-[8px] border-t border-[#F3F4F6]">
         <button type="button"
-          className="flex-1 text-[13px] font-medium text-[#4F46E5] border border-[#4F46E5] rounded-[8px] py-[8px] hover:bg-[#EEF2FF] transition-colors">
+          onClick={() => onViewDetails(attorney.id)}
+          className="flex-1 text-[12px] font-semibold text-[#4F46E5] border border-[#C7D2FE] bg-white rounded-[8px] py-[7px] hover:bg-[#EEF2FF] hover:border-[#4F46E5] transition-colors cursor-pointer">
           View Details
         </button>
         <button type="button" onClick={() => onSelect(attorney.id)} disabled={!attorney.is_available}
-          className="flex-1 text-[13px] font-semibold text-white bg-[#4F46E5] rounded-[8px] py-[8px] hover:bg-[#4338CA] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-          {attorney.is_available ? "Send Consultation" : "Unavailable"}
+          className="flex-1 text-[12px] font-bold text-white bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] rounded-[8px] py-[7px] hover:from-[#4338CA] hover:to-[#6D28D9] shadow-[0_2px_8px_rgba(79,70,229,0.25)] hover:shadow-[0_4px_12px_rgba(79,70,229,0.35)] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none cursor-pointer">
+          {attorney.is_available ? "Send Consultation →" : "Unavailable"}
         </button>
       </div>
     </div>
@@ -265,7 +277,8 @@ export default function SelectAttorney() {
   const { filters, updateFilters, resetFilters } = useAttorneyFilters();
   const { attorneys = [], loading, error, total = 0 } = useAttorneys(filters);
 
-  const handleSelect = (id: string) => navigate(`/consultations/book/${id}`);
+  const handleSelect      = (id: string) => navigate(`/consultations/book/${id}`);
+  const handleViewDetails = (id: string) => navigate(`/consultations/attorney/${id}`);
 
   return (
     <div className="flex flex-col gap-[24px] px-[24px] sm:px-[32px] pt-[12px] pb-[48px]">
@@ -359,7 +372,9 @@ export default function SelectAttorney() {
           {!loading && !error && attorneys.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
               {attorneys.map(attorney => (
-                <AttorneyCard key={attorney.id} attorney={attorney} onSelect={handleSelect} />
+                <AttorneyCard key={attorney.id} attorney={attorney}
+                  onSelect={handleSelect}
+                  onViewDetails={handleViewDetails} />
               ))}
             </div>
           )}

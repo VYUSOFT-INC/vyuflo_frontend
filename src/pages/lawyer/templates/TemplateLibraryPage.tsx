@@ -390,7 +390,7 @@ export default function TemplateLibraryPage() {
         }`}>{banner.text}</div>
       )}
 
-      {/* ── Tabs row + search ─────────────────────────────────────── */}
+      {/* ── Tabs row + Visa dropdown + search ─────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 pb-3">
         <div className="flex flex-wrap items-center gap-1.5">
           {TYPE_TABS.map((tab) => (
@@ -408,44 +408,38 @@ export default function TemplateLibraryPage() {
           ))}
         </div>
 
-        <form onSubmit={submitSearch} className="relative w-full sm:w-72">
-          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
-          <input
-            type="text"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search templates..."
-            className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm placeholder:text-gray-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
-          />
-        </form>
-      </div>
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          {/* Visa filter — compact dropdown replaces the old chip strip.
+              "All visa types" clears the filter; picking any code sets
+              ?visa=<code> in the URL (deep-linkable). Options are pulled
+              from the live /visa-types endpoint, falling back to a small
+              static set until the API returns. */}
+          <label className="relative">
+            <span className="sr-only">Visa filter</span>
+            <select
+              value={visaFilter || ''}
+              onChange={(e) => setQuery({ visa: e.target.value || null })}
+              className="appearance-none rounded-lg border border-indigo-500 bg-indigo-600 py-2 pl-3 pr-8 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 cursor-pointer"
+            >
+              <option value="" className="bg-white text-gray-700">All visa types</option>
+              {visaCodesForChips.map((v) => (
+                <option key={v} value={v} className="bg-white text-gray-700">{v}</option>
+              ))}
+            </select>
+            <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-white text-xs">▾</span>
+          </label>
 
-      {/* ── Visa filter chip strip ────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-medium text-gray-500">Visa:</span>
-        <button
-          onClick={() => setQuery({ visa: null })}
-          className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${
-            !visaFilter
-              ? 'border-indigo-200 bg-indigo-50 text-indigo-700'
-              : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-          }`}
-        >
-          All
-        </button>
-        {visaCodesForChips.map((v) => (
-          <button
-            key={v}
-            onClick={() => setQuery({ visa: visaFilter === v ? null : v })}
-            className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${
-              visaFilter === v
-                ? 'border-indigo-200 bg-indigo-50 text-indigo-700'
-                : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-            }`}
-          >
-            {v}
-          </button>
-        ))}
+          <form onSubmit={submitSearch} className="relative flex-1 sm:w-72">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search templates..."
+              className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm placeholder:text-gray-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+            />
+          </form>
+        </div>
       </div>
 
       {/* ── Card grid ─────────────────────────────────────────────── */}

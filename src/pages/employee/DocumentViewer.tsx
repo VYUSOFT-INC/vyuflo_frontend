@@ -1,3 +1,4 @@
+
 // // src/pages/employee/DocumentViewer.tsx
 // import { useState, useEffect }         from "react";
 // import { useSearchParams, useNavigate } from "react-router-dom";
@@ -5,14 +6,14 @@
 // import { useOCR }                       from "../../hooks/employee/useOCR";
 // import documentsApi                     from "../../api/employee/documents.api";
 // // import axiosInstance                    from "../../api/axios";
-
+ 
 // // ── Helpers ───────────────────────────────────────────────────────────────────
 // function confBadge(score: number) {
 //   if (score >= 90) return { bg: "bg-[#dcfce7]", text: "text-[#16a34a]" };
 //   if (score >= 75) return { bg: "bg-[#fef9c3]", text: "text-[#ca8a04]" };
 //   return               { bg: "bg-[#fee2e2]",    text: "text-[#dc2626]" };
 // }
-
+ 
 // function PageStatus({ status }: { status: string }) {
 //   if (status === "processed" || status === "confirmed")
 //     return <span className="text-[#16a34a] text-[10px] font-semibold">Processed</span>;
@@ -20,7 +21,7 @@
 //     return <span className="text-[#d97706] text-[10px] font-semibold">Review</span>;
 //   return <span className="text-indigo-600 text-[10px] font-semibold">Processing</span>;
 // }
-
+ 
 // // ── Spinner ───────────────────────────────────────────────────────────────────
 // function Spinner({ color = "text-indigo-600" }: { color?: string }) {
 //   return (
@@ -30,7 +31,7 @@
 //     </svg>
 //   );
 // }
-
+ 
 // // ─────────────────────────────────────────────────────────────────────────────
 // export default function DocumentViewer() {
 //   const navigate       = useNavigate();
@@ -42,9 +43,9 @@
 //   : returnAppId
 //   ? `/applications/${returnAppId}`
 //   : "/documents";
-
+ 
 //   const { data: doc, isLoading: docLoading, error: docError } = useDocument(docId);
-
+ 
 //   const [fileUrl,     setFileUrl]     = useState<string | null>(null);
 //   const [fileName,    setFileName]    = useState<string>("");
 //   const [fileBlob,    setFileBlob]    = useState<Blob | null>(null);
@@ -52,20 +53,21 @@
 //   const [rotation,    setRotation]    = useState(0);
 //   const [currentPage, setCurrentPage] = useState(1);
 //   const [rightOpen,   setRightOpen]   = useState(true);
-
+ 
 //   // Mobile tab: "pages" | "viewer" | "data"
 //   const [mobileTab, setMobileTab] = useState<"pages" | "viewer" | "data">("viewer");
-
+ 
 //   const totalPages = doc?.total_pages ?? 1;
 //   const isPdf      = doc?.file_type === "pdf" || fileName.endsWith(".pdf");
-
+ 
 //   const {
 //     fields, avgConfidence, source,
 //     isLoading: ocrLoading, error: ocrError,
+//     detectedType, typeMismatch, dismissMismatch,
 //     loadFields, submitFields, confirmField,
 //     saveEdit, startEdit, cancelEdit, updateEditValue,
 //   } = useOCR(docId);
-
+ 
 //   useEffect(() => {
 //     if (!docId) return;
 //     let objectUrl: string;
@@ -79,13 +81,13 @@
 //       .catch(err => console.error("Failed to load document file:", err));
 //     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
 //   }, [docId]);
-
+ 
 //   useEffect(() => {
 //     if (fileBlob && fileName && fields.length === 0 && !ocrLoading) {
 //       void loadFields(fileBlob, fileName);
 //     }
 //   }, [fileBlob, fileName]); // eslint-disable-line react-hooks/exhaustive-deps
-
+ 
 //   // async function handleNextDocument() {
 //   //   if (!returnAppId) { navigate("/documents"); return; }
 //   //   try {
@@ -99,7 +101,7 @@
 //   //     navigate(returnAppId ? `/applications/${returnAppId}` : "/documents");
 //   //   }
 //   // }
-
+ 
 //   function exportData() {
 //     const rows = fields.map(f =>
 //       `"${f.field_name}","${f.extracted_value}",${f.confidence_score},${f.is_confirmed}`
@@ -111,16 +113,16 @@
 //     a.href = url; a.download = `${doc?.name ?? "document"}_data.csv`; a.click();
 //     URL.revokeObjectURL(url);
 //   }
-
+ 
 //   function handleDownload() {
 //     if (!fileUrl || !doc) return;
 //     const a = document.createElement("a");
 //     a.href = fileUrl; a.download = doc.name; a.click();
 //   }
-
+ 
 //   const confirmedCount = fields.filter(f => f.is_confirmed).length;
 //   const reviewCount    = fields.filter(f => f.needs_review && !f.is_confirmed).length;
-
+ 
 //   // ── Loading / Error ────────────────────────────────────────────────────────
 //   if (docLoading) {
 //     return <div className="flex items-center justify-center h-full py-[64px]"><Spinner /></div>;
@@ -138,19 +140,19 @@
 //       </div>
 //     );
 //   }
-
+ 
 //   // ── Reusable panel contents ────────────────────────────────────────────────
-
+ 
 //   // Pages panel
 //   const PagesPanel = () => (
 //     <div className="flex flex-col h-full overflow-hidden bg-[#f8fafc]">
-
+ 
 //       {/* Header */}
 //       <div className="px-[16px] pt-[14px] pb-[12px] bg-white border-b border-[#f1f5f9] shrink-0">
 //         <p className="text-[#0f172a] text-[14px] font-bold">Document Pages</p>
 //         <p className="text-[#94a3b8] text-[11px] mt-[1px]">{totalPages} {totalPages === 1 ? "page" : "pages"}</p>
 //       </div>
-
+ 
 //       {/* Page grid */}
 //       <div className="flex-1 overflow-y-auto p-[16px]">
 //         <div className={totalPages === 1 ? "flex justify-center" : "grid grid-cols-2 gap-[12px]"}>
@@ -204,7 +206,7 @@
 //       </div>
 //     </div>
 //   );
-
+ 
 //   // Viewer panel
 //   const ViewerPanel = () => (
 //     <div className="flex-1 min-w-0 bg-[#e8ecf0] flex flex-col overflow-hidden relative h-full">
@@ -264,14 +266,40 @@
 //                 );
 //               })}
 //             </div>
-//             <div className="flex items-center justify-between pt-[8px] border-t border-[#f1f5f9] mt-[4px]">
-//               <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+//             <div className="flex items-center gap-[12px] pt-[8px] border-t border-[#f1f5f9] mt-[4px]">
+//               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" className="shrink-0">
 //                 <rect x="3" y="10" width="18" height="11" rx="2" stroke="#94a3b8" strokeWidth="1.5"/>
 //                 <circle cx="12" cy="5" r="2" stroke="#94a3b8" strokeWidth="1.5"/>
 //                 <path d="M12 7v3M8 14h.01M16 14h.01M9 17h6" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round"/>
 //               </svg>
+
+//               {/* Compact copy of the sidebar mismatch banner, filling the gap
+//                   next to Submit. On mobile the sidebar ("data" tab) is
+//                   separate from this viewer tab, so without this someone
+//                   could hit Submit here and never see the warning at all. */}
+//               <div className="flex-1 min-w-0">
+//                 {!ocrLoading && typeMismatch && (
+//                   <div className="flex items-center gap-[6px] bg-[#fffbeb] border border-[#fde68a] rounded-[8px] px-[10px] py-[6px]">
+//                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="shrink-0">
+//                       <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"
+//                         stroke="#d97706" strokeWidth="2" strokeLinecap="round"/>
+//                     </svg>
+//                     <p className="text-[#92400e] text-[11px] font-medium leading-[14px] truncate">
+//                       Expected <span className="font-semibold">{doc?.document_type ?? "a different document"}</span> — this looks like{" "}
+//                       <span className="font-semibold">
+//                         {detectedType && detectedType !== "other" ? detectedType.replace(/_/g, " ") : "something else"}
+//                       </span>.
+//                     </p>
+//                     <button onClick={dismissMismatch}
+//                       className="text-[11px] font-semibold text-[#92400e] underline shrink-0 ml-auto whitespace-nowrap">
+//                       Looks right
+//                     </button>
+//                   </div>
+//                 )}
+//               </div>
+
 //               <button onClick={async () => { await submitFields(); navigate(returnUrl); }}
-//                 className="flex items-center gap-[6px] h-[34px] px-[20px] rounded-[8px] text-white text-[12px] font-semibold cursor-pointer hover:opacity-90 active:scale-[0.98] transition"
+//                 className="shrink-0 flex items-center gap-[6px] h-[34px] px-[20px] rounded-[8px] text-white text-[12px] font-semibold cursor-pointer hover:opacity-90 active:scale-[0.98] transition"
 //                 style={{ background: "linear-gradient(135deg, var(--theme-primary), var(--theme-gradient-end))" }}>
 //                 {source === "db" ? "Update" : "Submit"}
 //               </button>
@@ -295,7 +323,7 @@
 //       </div>
 //     </div>
 //   );
-
+ 
 //   // Data panel
 //   const DataPanel = () => (
 //     <div className="flex flex-col h-full overflow-hidden bg-white">
@@ -318,6 +346,44 @@
 //         </div>
 //       </div>
 //       <div className="flex-1 overflow-y-auto px-[10px] py-[10px] flex flex-col gap-[8px]">
+//         {!ocrLoading && typeMismatch && (
+//           <div className="bg-[#fffbeb] border border-[#fde68a] rounded-[10px] p-[12px] flex flex-col gap-[8px]">
+//             <div className="flex items-start gap-[8px]">
+//               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="shrink-0 mt-[1px]">
+//                 <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"
+//                   stroke="#d97706" strokeWidth="2" strokeLinecap="round"/>
+//               </svg>
+//               <div>
+//                 <p className="text-[#92400e] text-[12px] font-semibold leading-[16px]">
+//                   This doesn't look like the expected document
+//                 </p>
+//                 <p className="text-[#92400e] text-[11px] leading-[15px] mt-[2px]">
+//                   We expected <span className="font-medium">{doc?.document_type ?? "this document type"}</span>, but
+//                   the file you uploaded looks like{" "}
+//                   <span className="font-medium">
+//                     {detectedType && detectedType !== "other" ? detectedType.replace(/_/g, " ") : "something else"}
+//                   </span>. Double-check you selected the right file.
+//                 </p>
+//               </div>
+//             </div>
+//             <div className="flex gap-[8px] pl-[24px]">
+//               <button
+//                 onClick={async () => {
+//                   if (!docId) return;
+//                   try { await documentsApi.delete(docId); } catch { /* ignore */ }
+//                   navigate(returnUrl);
+//                 }}
+//                 className="text-[11px] font-semibold text-[#92400e] bg-white border border-[#fde68a] rounded-[6px] px-[10px] py-[5px] hover:bg-[#fef3c7] transition">
+//                 Remove &amp; upload a different file
+//               </button>
+//               <button
+//                 onClick={dismissMismatch}
+//                 className="text-[11px] font-medium text-[#92400e] hover:underline px-[4px] py-[5px]">
+//                 This is correct, continue
+//               </button>
+//             </div>
+//           </div>
+//         )}
 //         {ocrLoading && (
 //           <div className="flex flex-col items-center gap-[8px] py-[40px]">
 //             <Spinner /><p className="text-[#64748b] text-[12px] text-center">Extracting data…</p>
@@ -424,12 +490,12 @@
 //       </div>
 //     </div>
 //   );
-
+ 
 //   // ─────────────────────────────────────────────────────────────────────────
 //   return (
 //     <div className="flex flex-col bg-[#f9fafb] overflow-hidden"
 //       style={{ fontFamily: "Inter, sans-serif", height: "calc(100dvh - 56px)" }}>
-
+ 
 //       {/* ── TOP BAR ── */}
 //       <div className="bg-white border-b border-[#e5e7eb] flex items-center h-[48px] sm:h-[52px] px-[12px] sm:px-[16px] shrink-0 gap-[8px] sm:gap-[12px]">
 //         <button onClick={() => navigate(returnAppId ? `/applications/${returnAppId}` : "/documents")}
@@ -440,9 +506,9 @@
 //           <span className="hidden sm:inline">Back to Case</span>
 //           <span className="sm:hidden">Back</span>
 //         </button>
-
+ 
 //         <div className="h-[20px] w-px bg-[#e5e7eb] shrink-0" />
-
+ 
 //         <div className="flex items-center gap-[8px] min-w-0 flex-1">
 //           <div className="bg-[#fee2e2] rounded-[5px] flex items-center justify-center w-[28px] h-[32px] shrink-0">
 //             <span className="text-[#ef4444] text-[7px] font-black">PDF</span>
@@ -454,14 +520,14 @@
 //             </span>
 //           </div>
 //         </div>
-
+ 
 //         {/* Zoom — hidden on mobile */}
 //         <div className="hidden sm:flex items-center gap-[3px] shrink-0">
 //           <button onClick={() => setZoom(z => Math.max(50, z - 10))} className="size-[26px] border border-[#e5e7eb] rounded-[5px] text-[#374151] flex items-center justify-center hover:bg-[#f9fafb] transition text-[14px] font-medium">−</button>
 //           <span className="text-[#374151] text-[12px] font-medium w-[42px] text-center">{zoom}%</span>
 //           <button onClick={() => setZoom(z => Math.min(200, z + 10))} className="size-[26px] border border-[#e5e7eb] rounded-[5px] text-[#374151] flex items-center justify-center hover:bg-[#f9fafb] transition text-[14px] font-medium">+</button>
 //         </div>
-
+ 
 //         {/* Rotate */}
 //         <button onClick={() => setRotation(r => (r + 90) % 360)}
 //           className="hidden sm:flex items-center gap-[5px] h-[30px] px-[10px] border border-[#e5e7eb] rounded-[7px] text-[#374151] text-[12px] font-medium hover:bg-[#f9fafb] transition shrink-0">
@@ -471,7 +537,7 @@
 //           </svg>
 //           Rotate
 //         </button>
-
+ 
 //         {/* Download */}
 //         <button onClick={handleDownload}
 //           className="flex items-center gap-[5px] h-[30px] px-[8px] sm:px-[10px] border border-[#e5e7eb] rounded-[7px] text-[#374151] text-[12px] font-medium hover:bg-[#f9fafb] transition shrink-0">
@@ -481,7 +547,7 @@
 //           <span className="hidden sm:inline">Download</span>
 //         </button>
 //       </div>
-
+ 
 //       {/* ── MOBILE TABS ── */}
 //       <div className="lg:hidden flex items-center border-b border-[#e5e7eb] bg-white shrink-0">
 //         {([
@@ -499,7 +565,7 @@
 //           </button>
 //         ))}
 //       </div>
-
+ 
 //       {/* ── BODY ── */}
 //       {/* Mobile: show one tab at a time */}
 //       <div className="lg:hidden flex-1 min-h-0 overflow-hidden">
@@ -507,7 +573,7 @@
 //         {mobileTab === "viewer" && <ViewerPanel />}
 //         {mobileTab === "data"   && <DataPanel  />}
 //       </div>
-
+ 
 //       {/* Desktop: 3-panel side by side */}
 //       <div className="hidden lg:flex flex-1 min-h-0 overflow-hidden">
 //         <div className="w-[168px] shrink-0 border-r border-[#e5e7eb]"><PagesPanel /></div>
@@ -524,7 +590,7 @@
 //           </div>
 //         )}
 //       </div>
-
+ 
 //       {/* ── BOTTOM STATUS BAR ── */}
 //       <div className="bg-white border-t border-[#e5e7eb] flex items-center justify-between h-[48px] px-[12px] sm:px-[16px] shrink-0">
 //         <div className="flex items-center gap-[10px] sm:gap-[14px]">
@@ -553,21 +619,21 @@
 //   );
 // }
 
+
 // src/pages/employee/DocumentViewer.tsx
 import { useState, useEffect }         from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useDocument }                  from "../../hooks/employee/useDocuments";
 import { useOCR }                       from "../../hooks/employee/useOCR";
 import documentsApi                     from "../../api/employee/documents.api";
-// import axiosInstance                    from "../../api/axios";
- 
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function confBadge(score: number) {
   if (score >= 90) return { bg: "bg-[#dcfce7]", text: "text-[#16a34a]" };
   if (score >= 75) return { bg: "bg-[#fef9c3]", text: "text-[#ca8a04]" };
   return               { bg: "bg-[#fee2e2]",    text: "text-[#dc2626]" };
 }
- 
+
 function PageStatus({ status }: { status: string }) {
   if (status === "processed" || status === "confirmed")
     return <span className="text-[#16a34a] text-[10px] font-semibold">Processed</span>;
@@ -575,7 +641,7 @@ function PageStatus({ status }: { status: string }) {
     return <span className="text-[#d97706] text-[10px] font-semibold">Review</span>;
   return <span className="text-indigo-600 text-[10px] font-semibold">Processing</span>;
 }
- 
+
 // ── Spinner ───────────────────────────────────────────────────────────────────
 function Spinner({ color = "text-indigo-600" }: { color?: string }) {
   return (
@@ -585,7 +651,7 @@ function Spinner({ color = "text-indigo-600" }: { color?: string }) {
     </svg>
   );
 }
- 
+
 // ─────────────────────────────────────────────────────────────────────────────
 export default function DocumentViewer() {
   const navigate       = useNavigate();
@@ -597,9 +663,9 @@ export default function DocumentViewer() {
   : returnAppId
   ? `/applications/${returnAppId}`
   : "/documents";
- 
+
   const { data: doc, isLoading: docLoading, error: docError } = useDocument(docId);
- 
+
   const [fileUrl,     setFileUrl]     = useState<string | null>(null);
   const [fileName,    setFileName]    = useState<string>("");
   const [fileBlob,    setFileBlob]    = useState<Blob | null>(null);
@@ -607,21 +673,21 @@ export default function DocumentViewer() {
   const [rotation,    setRotation]    = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [rightOpen,   setRightOpen]   = useState(true);
- 
-  // Mobile tab: "pages" | "viewer" | "data"
+
   const [mobileTab, setMobileTab] = useState<"pages" | "viewer" | "data">("viewer");
- 
+
   const totalPages = doc?.total_pages ?? 1;
   const isPdf      = doc?.file_type === "pdf" || fileName.endsWith(".pdf");
- 
+
   const {
     fields, avgConfidence, source,
     isLoading: ocrLoading, error: ocrError,
     detectedType, typeMismatch, dismissMismatch,
+    missingMandatoryFields,
     loadFields, submitFields, confirmField,
     saveEdit, startEdit, cancelEdit, updateEditValue,
   } = useOCR(docId);
- 
+
   useEffect(() => {
     if (!docId) return;
     let objectUrl: string;
@@ -635,27 +701,13 @@ export default function DocumentViewer() {
       .catch(err => console.error("Failed to load document file:", err));
     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [docId]);
- 
+
   useEffect(() => {
     if (fileBlob && fileName && fields.length === 0 && !ocrLoading) {
       void loadFields(fileBlob, fileName);
     }
   }, [fileBlob, fileName]); // eslint-disable-line react-hooks/exhaustive-deps
- 
-  // async function handleNextDocument() {
-  //   if (!returnAppId) { navigate("/documents"); return; }
-  //   try {
-  //     const res  = await axiosInstance.get(`/documents?application_id=${returnAppId}`);
-  //     const docs = (res.data?.items ?? res.data ?? []) as { id: string }[];
-  //     const idx  = docs.findIndex(d => d.id === docId);
-  //     const next = docs[idx + 1];
-  //     if (next) navigate(`/documents/viewer?doc_id=${next.id}&application_id=${returnAppId}`);
-  //     else      navigate(`/applications/${returnAppId}`);
-  //   } catch {
-  //     navigate(returnAppId ? `/applications/${returnAppId}` : "/documents");
-  //   }
-  // }
- 
+
   function exportData() {
     const rows = fields.map(f =>
       `"${f.field_name}","${f.extracted_value}",${f.confidence_score},${f.is_confirmed}`
@@ -667,16 +719,16 @@ export default function DocumentViewer() {
     a.href = url; a.download = `${doc?.name ?? "document"}_data.csv`; a.click();
     URL.revokeObjectURL(url);
   }
- 
+
   function handleDownload() {
     if (!fileUrl || !doc) return;
     const a = document.createElement("a");
     a.href = fileUrl; a.download = doc.name; a.click();
   }
- 
+
   const confirmedCount = fields.filter(f => f.is_confirmed).length;
   const reviewCount    = fields.filter(f => f.needs_review && !f.is_confirmed).length;
- 
+
   // ── Loading / Error ────────────────────────────────────────────────────────
   if (docLoading) {
     return <div className="flex items-center justify-center h-full py-[64px]"><Spinner /></div>;
@@ -694,20 +746,16 @@ export default function DocumentViewer() {
       </div>
     );
   }
- 
+
   // ── Reusable panel contents ────────────────────────────────────────────────
- 
+
   // Pages panel
   const PagesPanel = () => (
     <div className="flex flex-col h-full overflow-hidden bg-[#f8fafc]">
- 
-      {/* Header */}
       <div className="px-[16px] pt-[14px] pb-[12px] bg-white border-b border-[#f1f5f9] shrink-0">
         <p className="text-[#0f172a] text-[14px] font-bold">Document Pages</p>
         <p className="text-[#94a3b8] text-[11px] mt-[1px]">{totalPages} {totalPages === 1 ? "page" : "pages"}</p>
       </div>
- 
-      {/* Page grid */}
       <div className="flex-1 overflow-y-auto p-[16px]">
         <div className={totalPages === 1 ? "flex justify-center" : "grid grid-cols-2 gap-[12px]"}>
           {Array.from({ length: totalPages > 0 ? totalPages : 1 }).map((_, i) => {
@@ -721,7 +769,6 @@ export default function DocumentViewer() {
                     ? "border-indigo-600 shadow-[0_0_0_3px_rgba(58,70,229,0.12)]"
                     : "border-[#e5e7eb] hover:border-indigo-200"
                 }`}>
-                {/* Thumbnail */}
                 <div className="bg-[#f1f5f9] relative overflow-hidden" style={{ paddingTop: "70%" }}>
                   <div className="absolute inset-0 flex items-center justify-center">
                     {fileUrl && !isPdf ? (
@@ -739,7 +786,6 @@ export default function DocumentViewer() {
                       </div>
                     )}
                   </div>
-                  {/* Active indicator */}
                   {isActive && (
                     <div className="absolute top-[6px] left-[6px] bg-indigo-600 rounded-full w-[18px] h-[18px] flex items-center justify-center shadow-sm">
                       <svg width="9" height="9" viewBox="0 0 24 24" fill="none">
@@ -748,7 +794,6 @@ export default function DocumentViewer() {
                     </div>
                   )}
                 </div>
-                {/* Label */}
                 <div className="px-[8px] py-[6px] flex items-center justify-between bg-white border-t border-[#f1f5f9]">
                   <span className="text-[#374151] text-[11px] font-medium">Page {pageNum}</span>
                   <PageStatus status={status} />
@@ -760,7 +805,7 @@ export default function DocumentViewer() {
       </div>
     </div>
   );
- 
+
   // Viewer panel
   const ViewerPanel = () => (
     <div className="flex-1 min-w-0 bg-[#e8ecf0] flex flex-col overflow-hidden relative h-full">
@@ -792,11 +837,19 @@ export default function DocumentViewer() {
                   field.field_name.toLowerCase().includes("employer") ||
                   field.field_name.toLowerCase().includes("issuing authority") ||
                   field.field_name.toLowerCase().includes("mrz");
-                const borderColor = field.is_confirmed ? "#22c55e" : field.needs_review ? "#f59e0b" : "#d1d5db";
-                const bgColor     = field.is_confirmed ? "rgba(240,253,244,0.5)" : field.needs_review ? "rgba(255,251,235,0.5)" : "white";
+                const isMissingMandatory = field.is_mandatory && !field.extracted_value.trim();
+                const borderColor = isMissingMandatory
+                  ? "#ef4444"
+                  : field.is_confirmed ? "#22c55e" : field.needs_review ? "#f59e0b" : "#d1d5db";
+                const bgColor = isMissingMandatory
+                  ? "rgba(254,242,242,0.6)"
+                  : field.is_confirmed ? "rgba(240,253,244,0.5)" : field.needs_review ? "rgba(255,251,235,0.5)" : "white";
                 return (
                   <div key={field.id} className={`flex flex-col gap-[4px] ${isFullWidth ? "sm:col-span-2" : ""}`}>
-                    <label className="text-[#64748b] text-[11px] font-medium leading-[14px] tracking-[0.2px]">{field.field_name}</label>
+                    <label className="text-[#64748b] text-[11px] font-medium leading-[14px] tracking-[0.2px]">
+                      {field.field_name}
+                      {field.is_mandatory && <span className="text-[#ef4444] ml-[3px]">*</span>}
+                    </label>
                     {field.is_editing ? (
                       <input autoFocus value={field.edit_value} onChange={e => updateEditValue(field.id, e.target.value)}
                         onKeyDown={e => { if (e.key === "Enter") void saveEdit(field.id); }}
@@ -808,7 +861,9 @@ export default function DocumentViewer() {
                         {field.extracted_value || <span className="text-[#94a3b8] font-normal text-[13px]">—</span>}
                       </div>
                     )}
-                    {field.needs_review && !field.is_confirmed && (
+                    {isMissingMandatory ? (
+                      <p className="text-[#dc2626] text-[10px] leading-[14px]">This field is required.</p>
+                    ) : field.needs_review && !field.is_confirmed && (
                       <p className="flex items-center gap-[3px] text-[#d97706] text-[10px] leading-[14px]">
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
                           <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01" stroke="#d97706" strokeWidth="2" strokeLinecap="round"/>
@@ -827,33 +882,41 @@ export default function DocumentViewer() {
                 <path d="M12 7v3M8 14h.01M16 14h.01M9 17h6" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
 
-              {/* Compact copy of the sidebar mismatch banner, filling the gap
-                  next to Submit. On mobile the sidebar ("data" tab) is
-                  separate from this viewer tab, so without this someone
-                  could hit Submit here and never see the warning at all. */}
-              <div className="flex-1 min-w-0">
-                {!ocrLoading && typeMismatch && (
-                  <div className="flex items-center gap-[6px] bg-[#fffbeb] border border-[#fde68a] rounded-[8px] px-[10px] py-[6px]">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="shrink-0">
-                      <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"
-                        stroke="#d97706" strokeWidth="2" strokeLinecap="round"/>
-                    </svg>
-                    <p className="text-[#92400e] text-[11px] font-medium leading-[14px] truncate">
-                      Expected <span className="font-semibold">{doc?.document_type ?? "a different document"}</span> — this looks like{" "}
-                      <span className="font-semibold">
-                        {detectedType && detectedType !== "other" ? detectedType.replace(/_/g, " ") : "something else"}
-                      </span>.
-                    </p>
-                    <button onClick={dismissMismatch}
-                      className="text-[11px] font-semibold text-[#92400e] underline shrink-0 ml-auto whitespace-nowrap">
-                      Looks right
-                    </button>
-                  </div>
+              <div className="flex-1 min-w-0 flex flex-col gap-[2px]">
+                {missingMandatoryFields.length > 0 ? (
+                  <p className="text-[#dc2626] text-[11px] font-medium truncate">
+                    Missing required: {missingMandatoryFields.join(", ")}
+                  </p>
+                ) : (
+                  !ocrLoading && typeMismatch && (
+                    <div className="flex items-center gap-[6px] bg-[#fffbeb] border border-[#fde68a] rounded-[8px] px-[10px] py-[6px]">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="shrink-0">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"
+                          stroke="#d97706" strokeWidth="2" strokeLinecap="round"/>
+                      </svg>
+                      <p className="text-[#92400e] text-[11px] font-medium leading-[14px] truncate">
+                        Expected <span className="font-semibold">{doc?.document_type ?? "a different document"}</span> — this looks like{" "}
+                        <span className="font-semibold">
+                          {detectedType && detectedType !== "other" ? detectedType.replace(/_/g, " ") : "something else"}
+                        </span>.
+                      </p>
+                      <button onClick={dismissMismatch}
+                        className="text-[11px] font-semibold text-[#92400e] underline shrink-0 ml-auto whitespace-nowrap">
+                        Looks right
+                      </button>
+                    </div>
+                  )
+                )}
+                {ocrError && (
+                  <p className="text-[#dc2626] text-[11px] font-medium truncate">{ocrError}</p>
                 )}
               </div>
 
               <button onClick={async () => { await submitFields(); navigate(returnUrl); }}
-                className="shrink-0 flex items-center gap-[6px] h-[34px] px-[20px] rounded-[8px] text-white text-[12px] font-semibold cursor-pointer hover:opacity-90 active:scale-[0.98] transition"
+                disabled={missingMandatoryFields.length > 0}
+                className="shrink-0 flex items-center gap-[6px] h-[34px] px-[20px] rounded-[8px] text-white text-[12px] font-semibold transition
+                           disabled:opacity-40 disabled:cursor-not-allowed
+                           hover:opacity-90 active:scale-[0.98]"
                 style={{ background: "linear-gradient(135deg, var(--theme-primary), var(--theme-gradient-end))" }}>
                 {source === "db" ? "Update" : "Submit"}
               </button>
@@ -877,7 +940,7 @@ export default function DocumentViewer() {
       </div>
     </div>
   );
- 
+
   // Data panel
   const DataPanel = () => (
     <div className="flex flex-col h-full overflow-hidden bg-white">
@@ -900,6 +963,13 @@ export default function DocumentViewer() {
         </div>
       </div>
       <div className="flex-1 overflow-y-auto px-[10px] py-[10px] flex flex-col gap-[8px]">
+        {missingMandatoryFields.length > 0 && (
+          <div className="bg-[#fef2f2] border border-[#fecaca] rounded-[10px] p-[10px]">
+            <p className="text-[#dc2626] text-[11px] font-semibold leading-[15px]">
+              Missing required field{missingMandatoryFields.length !== 1 ? "s" : ""}: {missingMandatoryFields.join(", ")}
+            </p>
+          </div>
+        )}
         {!ocrLoading && typeMismatch && (
           <div className="bg-[#fffbeb] border border-[#fde68a] rounded-[10px] p-[12px] flex flex-col gap-[8px]">
             <div className="flex items-start gap-[8px]">
@@ -959,12 +1029,13 @@ export default function DocumentViewer() {
         )}
         {fields.map(field => {
           const cb = confBadge(field.confidence_score);
+          const isMissingMandatory = field.is_mandatory && !field.extracted_value.trim();
           return (
             <div key={field.id} className={`rounded-[10px] border overflow-hidden ${
-              field.is_confirmed ? "border-[#d1fae5]" : field.needs_review ? "border-[#fde68a]" : "border-[#e5e7eb]"
+              isMissingMandatory ? "border-[#fecaca]" : field.is_confirmed ? "border-[#d1fae5]" : field.needs_review ? "border-[#fde68a]" : "border-[#e5e7eb]"
             }`}>
               <div className={`flex items-center justify-between px-[10px] py-[7px] ${
-                field.is_confirmed ? "bg-[#dcfce7]" : field.needs_review ? "bg-[#fef3c7]" : "bg-[#f8fafc]"
+                isMissingMandatory ? "bg-[#fef2f2]" : field.is_confirmed ? "bg-[#dcfce7]" : field.needs_review ? "bg-[#fef3c7]" : "bg-[#f8fafc]"
               }`}>
                 <div className="flex items-center gap-[5px] min-w-0">
                   <div className={`size-[14px] rounded-[3px] flex items-center justify-center shrink-0 ${
@@ -976,7 +1047,10 @@ export default function DocumentViewer() {
                         strokeWidth="2" strokeLinecap="round"/>
                     </svg>
                   </div>
-                  <span className="text-[#111827] text-[11px] font-semibold truncate">{field.field_name}</span>
+                  <span className="text-[#111827] text-[11px] font-semibold truncate">
+                    {field.field_name}
+                    {field.is_mandatory && <span className="text-[#ef4444] ml-[3px]">*</span>}
+                  </span>
                 </div>
                 <span className={`${cb.bg} ${cb.text} text-[10px] font-bold px-[5px] py-[1px] rounded-full shrink-0 ml-[4px]`}>
                   {field.confidence_score}%
@@ -992,7 +1066,9 @@ export default function DocumentViewer() {
                     {field.extracted_value || <span className="text-[#94a3b8]">—</span>}
                   </p>
                 )}
-                {field.needs_review && !field.is_confirmed && (
+                {isMissingMandatory ? (
+                  <p className="text-[#dc2626] text-[10px] mt-[3px]">Required — please fill this in.</p>
+                ) : field.needs_review && !field.is_confirmed && (
                   <p className="flex items-center gap-[3px] text-[#d97706] text-[10px] mt-[3px] leading-[14px]">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
                       <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01" stroke="#d97706" strokeWidth="2" strokeLinecap="round"/>
@@ -1044,12 +1120,12 @@ export default function DocumentViewer() {
       </div>
     </div>
   );
- 
+
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col bg-[#f9fafb] overflow-hidden"
       style={{ fontFamily: "Inter, sans-serif", height: "calc(100dvh - 56px)" }}>
- 
+
       {/* ── TOP BAR ── */}
       <div className="bg-white border-b border-[#e5e7eb] flex items-center h-[48px] sm:h-[52px] px-[12px] sm:px-[16px] shrink-0 gap-[8px] sm:gap-[12px]">
         <button onClick={() => navigate(returnAppId ? `/applications/${returnAppId}` : "/documents")}
@@ -1060,9 +1136,9 @@ export default function DocumentViewer() {
           <span className="hidden sm:inline">Back to Case</span>
           <span className="sm:hidden">Back</span>
         </button>
- 
+
         <div className="h-[20px] w-px bg-[#e5e7eb] shrink-0" />
- 
+
         <div className="flex items-center gap-[8px] min-w-0 flex-1">
           <div className="bg-[#fee2e2] rounded-[5px] flex items-center justify-center w-[28px] h-[32px] shrink-0">
             <span className="text-[#ef4444] text-[7px] font-black">PDF</span>
@@ -1074,14 +1150,14 @@ export default function DocumentViewer() {
             </span>
           </div>
         </div>
- 
+
         {/* Zoom — hidden on mobile */}
         <div className="hidden sm:flex items-center gap-[3px] shrink-0">
           <button onClick={() => setZoom(z => Math.max(50, z - 10))} className="size-[26px] border border-[#e5e7eb] rounded-[5px] text-[#374151] flex items-center justify-center hover:bg-[#f9fafb] transition text-[14px] font-medium">−</button>
           <span className="text-[#374151] text-[12px] font-medium w-[42px] text-center">{zoom}%</span>
           <button onClick={() => setZoom(z => Math.min(200, z + 10))} className="size-[26px] border border-[#e5e7eb] rounded-[5px] text-[#374151] flex items-center justify-center hover:bg-[#f9fafb] transition text-[14px] font-medium">+</button>
         </div>
- 
+
         {/* Rotate */}
         <button onClick={() => setRotation(r => (r + 90) % 360)}
           className="hidden sm:flex items-center gap-[5px] h-[30px] px-[10px] border border-[#e5e7eb] rounded-[7px] text-[#374151] text-[12px] font-medium hover:bg-[#f9fafb] transition shrink-0">
@@ -1091,7 +1167,7 @@ export default function DocumentViewer() {
           </svg>
           Rotate
         </button>
- 
+
         {/* Download */}
         <button onClick={handleDownload}
           className="flex items-center gap-[5px] h-[30px] px-[8px] sm:px-[10px] border border-[#e5e7eb] rounded-[7px] text-[#374151] text-[12px] font-medium hover:bg-[#f9fafb] transition shrink-0">
@@ -1101,7 +1177,7 @@ export default function DocumentViewer() {
           <span className="hidden sm:inline">Download</span>
         </button>
       </div>
- 
+
       {/* ── MOBILE TABS ── */}
       <div className="lg:hidden flex items-center border-b border-[#e5e7eb] bg-white shrink-0">
         {([
@@ -1119,16 +1195,14 @@ export default function DocumentViewer() {
           </button>
         ))}
       </div>
- 
+
       {/* ── BODY ── */}
-      {/* Mobile: show one tab at a time */}
       <div className="lg:hidden flex-1 min-h-0 overflow-hidden">
         {mobileTab === "pages"  && <PagesPanel />}
         {mobileTab === "viewer" && <ViewerPanel />}
         {mobileTab === "data"   && <DataPanel  />}
       </div>
- 
-      {/* Desktop: 3-panel side by side */}
+
       <div className="hidden lg:flex flex-1 min-h-0 overflow-hidden">
         <div className="w-[168px] shrink-0 border-r border-[#e5e7eb]"><PagesPanel /></div>
         <ViewerPanel />
@@ -1138,13 +1212,14 @@ export default function DocumentViewer() {
         {!rightOpen && fields.length > 0 && (
           <div className="absolute bottom-[56px] right-[16px]">
             <button onClick={async () => { await submitFields(); navigate(returnUrl); }}
-              className="flex items-center gap-[6px] h-[34px] px-[12px] rounded-[8px] bg-white border border-[#e5e7eb] text-[#374151] text-[12px] font-medium shadow-md hover:bg-[#f9fafb] transition">
+              disabled={missingMandatoryFields.length > 0}
+              className="flex items-center gap-[6px] h-[34px] px-[12px] rounded-[8px] bg-white border border-[#e5e7eb] text-[#374151] text-[12px] font-medium shadow-md hover:bg-[#f9fafb] transition disabled:opacity-40 disabled:cursor-not-allowed">
               {source === "db" ? "Update" : "Submit"}
             </button>
           </div>
         )}
       </div>
- 
+
       {/* ── BOTTOM STATUS BAR ── */}
       <div className="bg-white border-t border-[#e5e7eb] flex items-center justify-between h-[48px] px-[12px] sm:px-[16px] shrink-0">
         <div className="flex items-center gap-[10px] sm:gap-[14px]">
@@ -1156,6 +1231,12 @@ export default function DocumentViewer() {
             <span className="flex items-center gap-[5px] text-[10px] sm:text-[11px] text-[#d97706]">
               <span className="size-[7px] rounded-full bg-[#f59e0b] shrink-0" />
               {reviewCount} review
+            </span>
+          )}
+          {missingMandatoryFields.length > 0 && (
+            <span className="flex items-center gap-[5px] text-[10px] sm:text-[11px] text-[#dc2626]">
+              <span className="size-[7px] rounded-full bg-[#ef4444] shrink-0" />
+              {missingMandatoryFields.length} required
             </span>
           )}
         </div>
