@@ -360,6 +360,7 @@ import SelectAttorney        from './pages/employee/SelectAttorney';
 import AttorneyDetail        from './pages/employee/AttorneyDetail';
 import BookConsultation      from './pages/employee/BookConsultation';
 import MyBookingsPage        from './pages/employee/MyBookingsPage';
+import EmployeeIntakePage    from './pages/employee/EmployeeIntakePage';
 import ConnectEmployer       from './pages/employee/ConnectEmployer';
 
 // ── hr pages ──────────────────────────────────────────────────────────────────
@@ -519,6 +520,7 @@ export default function App() {
               <Route path="/consultations/my-bookings"          element={<MyBookingsPage />} />
               <Route path="/consultations/attorney/:attorneyId" element={<AttorneyDetail />} />
               <Route path="/consultations/book/:attorneyId"     element={<BookConsultation />} />
+              <Route path="/my-intake/:sessionId"               element={<EmployeeIntakePage />} />
               <Route path="/profile"                          element={<ProfileSecurity />} />
               <Route path="/profile/authentication"           element={<ProfileSecurity />} />
               <Route path="/profile/mfa"                      element={<ProfileSecurity />} />

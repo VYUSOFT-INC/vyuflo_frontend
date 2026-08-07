@@ -417,8 +417,112 @@ export default function Dashboard() {
 
   const firstName = user?.first_name ?? 'there';
 
+  // Lawyer→employee intake requests. Priority order:
+  //   1. Backend action_items (real flow — when backend adds it)
+  //   2. localStorage bridge (dev testing — when lawyer clicks Send)
+  //   3. Hardcoded mock (demo mode) — so we can click through the
+  //      intake wizard even before ANY lawyer has sent a request
+  //
+  // De-dup: if backend surfaces the same session id, drop the local/mock.
+  const intakeRequestActions = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    type ActionShape = any;
+
+    // Session ids the backend has already surfaced — skip those below.
+    const backendSessionIds = new Set<string>();
+    for (const item of data?.action_items ?? []) {
+      const match = /\/intake\/([^/?#]+)/.exec(item.route ?? '');
+      if (match) backendSessionIds.add(match[1]);
+    }
+
+    const items: ActionShape[] = [];
+
+    // ── 2. localStorage bridge ─────────────────────────────────────
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+      const { readIntakeRequestsForEmployee } = require('../../lib/intakeRequests');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const reqs = readIntakeRequestsForEmployee(user?.email ?? null) as any[];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      reqs.filter((r: any) => !backendSessionIds.has(r.id)).forEach((r: any) => {
+        items.push({
+          id:          `intake-req-${r.id}`,
+          title:       r.is_correction
+            ? `📝 Corrections needed on your ${r.visa_code ?? ''} intake`
+            : `📩 Complete your ${r.visa_code ?? ''} intake`,
+          description: r.note || 'Your attorney needs details for your case.',
+          category:    'form',
+          priority:    'urgent',
+          due_date:    r.requested_at,
+          route:       `/my-intake/${r.id}`,
+          completed:   false,
+        });
+      });
+    } catch { /* ignore */ }
+
+    // ── 3. Demo mocks — auto-hide the moment backend surfaces real
+    //      intake action items. When backend team deploys the changes
+    //      in the spec doc, backend action_items will include the
+    //      intake row → this block silently no-ops → real data takes
+    //      over automatically.
+    const backendHasAnyIntake = backendSessionIds.size > 0;
+    const bridgeHasAnyIntake  = items.length > 0;
+
+    // Read "completed" markers for both demos so they hide once the
+    // user has clicked through and submitted them.
+    const completedDemoIds = new Set<string>();
+    try {
+      const raw = localStorage.getItem('vyuflo:intake:pending-requests:v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (Array.isArray(parsed) ? parsed : []).forEach((r: any) => {
+          if (r?.completed) completedDemoIds.add(r.id);
+        });
+      }
+    } catch { /* ignore */ }
+
+    if (!backendHasAnyIntake && !bridgeHasAnyIntake) {
+      // Demo #1 — Empty intake request (initial ask)
+      const DEMO1 = 'mock-session-demo';
+      if (!completedDemoIds.has(DEMO1)) {
+        items.push({
+          id:          `intake-req-${DEMO1}`,
+          title:       '📩 Complete your H-1B intake',
+          description: 'Your attorney has requested you fill out the initial intake form for your case. Please provide accurate details — you can refine later.',
+          category:    'form',
+          priority:    'urgent',
+          due_date:    new Date().toISOString(),
+          route:       `/my-intake/${DEMO1}`,
+          completed:   false,
+        });
+      }
+
+      // Demo #2 — Corrections needed (previously submitted, sent back)
+      const DEMO2 = 'mock-session-demo-corrections';
+      if (!completedDemoIds.has(DEMO2)) {
+        items.push({
+          id:          `intake-req-${DEMO2}`,
+          title:       '📝 Corrections needed on your L-1B intake',
+          description: 'Please update your passport expiration date and add your latest employment letter. Also, verify the start date for your current role — the year shown seems off.',
+          category:    'form',
+          priority:    'urgent',
+          due_date:    new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+          route:       `/my-intake/${DEMO2}`,
+          completed:   false,
+        });
+      }
+    }
+
+    return items;
+  }, [user?.email, data]);
+
   const pendingActions = useMemo(
-    () => (data?.action_items ?? []).filter(a => !a.completed), [data],
+    () => [
+      ...intakeRequestActions,
+      ...((data?.action_items ?? []).filter(a => !a.completed)),
+    ],
+    [data, intakeRequestActions],
   );
   const completedActions = useMemo(
     () => (data?.action_items ?? []).filter(a => a.completed), [data],
