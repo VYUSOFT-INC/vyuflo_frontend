@@ -37,8 +37,8 @@ interface Form {
   annual_salary:        string;
   current_visa_status:  string;
   visa_expiration_date: string;
-  has_visa_denial:      boolean;
-  has_overstay:         boolean;
+  has_visa_denial:      boolean | null;   // null = not answered yet
+  has_overstay:         boolean | null;
   visa_type_code:       string;
 }
 
@@ -47,7 +47,7 @@ const EMPTY: Form = {
   passport_expiry: '', email: '', phone: '',
   is_student: false, company_name: '', job_title: '', start_date: '', annual_salary: '',
   current_visa_status: '', visa_expiration_date: '',
-  has_visa_denial: false, has_overstay: false,
+  has_visa_denial: null, has_overstay: null,
   visa_type_code: '',
 };
 
@@ -97,7 +97,17 @@ export default function EmployeeIntakePage() {
             validateStatus: () => true,
           });
           if (!cancelled && res.status === 200 && res.data) {
-            setForm((f) => ({ ...f, ...res.data }));
+            // Map backend response → frontend form shape.
+            // Backend returns first_name/last_name (not full_name) and
+            // passport_expiry_date (not passport_expiry).
+            const d = res.data;
+            const full_name = [d.first_name, d.last_name].filter(Boolean).join(' ');
+            setForm((f) => ({
+              ...f,
+              ...d,
+              full_name:       full_name || f.full_name,
+              passport_expiry: d.passport_expiry_date ?? f.passport_expiry,
+            }));
           }
         } catch { /* ignore */ }
       }
@@ -120,24 +130,56 @@ export default function EmployeeIntakePage() {
   const next = () => setStep(STEPS[Math.min(idx + 1, STEPS.length - 1)].id);
   const prev = () => setStep(STEPS[Math.max(idx - 1, 0)].id);
 
-  const validPersonal = form.full_name.trim() && form.email.trim();
-  const validCase     = !!form.visa_type_code;
+  const validPersonal    = form.full_name.trim() && form.email.trim();
+  const validImmigration = form.has_visa_denial !== null && form.has_overstay !== null;
+  const validCase        = !!form.visa_type_code;
 
   const submit = async () => {
     setSubmitting(true); setError(null);
     try {
       if (!isDemo) {
-        // Save + submit to backend (best-effort — mock fallback if endpoints missing)
+        // Map the frontend form → backend IntakeDataSave schema.
+        // Backend expects: first_name + last_name (not full_name),
+        // passport_expiry_date (not passport_expiry). Fields not in the
+        // backend schema (phone, employment info, visa_type_code) are
+        // omitted here — they need to be added to the backend schema
+        // (see BACKEND_INTAKE_SCHEMA_GAPS.md).
+        const parts = (form.full_name || '').trim().split(/\s+/);
+        const backendPayload = {
+          first_name:           parts.slice(0, -1).join(' ') || parts[0] || null,
+          last_name:            parts.length > 1 ? parts.slice(-1)[0] : null,
+          date_of_birth:        form.date_of_birth || null,
+          nationality:          form.nationality || null,
+          passport_number:      form.passport_number || null,
+          passport_expiry_date: form.passport_expiry || null,
+          email:                form.email || null,
+          current_visa_status:  form.current_visa_status || null,
+          visa_expiration_date: form.visa_expiration_date || null,
+          has_visa_denial:      form.has_visa_denial,
+          has_overstay:         form.has_overstay,
+        };
+
+        // Save + submit to backend
         try {
-          await axios.put(`/intake/sessions/${sessionId}/data`, form, {
-            validateStatus: () => true,
-          });
-        } catch { /* ignore */ }
+          const putRes = await axios.put(
+            `/intake/sessions/${sessionId}/data`,
+            backendPayload,
+            { validateStatus: () => true },
+          );
+          if (putRes.status >= 400) {
+            console.warn('[intake PUT]', putRes.status, putRes.data);
+          }
+        } catch (e) { console.warn('[intake PUT] threw', e); }
         try {
-          await axios.post(`/intake/sessions/${sessionId}/submit`, {}, {
-            validateStatus: () => true,
-          });
-        } catch { /* ignore */ }
+          const submitRes = await axios.post(
+            `/intake/sessions/${sessionId}/submit`,
+            {},
+            { validateStatus: () => true },
+          );
+          if (submitRes.status >= 400) {
+            console.warn('[intake submit]', submitRes.status, submitRes.data);
+          }
+        } catch (e) { console.warn('[intake submit] threw', e); }
       }
 
       // For demo, ensure a completed marker exists in localStorage so
@@ -300,14 +342,26 @@ export default function EmployeeIntakePage() {
             <Field label="Visa expiration date">
               <input type="date" value={form.visa_expiration_date} onChange={e => update({ visa_expiration_date: e.target.value })} className={inputCls} />
             </Field>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={form.has_visa_denial} onChange={e => update({ has_visa_denial: e.target.checked })} />
-              <span className="text-sm text-gray-700">I've had a visa denial before</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={form.has_overstay} onChange={e => update({ has_overstay: e.target.checked })} />
-              <span className="text-sm text-gray-700">I've overstayed a visa before</span>
-            </label>
+
+            <Field label="Have you ever been denied a US visa?" required>
+              <YesNoPills
+                value={form.has_visa_denial}
+                onChange={(v) => update({ has_visa_denial: v })}
+              />
+            </Field>
+
+            <Field label="Have you ever overstayed a visa?" required>
+              <YesNoPills
+                value={form.has_overstay}
+                onChange={(v) => update({ has_overstay: v })}
+              />
+            </Field>
+
+            {(form.has_visa_denial === null || form.has_overstay === null) && (
+              <p className="text-xs text-amber-600">
+                ⚠️ Please answer both questions before continuing.
+              </p>
+            )}
           </div>
         )}
 
@@ -351,8 +405,8 @@ export default function EmployeeIntakePage() {
             <ReviewBlock title="Immigration" rows={[
               ['Current visa', form.current_visa_status],
               ['Expiration',   form.visa_expiration_date],
-              ['Denial',       form.has_visa_denial ? 'Yes' : 'No'],
-              ['Overstay',     form.has_overstay ? 'Yes' : 'No'],
+              ['Denial',       form.has_visa_denial === null ? '' : (form.has_visa_denial ? 'Yes' : 'No')],
+              ['Overstay',     form.has_overstay     === null ? '' : (form.has_overstay     ? 'Yes' : 'No')],
             ]} />
             <ReviewBlock title="Case type" rows={[['Visa', form.visa_type_code]]} />
             {error && <p className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-sm text-rose-700">{error}</p>}
@@ -368,12 +422,16 @@ export default function EmployeeIntakePage() {
         </button>
         {step !== 'review' ? (
           <button onClick={next}
-            disabled={(step === 'personal' && !validPersonal) || (step === 'case' && !validCase)}
+            disabled={
+              (step === 'personal' && !validPersonal) ||
+              (step === 'immigration' && !validImmigration) ||
+              (step === 'case' && !validCase)
+            }
             className="rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">
             Continue →
           </button>
         ) : (
-          <button onClick={submit} disabled={submitting || !validPersonal || !validCase}
+          <button onClick={submit} disabled={submitting || !validPersonal || !validImmigration || !validCase}
             className="rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">
             {submitting ? 'Submitting…' : '✓ Submit intake'}
           </button>
@@ -396,6 +454,41 @@ function Field({ label, required, children }: { label: string; required?: boolea
     </label>
   );
 }
+function YesNoPills({
+  value, onChange,
+}: {
+  value: boolean | null;
+  onChange: (v: boolean) => void;
+}) {
+  const base = 'flex-1 rounded-lg border px-4 py-2 text-sm font-semibold transition cursor-pointer';
+  return (
+    <div className="flex gap-2">
+      <button
+        type="button"
+        onClick={() => onChange(true)}
+        className={`${base} ${
+          value === true
+            ? 'border-indigo-500 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-200'
+            : 'border-gray-300 bg-white text-gray-700 hover:border-indigo-300'
+        }`}
+      >
+        Yes
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange(false)}
+        className={`${base} ${
+          value === false
+            ? 'border-indigo-500 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-200'
+            : 'border-gray-300 bg-white text-gray-700 hover:border-indigo-300'
+        }`}
+      >
+        No
+      </button>
+    </div>
+  );
+}
+
 function ReviewBlock({ title, rows }: { title: string; rows: [string, string][] }) {
   return (
     <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
