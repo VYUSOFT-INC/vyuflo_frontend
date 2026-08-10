@@ -18,6 +18,7 @@ import type {
   DocumentSummaryItem, DocStatus, Deadline, DeadlineUrgency,
   ActivityItem, ActivityType, CaseTeamMember,
 } from '../../types/employee/dashboard.types';
+import { readIntakeRequestsForEmployee } from '../../lib/intakeRequests';
 
 const PRIMARY = 'var(--theme-primary)';
 const PRIMARY_GRADIENT = 'linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)';
@@ -439,12 +440,8 @@ export default function Dashboard() {
 
     // ── 2. localStorage bridge ─────────────────────────────────────
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-      const { readIntakeRequestsForEmployee } = require('../../lib/intakeRequests');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const reqs = readIntakeRequestsForEmployee(user?.email ?? null) as any[];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      reqs.filter((r: any) => !backendSessionIds.has(r.id)).forEach((r: any) => {
+      const reqs = readIntakeRequestsForEmployee(user?.email ?? null);
+      reqs.filter((r) => !backendSessionIds.has(r.id)).forEach((r) => {
         items.push({
           id:          `intake-req-${r.id}`,
           title:       r.is_correction

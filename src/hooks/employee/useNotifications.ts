@@ -21,6 +21,7 @@ import {
   getNotificationPreferences,
   updateNotificationPreferences,
 } from "../../api/employee/notifications.api";
+import { readIntakeRequests, toEmployeeNotification } from "../../lib/intakeRequests";
 
 const PAGE_SIZE = 20;
 
@@ -58,25 +59,15 @@ export function useNotifications(params?: {
 
       // Merge local intake-request notifications (dev bridge) — hides
       // automatically once backend also surfaces the same session via
-      // its own Notification row. De-dup by application_id + title.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let localIntakeNotifs: any[] = [];
+      // its own Notification row. De-dup by title.
+      let localIntakeNotifs: Notification[] = [];
       if (reset) {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-          const { readIntakeRequests, toEmployeeNotification } = require('../../lib/intakeRequests');
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const reqs = readIntakeRequests().filter((r: any) => !r.completed);
-          // Skip local notif if backend already returned a notification
-          // for the same intake (same title matches backend's insert).
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const backendTitles = new Set(data.items.map((n: any) => n.title));
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const reqs = readIntakeRequests().filter((r) => !r.completed);
+          const backendTitles = new Set(data.items.map((n) => n.title));
           localIntakeNotifs = reqs
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            .map((r: any) => toEmployeeNotification(r))
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            .filter((n: any) => !backendTitles.has(n.title));
+            .map((r) => toEmployeeNotification(r) as Notification)
+            .filter((n) => !backendTitles.has(n.title));
         } catch { /* ignore */ }
       }
 
