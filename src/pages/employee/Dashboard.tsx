@@ -19,6 +19,7 @@ import type {
   ActivityItem, ActivityType, CaseTeamMember,
 } from '../../types/employee/dashboard.types';
 import { readIntakeRequestsForEmployee } from '../../lib/intakeRequests';
+import { readSharedRemindersFor } from '../../lib/sharedReminders';
 
 const PRIMARY = 'var(--theme-primary)';
 const PRIMARY_GRADIENT = 'linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)';
@@ -514,12 +515,51 @@ export default function Dashboard() {
     return items;
   }, [user?.email, data]);
 
+  // ── Calendar-event reminders bridge ──────────────────────────────────
+  // When lawyer creates a calendar event linked to this employee's case,
+  // sharedReminders.ts stores it. Surface upcoming ones as Action Items.
+  // Removes once backend adds real Notification/Reminder rows on
+  // POST /calendar/events (see BACKEND spec doc).
+  const calendarReminderActions = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    type ActionShape = any;
+    const items: ActionShape[] = [];
+    try {
+      const fullName = user
+        ? [user.first_name, user.last_name].filter(Boolean).join(' ')
+        : '';
+      const shared = readSharedRemindersFor({
+        email:  user?.email,
+        name:   fullName,
+        userId: user?.id,
+      });
+      // Only show upcoming (event_date today or later)
+      const today = new Date().toISOString().slice(0, 10);
+      shared
+        .filter((r) => r.event_date >= today)
+        .forEach((r) => {
+          items.push({
+            id:          `cal-event-${r.id}`,
+            title:       `📅 ${r.event_type}: ${r.title}`,
+            description: `Scheduled by ${r.attorney_name} on ${r.event_date} at ${(r.start_time || '').slice(0, 5)}. Reminder ${r.reminder_minutes} min before.`,
+            category:    'calendar',
+            priority:    r.event_type?.toLowerCase().includes('court') ? 'urgent' : 'high',
+            due_date:    `${r.event_date}T${r.start_time || '09:00:00'}`,
+            route:       `/notifications`,
+            completed:   false,
+          });
+        });
+    } catch { /* ignore */ }
+    return items;
+  }, [user?.email, user?.id, user?.first_name, user?.last_name]);
+
   const pendingActions = useMemo(
     () => [
+      ...calendarReminderActions,
       ...intakeRequestActions,
       ...((data?.action_items ?? []).filter(a => !a.completed)),
     ],
-    [data, intakeRequestActions],
+    [data, intakeRequestActions, calendarReminderActions],
   );
   const completedActions = useMemo(
     () => (data?.action_items ?? []).filter(a => a.completed), [data],
@@ -812,7 +852,7 @@ export default function Dashboard() {
                       { label: 'Upload Docs',      icon: <Upload size={15} />,        route: '/documents/upload',  comingSoon: false },
                       { label: 'Messages',          icon: <MessageSquare size={15} />, route: '/messages',          comingSoon: false },
                       { label: 'My Applications',   icon: <Briefcase size={15} />,     route: '/applications/list', comingSoon: false },
-                      { label: 'Book Consultation', icon: <CalendarClock size={15} />, route: null,                 comingSoon: true  },
+                      { label: 'Book Consultation', icon: <CalendarClock size={15} />, route: '/consultations',     comingSoon: false },
                     ].map(qa => (
                       <button key={qa.label}
                         onClick={() => qa.comingSoon ? setShowConsultation(true) : qa.route && navigate(qa.route)}

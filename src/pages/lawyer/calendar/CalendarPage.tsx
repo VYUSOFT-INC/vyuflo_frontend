@@ -24,6 +24,10 @@ import {
   buildReminderFromEvent,
 } from '../../../utils/localReminders';
 import {
+  upsertSharedReminder,
+  removeSharedReminder,
+} from '../../../lib/sharedReminders';
+import {
   EVENT_TYPE_CONFIG,
   URGENCY_CONFIG,
 } from '../../../types/lawyer/calendar.types';
@@ -125,7 +129,11 @@ export default function CalendarPage() {
     }
   };
 
-  const handleSaveEvent = async (payload: CreateEventPayload, eventId?: string) => {
+  const handleSaveEvent = async (
+    payload: CreateEventPayload,
+    eventId?: string,
+    linkedCaseInfo?: { application_id: string; application_number?: string; client_name: string } | null,
+  ) => {
     try {
       let savedId = eventId;
       if (eventId) {
@@ -152,8 +160,35 @@ export default function CalendarPage() {
               reminderMinutes: payload.reminder_minutes ?? 0,
             }),
           );
+
+          // If the event is linked to a case, fan out a shared reminder
+          // to the client (and eventually HR) — dev bridge until backend
+          // does this natively (see BACKEND spec doc).
+          if (payload.application_id && linkedCaseInfo?.client_name) {
+            upsertSharedReminder({
+              id:                savedId,
+              event_type:        payload.event_type,
+              title:             payload.title,
+              event_date:        payload.event_date,
+              start_time:        payload.start_time,
+              reminder_minutes:  payload.reminder_minutes ?? 0,
+              attorney_name:     'Your attorney',
+              attorney_id:       null,
+              application_id:    payload.application_id,
+              case_number:       linkedCaseInfo.application_number ?? null,
+              client_user_id:    null,
+              client_name:       linkedCaseInfo.client_name,
+              client_email:      null,
+              hr_user_id:        null,
+              hr_name:           null,
+              hr_email:          null,
+              created_at:        new Date().toISOString(),
+              cancelled:         false,
+            });
+          }
         } else {
           removeLocalReminder(savedId);
+          removeSharedReminder(savedId);
         }
       }
 
@@ -787,7 +822,11 @@ function AddEventModal({
 }: {
   initialEvent: EventDetail | null;
   onClose: () => void;
-  onSave: (payload: CreateEventPayload, eventId?: string) => Promise<void>;
+  onSave: (
+    payload: CreateEventPayload,
+    eventId?: string,
+    linkedCaseInfo?: { application_id: string; application_number?: string; client_name: string } | null,
+  ) => Promise<void>;
 }) {
   const isEdit = !!initialEvent;
   const [eventType, setEventType] = useState<Exclude<EventType, 'deadline'>>(
@@ -833,7 +872,7 @@ function AddEventModal({
 
     setSaving(true);
     try {
-      await onSave(payload, initialEvent?.id);
+      await onSave(payload, initialEvent?.id, linkedCase);
     } finally {
       setSaving(false);
     }
@@ -876,7 +915,13 @@ function AddEventModal({
               <Field label="End Time"><Input type="time" value={endTime} onChange={setEndTime} /></Field>
             </div>
           )}
-          <Field label="Linked Case (optional)"><LinkedCaseSearch value={linkedCase} onChange={setLinkedCase} /></Field>
+          <Field label="Linked Case (optional)">
+            <LinkedCaseSearch value={linkedCase} onChange={setLinkedCase} />
+            <p className="mt-1.5 flex items-start gap-1.5 text-xs text-gray-500">
+              <span className="mt-0.5">💡</span>
+              <span>Linking a case will automatically notify the client and their HR when this event is saved.</span>
+            </p>
+          </Field>
           <Field label="Location"><Input value={location} onChange={setLocation} placeholder="e.g. Conference Room A" /></Field>
           <Field label="Notes"><Textarea value={notes} onChange={setNotes} placeholder="Add any relevant details, links, or instructions…" rows={3} /></Field>
           <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-3">
@@ -963,7 +1008,16 @@ function LinkedCaseSearch({
         <div className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
           {results.map((r) => (
             <button key={r.application_id} type="button"
-              onClick={() => { onChange(r); setQuery(''); setOpen(false); }}
+              // preventDefault on mouseDown stops the input's onBlur firing
+              // before this click completes — otherwise the dropdown closes
+              // and the click is swallowed.
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onChange(r);
+                setQuery('');
+                setResults([]);
+                setOpen(false);
+              }}
               className="block w-full border-b border-gray-50 px-3 py-2 text-left text-xs hover:bg-indigo-50/40"
             >
               <p className="font-semibold text-gray-900">{r.client_name}</p>
