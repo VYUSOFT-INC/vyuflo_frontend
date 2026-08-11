@@ -288,8 +288,8 @@ function EmojiPicker({ onPick, onClose }: { onPick: (e: string) => void; onClose
 // ── New conversation modal ────────────────────────────────────────────────────
 type StaffUser = { id: string; name: string; role?: string; avatar_url?: string };
 
-function NewConvModal({ onClose, onCreate, isHR }: {
-  onClose: () => void; onCreate: (userId: string) => void; isHR: boolean;
+function NewConvModal({ onClose, onCreate, isHR, isLawyer }: {
+  onClose: () => void; onCreate: (userId: string) => void; isHR: boolean; isLawyer: boolean;
 }) {
   const [users,    setUsers]    = useState<StaffUser[]>([]);
   const [loading,  setLoading]  = useState(true);
@@ -306,16 +306,71 @@ function NewConvModal({ onClose, onCreate, isHR }: {
         }))))
         .catch(() => setUsers([]))
         .finally(() => setLoading(false));
-    } else {
-      messageApi.listStaff()
-        .then(items => setUsers(items.map(s => ({
-          id: s.id, name: `${s.first_name} ${s.last_name}`,
-          role: s.role, avatar_url: s.profile_picture_url ?? s.avatar_url,
-        }))))
+    } else if (isLawyer) {
+      // Lawyer: chat with clients from their assigned cases. Derive
+      // unique clients from casesApi.listMyCases() so any case HR has
+      // assigned to this lawyer shows up as a chat target.
+      import("../../api/lawyer/cases.api")
+        .then(({ casesApi }) => casesApi.listMyCases())
+        .then(cases => {
+          const byUser = new Map<string, StaffUser>();
+          for (const c of cases) {
+            const uid = (c as any).client_user_id || (c as any).client_id;
+            if (!uid || byUser.has(uid)) continue;
+            byUser.set(uid, {
+              id:         uid,
+              name:       c.client_name || (c as any).client_email || "Client",
+              role:       (c as any).visa_type || (c as any).case_number || "Client",
+              avatar_url: (c as any).client_avatar_url,
+            });
+          }
+          setUsers(Array.from(byUser.values()));
+        })
         .catch(() => setUsers([]))
         .finally(() => setLoading(false));
+    } else {
+      // Employee: chat with attorneys they've consulted with.
+      // Load from consultation bookings (dedup by attorney_user_id).
+      // Falls back to the /users staff list only if bookings return
+      // nothing usable — keeps things working for freshly-onboarded
+      // employees who haven't booked a consultation yet.
+      (async () => {
+        const collected: StaffUser[] = [];
+        try {
+          const { listMyBookings } = await import("../../api/employee/bookConsultation.api");
+          const bookings = await listMyBookings();
+          const byUser = new Map<string, StaffUser>();
+          for (const b of bookings) {
+            const uid = b.attorney_user_id;
+            if (!uid || byUser.has(uid)) continue;
+            byUser.set(uid, {
+              id:         uid,
+              name:       b.attorney_name || "Attorney",
+              role:       b.attorney_firm || "Attorney",
+              avatar_url: b.attorney_photo_url ?? undefined,
+            });
+          }
+          collected.push(...Array.from(byUser.values()));
+        } catch { /* fall through */ }
+
+        if (collected.length === 0) {
+          try {
+            const items = await messageApi.listStaff();
+            for (const s of items) {
+              collected.push({
+                id:         s.id,
+                name:       `${s.first_name} ${s.last_name}`.trim(),
+                role:       s.role,
+                avatar_url: s.profile_picture_url ?? s.avatar_url,
+              });
+            }
+          } catch { /* silent */ }
+        }
+        setUsers(collected);
+        setLoading(false);
+      })();
     }
-  }, [isHR]);
+  }, [isHR, isLawyer]);
 
   const filtered = users.filter(u =>
     u.name.toLowerCase().includes(search.toLowerCase())
@@ -334,7 +389,7 @@ function NewConvModal({ onClose, onCreate, isHR }: {
           <div className="relative">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input autoFocus type="text"
-              placeholder={isHR ? "Search employees…" : "Search staff…"}
+              placeholder={isHR ? "Search employees…" : (isLawyer ? "Search clients…" : "Search staff…")}
               value={search} onChange={e => setSearch(e.target.value)}
               className="w-full h-9 bg-slate-50 border border-slate-100 rounded-xl pl-8 pr-3 text-[13px] outline-none focus:ring-2 focus:ring-[var(--theme-light)] focus:border-[var(--theme-primary)] transition" />
           </div>
@@ -385,7 +440,8 @@ function NewConvModal({ onClose, onCreate, isHR }: {
 // =============================================================================
 const SecureMessaging: React.FC = () => {
   const session = getUiSession();
-  const isHR    = session?.roles?.includes("hr") ?? false;
+  const isHR     = session?.roles?.includes("hr") ?? false;
+  const isLawyer = session?.roles?.includes("attorney") ?? false;
   const { data: profile } = useMyProfile(); // ← ADDED: resolves current user's avatar live (not stored in ui_session)
 
   const currentUserId = useMemo((): string => {
@@ -949,7 +1005,7 @@ const SecureMessaging: React.FC = () => {
 
       {/* New conversation modal */}
       {showNewConv && (
-        <NewConvModal isHR={isHR} onClose={() => setShowNewConv(false)} onCreate={handleCreateConv} />
+        <NewConvModal isHR={isHR} isLawyer={isLawyer} onClose={() => setShowNewConv(false)} onCreate={handleCreateConv} />
       )}
     </div>
   );

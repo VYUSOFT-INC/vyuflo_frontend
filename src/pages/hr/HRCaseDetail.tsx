@@ -859,6 +859,12 @@ import type {
   HRCaseResponse, HRCaseStatus, HRCaseStage,
   HRCaseHistoryItem, HRApprovalStatus,
 } from '../../types/hr/createCase.types';
+import { hrDocumentApi }  from '../../api/hr/hrDocument.api';
+import type { HRDocumentResponse } from '../../types/hr/document.types';
+import { hrDeadlinesApi } from '../../api/hr/hrDeadlines.api';
+import type { HRDeadlineItem } from '../../types/hr/deadlines.types';
+import { visaChecklistApi } from '../../api/employee/visaChecklist.api';
+import { hrCaseLettersApi, type GeneratedLetter } from '../../api/hr/hrCaseLetters.api';
 import { getFileUrl } from '../../utils/fileUrl';
 
 const PRIMARY_GRADIENT = 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)';
@@ -1881,7 +1887,23 @@ export default function HRCaseDetail() {
                   ]}
                 />
               )}
-              {['checklist', 'letters', 'lca', 'deadlines', 'access'].includes(activeTab) && (
+              {activeTab === 'checklist' && (
+                <ChecklistTab
+                  applicationId={applicationId ?? ''}
+                  visaTypeId={c.visa_type?.id ?? null}
+                  visaCode={c.visa_type?.code ?? null}
+                />
+              )}
+
+              {activeTab === 'letters' && (
+                <LettersTab applicationId={applicationId ?? ''} />
+              )}
+
+              {activeTab === 'deadlines' && (
+                <DeadlinesTab applicationId={applicationId ?? ''} caseNumber={c.application_number} />
+              )}
+
+              {['lca', 'access'].includes(activeTab) && (
                 <div className="bg-white border border-[#f1f5f9] rounded-[14px] p-[40px] text-center shadow-[0px_1px_1px_rgba(0,0,0,0.04)]">
                   <p className="text-[14px] font-semibold text-[#0f172a] mb-[4px]">
                     {TABS.find(t => t.id === activeTab)?.label}
@@ -1903,6 +1925,555 @@ export default function HRCaseDetail() {
 
       <ChangeStatusModal open={showStatusModal} current={c.status} onClose={() => setStatusModal(false)} onSave={handleChangeStatus} />
       <ApprovalModal open={showApprovalModal} current={c.hr_approval_status} onClose={() => setApprovalModal(false)} onSave={handleApproval} />
+    </div>
+  );
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MISSING CHECKLIST TAB
+   Lists required documents for the case + shows which are uploaded/verified/
+   missing. Reads from GET /hr/documents?application_id=... via hrDocumentApi.
+═════════════════════════════════════════════════════════════════════════════ */
+
+/** Robust parser for `required_documents` — backend may hand it back as
+ *  a real array, a JSON-encoded string, a comma-separated string, or
+ *  null. Always returns a clean string[]. */
+function parseRequiredDocs(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw.filter((x) => typeof x === 'string' && x.trim().length > 0);
+  }
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((x) => typeof x === 'string' && x.trim().length > 0);
+      }
+    } catch { /* not JSON */ }
+    return raw.split(',').map((s) => s.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+// One row in the computed checklist — every REQUIRED doc for the visa
+// gets an entry regardless of whether it's uploaded or not.
+type ChecklistEntry = {
+  required_name: string;           // display name from visa checklist
+  status:        'uploaded' | 'pending_review' | 'verified' | 'rejected' | 'missing';
+  matchedDoc?:   HRDocumentResponse;   // the actual upload row if we found one
+};
+
+/** Loose match — case-insensitive substring / token overlap. Handles the
+ *  common cases: "Passport Copy" vs "Passport", "Employment Letter" vs
+ *  "Offer Letter" etc. Returns true when either side contains the other. */
+function nameMatches(required: string, uploaded: string): boolean {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const a = norm(required);
+  const b = norm(uploaded);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.includes(b) || b.includes(a)) return true;
+  // Token overlap ≥ 50%
+  const at = new Set(a.split(' ').filter(Boolean));
+  const bt = new Set(b.split(' ').filter(Boolean));
+  let hits = 0;
+  for (const t of at) if (bt.has(t)) hits++;
+  return hits > 0 && hits / Math.min(at.size, bt.size) >= 0.5;
+}
+
+function ChecklistTab({
+  applicationId, visaTypeId, visaCode,
+}: {
+  applicationId: string;
+  visaTypeId:    string | null;
+  visaCode:      string | null;
+}) {
+  const [entries,   setEntries]   = useState<ChecklistEntry[]>([]);
+  const [extraDocs, setExtraDocs] = useState<HRDocumentResponse[]>([]);  // uploaded but not on required list
+  const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!applicationId) { setLoading(false); return; }
+    (async () => {
+      setLoading(true); setError(null);
+      try {
+        // 1. Required list from the visa type catalog. Backend can return
+        //    the field as an array OR a JSON string OR a comma list.
+        let required: string[] = [];
+        if (visaTypeId) {
+          const detail = await visaChecklistApi.getVisaTypeDetail(visaTypeId);
+          required = parseRequiredDocs((detail as unknown as { required_documents?: unknown })?.required_documents);
+        }
+        // Fallback — some visa types leave the list empty; use a sensible
+        // default so HR still sees an actionable checklist.
+        if (required.length === 0) {
+          required = ['Passport Copy', 'Employment Letter', 'Latest Payslip', 'Resume / CV', 'Educational Documents'];
+        }
+
+        // 2. Uploaded docs for this case
+        const docsRes = await hrDocumentApi.listByCase(applicationId);
+        const uploads = docsRes.items ?? [];
+
+        // 3. Build one entry per required doc — best-match against uploads
+        const usedIds = new Set<string>();
+        const built: ChecklistEntry[] = required.map((req) => {
+          const match = uploads.find((u) =>
+            !usedIds.has(u.id) &&
+            nameMatches(req, u.document_type || u.name || '')
+          );
+          if (match) {
+            usedIds.add(match.id);
+            const s = match.status;
+            const norm: ChecklistEntry['status'] =
+              s === 'verified' || s === 'pending_review' || s === 'uploaded' ? s :
+              s === 'rejected' ? 'rejected' : 'missing';
+            return { required_name: req, status: norm, matchedDoc: match };
+          }
+          return { required_name: req, status: 'missing' };
+        });
+
+        // 4. Anything uploaded but NOT matching any required item → "extras"
+        const extras = uploads.filter((u) => !usedIds.has(u.id));
+
+        setEntries(built);
+        setExtraDocs(extras);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Failed to load checklist.');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [applicationId, visaTypeId]);
+
+  const done      = entries.filter(e => e.status === 'verified' || e.status === 'uploaded' || e.status === 'pending_review');
+  const rejected  = entries.filter(e => e.status === 'rejected');
+  const missing   = entries.filter(e => e.status === 'missing');
+  const total     = entries.length;
+  const completed = done.length;
+  const pct       = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  return (
+    <div className="bg-white border border-[#f1f5f9] rounded-[14px] p-[24px] shadow-[0px_1px_1px_rgba(0,0,0,0.04)]">
+      <div className="flex items-start justify-between mb-[16px]">
+        <div>
+          <h3 className="text-[16px] font-bold text-[#0f172a] mb-[2px]">Missing Checklist</h3>
+          <p className="text-[13px] text-[#64748b]">
+            Documents required for {visaCode ? <b>{visaCode}</b> : 'this visa'} — track what the employee still needs to upload.
+          </p>
+        </div>
+        {!loading && total > 0 && (
+          <div className="text-right">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-[#94a3b8]">Complete</p>
+            <p className="text-[22px] font-bold text-[#0f172a] leading-tight">{completed}<span className="text-[13px] font-medium text-[#94a3b8]">/{total}</span></p>
+          </div>
+        )}
+      </div>
+
+      {!loading && total > 0 && (
+        <div className="h-[8px] bg-[#f1f5f9] rounded-full overflow-hidden mb-[20px]">
+          <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: PRIMARY_GRADIENT }} />
+        </div>
+      )}
+
+      {loading && (
+        <div className="py-[40px] text-center text-[13px] text-[#94a3b8]">Loading checklist…</div>
+      )}
+
+      {error && !loading && (
+        <div className="p-[16px] rounded-[10px] bg-[#fef2f2] border border-[#fecaca] text-[13px] text-[#b91c1c]">
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && total === 0 && (
+        <div className="py-[40px] text-center">
+          <CheckSquare size={32} className="mx-auto text-[#cbd5e1] mb-[8px]" />
+          <p className="text-[13px] text-[#64748b]">No required documents configured for this visa type.</p>
+        </div>
+      )}
+
+      {!loading && !error && total > 0 && (
+        <div className="flex flex-col gap-[20px]">
+          {missing.length > 0 && (
+            <ChecklistSection title="Missing — waiting on employee" count={missing.length} tone="warn" entries={missing} />
+          )}
+          {rejected.length > 0 && (
+            <ChecklistSection title="Rejected — needs re-upload" count={rejected.length} tone="danger" entries={rejected} />
+          )}
+          {done.length > 0 && (
+            <ChecklistSection title="Received" count={done.length} tone="ok" entries={done} />
+          )}
+          {extraDocs.length > 0 && (
+            <div>
+              <div className="flex items-center gap-[8px] mb-[10px]">
+                <h4 className="text-[13px] font-semibold text-[#0f172a]">Additional uploads</h4>
+                <span className="px-[8px] py-[2px] rounded-full text-[11px] font-semibold bg-[#f1f5f9] text-[#64748b]">
+                  {extraDocs.length}
+                </span>
+              </div>
+              <p className="text-[11px] text-[#94a3b8] mb-[8px]">Uploaded but not on the required list.</p>
+              <div className="flex flex-col gap-[6px]">
+                {extraDocs.map(d => (
+                  <ChecklistRow
+                    key={d.id}
+                    entry={{ required_name: d.document_type || d.name || 'Document', status: (d.status === 'verified' || d.status === 'uploaded' || d.status === 'pending_review') ? d.status : d.status === 'rejected' ? 'rejected' : 'missing', matchedDoc: d }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChecklistSection({
+  title, count, tone, entries,
+}: {
+  title: string;
+  count: number;
+  tone: 'ok' | 'warn' | 'danger';
+  entries: ChecklistEntry[];
+}) {
+  const toneStyles: Record<typeof tone, { badgeBg: string; badgeText: string }> = {
+    ok:     { badgeBg: '#dcfce7', badgeText: '#15803d' },
+    warn:   { badgeBg: '#fef3c7', badgeText: '#b45309' },
+    danger: { badgeBg: '#fee2e2', badgeText: '#b91c1c' },
+  };
+  const s = toneStyles[tone];
+
+  return (
+    <div>
+      <div className="flex items-center gap-[8px] mb-[10px]">
+        <h4 className="text-[13px] font-semibold text-[#0f172a]">{title}</h4>
+        <span className="px-[8px] py-[2px] rounded-full text-[11px] font-semibold"
+              style={{ backgroundColor: s.badgeBg, color: s.badgeText }}>
+          {count}
+        </span>
+      </div>
+      <div className="flex flex-col gap-[6px]">
+        {entries.map((e, i) => <ChecklistRow key={`${e.required_name}-${i}`} entry={e} />)}
+      </div>
+    </div>
+  );
+}
+
+function ChecklistRow({ entry }: { entry: ChecklistEntry }) {
+  const statusMeta: Record<ChecklistEntry['status'], { label: string; bg: string; fg: string; icon: ReactNode; rowBg: string; rowBorder: string }> = {
+    missing:        { label: 'Missing',        bg: '#fef3c7', fg: '#b45309', icon: <AlertCircle size={12} />,   rowBg: '#fffbeb', rowBorder: '#fde68a' },
+    uploaded:       { label: 'Uploaded',       bg: '#dbeafe', fg: '#1d4ed8', icon: <FileText size={12} />,      rowBg: '#eff6ff', rowBorder: '#bfdbfe' },
+    pending_review: { label: 'Pending review', bg: '#e0e7ff', fg: '#4338ca', icon: <Clock size={12} />,         rowBg: '#eef2ff', rowBorder: '#c7d2fe' },
+    verified:       { label: 'Verified',       bg: '#dcfce7', fg: '#15803d', icon: <CheckCircle2 size={12} />,  rowBg: '#f0fdf4', rowBorder: '#bbf7d0' },
+    rejected:       { label: 'Rejected',       bg: '#fee2e2', fg: '#b91c1c', icon: <XCircle size={12} />,       rowBg: '#fef2f2', rowBorder: '#fecaca' },
+  };
+  const m = statusMeta[entry.status];
+  const subline = entry.matchedDoc
+    ? `Uploaded ${new Date(entry.matchedDoc.uploaded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+    : 'Awaiting upload';
+
+  return (
+    <div className="flex items-center gap-[12px] p-[12px] rounded-[10px] border transition"
+         style={{ backgroundColor: m.rowBg, borderColor: m.rowBorder }}>
+      <div className="w-[36px] h-[36px] rounded-[8px] flex items-center justify-center shrink-0"
+           style={{ backgroundColor: 'rgba(255,255,255,0.7)' }}>
+        {entry.status === 'verified'   ? <CheckCircle2 size={16} className="text-[#15803d]" /> :
+         entry.status === 'rejected'   ? <XCircle      size={16} className="text-[#b91c1c]" /> :
+         entry.status === 'missing'    ? <AlertCircle  size={16} className="text-[#b45309]" /> :
+                                         <FileText     size={16} className="text-[#4338ca]" />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] font-medium text-[#0f172a] truncate">{entry.required_name}</p>
+        <p className="text-[11px] text-[#94a3b8]">{subline}</p>
+      </div>
+      <span className="inline-flex items-center gap-[4px] px-[8px] py-[3px] rounded-full text-[11px] font-semibold shrink-0"
+            style={{ backgroundColor: m.bg, color: m.fg }}>
+        {m.icon} {m.label}
+      </span>
+    </div>
+  );
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GENERATED LETTERS TAB
+   Filters case documents to category='legal' or document_type containing
+   'letter'. Provides a download link per row.
+═════════════════════════════════════════════════════════════════════════════ */
+
+function LettersTab({ applicationId }: { applicationId: string }) {
+  const [letters, setLetters] = useState<GeneratedLetter[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
+  const [signingId, setSigningId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!applicationId) { setLoading(false); return; }
+    setLoading(true); setError(null);
+    try {
+      const items = await hrCaseLettersApi.list(applicationId);
+      setLetters(items);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load letters.');
+    } finally {
+      setLoading(false);
+    }
+  }, [applicationId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const handleSign = async (letterId: string) => {
+    setSigningId(letterId);
+    try {
+      const updated = await hrCaseLettersApi.sign(applicationId, letterId);
+      setLetters(prev => prev.map(l => l.id === letterId ? updated : l));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Sign failed.');
+    } finally {
+      setSigningId(null);
+    }
+  };
+
+  const pendingCount = letters.filter(l => l.status === 'pending_hr_signature').length;
+
+  return (
+    <div className="bg-white border border-[#f1f5f9] rounded-[14px] p-[24px] shadow-[0px_1px_1px_rgba(0,0,0,0.04)]">
+      <div className="flex items-start justify-between mb-[16px]">
+        <div>
+          <h3 className="text-[16px] font-bold text-[#0f172a] mb-[2px]">Generated Letters</h3>
+          <p className="text-[13px] text-[#64748b]">
+            Offer letters, support letters, employment verifications, LCA postings — generated by the attorney for this case.
+          </p>
+        </div>
+        {pendingCount > 0 && (
+          <div className="inline-flex items-center gap-[6px] px-[10px] py-[5px] rounded-full bg-[#fef3c7] border border-[#fde68a]">
+            <AlertCircle size={13} className="text-[#b45309]" />
+            <span className="text-[11px] font-semibold text-[#b45309]">
+              {pendingCount} awaiting your signature
+            </span>
+          </div>
+        )}
+      </div>
+
+      {loading && (
+        <div className="py-[40px] text-center text-[13px] text-[#94a3b8]">Loading letters…</div>
+      )}
+
+      {error && !loading && (
+        <div className="p-[16px] rounded-[10px] bg-[#fef2f2] border border-[#fecaca] text-[13px] text-[#b91c1c]">
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && letters.length === 0 && (
+        <div className="py-[40px] text-center">
+          <FileText size={32} className="mx-auto text-[#cbd5e1] mb-[8px]" />
+          <p className="text-[13px] text-[#64748b]">No letters generated yet for this case.</p>
+          <p className="text-[11px] text-[#94a3b8] mt-[4px]">Letters generated by the attorney will appear here.</p>
+        </div>
+      )}
+
+      {!loading && !error && letters.length > 0 && (
+        <div className="flex flex-col gap-[10px]">
+          {letters.map(l => (
+            <LetterRow
+              key={l.id}
+              letter={l}
+              applicationId={applicationId}
+              onSign={() => handleSign(l.id)}
+              signing={signingId === l.id}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LetterRow({
+  letter, applicationId, onSign, signing,
+}: {
+  letter:        GeneratedLetter;
+  applicationId: string;
+  onSign:        () => void;
+  signing:       boolean;
+}) {
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const { blob, fileName } = await hrCaseLettersApi.downloadPdf(applicationId, letter.id);
+      const url = URL.createObjectURL(blob);
+      const a   = document.createElement('a');
+      a.href = url; a.download = fileName || `${letter.name || 'letter'}.pdf`; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Download failed.');
+    } finally { setDownloading(false); }
+  };
+
+  // Letter-type icon + tint
+  const typeMeta: Record<GeneratedLetter['letter_type'], { label: string; bg: string; fg: string }> = {
+    offer:                   { label: 'Offer Letter',              bg: '#eef2ff', fg: '#4338ca' },
+    support:                 { label: 'Support Letter',            bg: '#f0fdf4', fg: '#15803d' },
+    employment_verification: { label: 'Employment Verification',   bg: '#eff6ff', fg: '#1d4ed8' },
+    lca_posting:             { label: 'LCA Posting',               bg: '#fef3c7', fg: '#b45309' },
+    other:                   { label: 'Other',                     bg: '#f1f5f9', fg: '#475569' },
+  };
+  const t = typeMeta[letter.letter_type] ?? typeMeta.other;
+
+  // Status pill
+  const statusMeta: Record<GeneratedLetter['status'], { label: string; bg: string; fg: string; icon: ReactNode }> = {
+    draft:                { label: 'Draft',              bg: '#f1f5f9', fg: '#475569', icon: <Edit2 size={11} /> },
+    pending_hr_signature: { label: 'Awaiting signature', bg: '#fef3c7', fg: '#b45309', icon: <AlertCircle size={11} /> },
+    signed:               { label: 'Signed',             bg: '#dcfce7', fg: '#15803d', icon: <CheckCircle2 size={11} /> },
+    sent:                 { label: 'Sent',               bg: '#dbeafe', fg: '#1d4ed8', icon: <ArrowRight size={11} /> },
+    filed:                { label: 'Filed',              bg: '#e0e7ff', fg: '#4338ca', icon: <CheckSquare size={11} /> },
+  };
+  const s = statusMeta[letter.status] ?? statusMeta.draft;
+  const canSign = letter.status === 'pending_hr_signature';
+
+  return (
+    <div className="p-[14px] rounded-[10px] border border-[#f1f5f9] hover:bg-[#f9fafb] transition">
+      <div className="flex items-start gap-[12px]">
+        <div className="w-[40px] h-[40px] rounded-[10px] flex items-center justify-center shrink-0"
+             style={{ backgroundColor: t.bg }}>
+          <FileText size={18} style={{ color: t.fg }} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-[8px] flex-wrap">
+            <p className="text-[13px] font-semibold text-[#0f172a] truncate">{letter.name}</p>
+            <span className="inline-flex items-center gap-[3px] px-[8px] py-[2px] rounded-full text-[10px] font-semibold"
+                  style={{ backgroundColor: t.bg, color: t.fg }}>
+              {t.label}
+            </span>
+            <span className="inline-flex items-center gap-[3px] px-[8px] py-[2px] rounded-full text-[10px] font-semibold"
+                  style={{ backgroundColor: s.bg, color: s.fg }}>
+              {s.icon} {s.label}
+            </span>
+          </div>
+          <p className="text-[11px] text-[#94a3b8] mt-[4px]">
+            Generated by <b className="text-[#475569]">{letter.generated_by}</b> · {new Date(letter.generated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+          </p>
+        </div>
+        <div className="flex gap-[8px] shrink-0">
+          {canSign && (
+            <button type="button" onClick={onSign} disabled={signing}
+              className="inline-flex items-center gap-[5px] px-[11px] py-[6px] rounded-[8px] text-[12px] font-semibold text-white disabled:opacity-60"
+              style={{ background: PRIMARY_GRADIENT }}>
+              <CheckCircle2 size={13} /> {signing ? 'Signing…' : 'Sign'}
+            </button>
+          )}
+          <button type="button" onClick={handleDownload} disabled={downloading}
+            className="inline-flex items-center gap-[5px] px-[11px] py-[6px] rounded-[8px] text-[12px] font-semibold text-[#0f172a] border border-[#e5e7eb] hover:bg-[#f9fafb] disabled:opacity-60">
+            <Download size={13} /> {downloading ? '…' : 'PDF'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DEADLINES TAB
+   Renders the same HRDeadlines rows filtered to this application only.
+═════════════════════════════════════════════════════════════════════════════ */
+
+function DeadlinesTab({ applicationId, caseNumber }: { applicationId: string; caseNumber: string }) {
+  const [items,   setItems]   = useState<HRDeadlineItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!applicationId) { setLoading(false); return; }
+    (async () => {
+      setLoading(true); setError(null);
+      try {
+        const res  = await hrDeadlinesApi.list();
+        const mine = (res.items ?? []).filter(
+          d => d.application_id === applicationId ||
+               (caseNumber && d.case_number === caseNumber)
+        );
+        setItems(mine);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Failed to load deadlines.');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [applicationId, caseNumber]);
+
+  return (
+    <div className="bg-white border border-[#f1f5f9] rounded-[14px] p-[24px] shadow-[0px_1px_1px_rgba(0,0,0,0.04)]">
+      <div className="flex items-start justify-between mb-[16px]">
+        <div>
+          <h3 className="text-[16px] font-bold text-[#0f172a] mb-[2px]">Deadlines</h3>
+          <p className="text-[13px] text-[#64748b]">Upcoming due dates and filing windows for this case.</p>
+        </div>
+      </div>
+
+      {loading && (
+        <div className="py-[40px] text-center text-[13px] text-[#94a3b8]">Loading deadlines…</div>
+      )}
+
+      {error && !loading && (
+        <div className="p-[16px] rounded-[10px] bg-[#fef2f2] border border-[#fecaca] text-[13px] text-[#b91c1c]">
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && items.length === 0 && (
+        <div className="py-[40px] text-center">
+          <Clock size={32} className="mx-auto text-[#cbd5e1] mb-[8px]" />
+          <p className="text-[13px] text-[#64748b]">No deadlines scheduled for this case.</p>
+        </div>
+      )}
+
+      {!loading && !error && items.length > 0 && (
+        <div className="flex flex-col gap-[10px]">
+          {items.map(d => <DeadlineRow key={d.id} d={d} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DeadlineRow({ d }: { d: HRDeadlineItem }) {
+  const overdue  = d.days_remaining < 0;
+  const urgent   = d.days_remaining >= 0 && d.days_remaining <= 7;
+  const tone     = overdue ? 'danger' : urgent ? 'warn' : 'ok';
+  const styles: Record<typeof tone, { border: string; bg: string; badgeBg: string; badgeText: string }> = {
+    ok:     { border: '#e5e7eb', bg: '#f9fafb', badgeBg: '#dcfce7', badgeText: '#15803d' },
+    warn:   { border: '#fed7aa', bg: '#fff7ed', badgeBg: '#fef3c7', badgeText: '#b45309' },
+    danger: { border: '#fecaca', bg: '#fef2f2', badgeBg: '#fee2e2', badgeText: '#b91c1c' },
+  };
+  const s = styles[tone];
+  const label = overdue
+    ? `Overdue by ${Math.abs(d.days_remaining)} day${Math.abs(d.days_remaining) !== 1 ? 's' : ''}`
+    : d.days_remaining === 0
+      ? 'Due today'
+      : `Due in ${d.days_remaining} day${d.days_remaining !== 1 ? 's' : ''}`;
+
+  return (
+    <div className="p-[14px] rounded-[10px] border" style={{ borderColor: s.border, backgroundColor: s.bg }}>
+      <div className="flex items-start justify-between gap-[12px]">
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold text-[#0f172a] truncate">{d.title}</p>
+          {d.description && <p className="text-[12px] text-[#64748b] mt-[2px] line-clamp-2">{d.description}</p>}
+          <p className="text-[11px] text-[#94a3b8] mt-[6px]">
+            Due {new Date(d.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            {d.deadline_type && ` · ${d.deadline_type}`}
+          </p>
+        </div>
+        <span className="inline-flex items-center gap-[4px] px-[10px] py-[4px] rounded-full text-[11px] font-semibold shrink-0"
+              style={{ backgroundColor: s.badgeBg, color: s.badgeText }}>
+          {overdue ? <AlertTriangle size={11} /> : <Clock size={11} />}
+          {label}
+        </span>
+      </div>
     </div>
   );
 }
