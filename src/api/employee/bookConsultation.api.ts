@@ -169,6 +169,7 @@ export const listMyBookings = async (): Promise<MyBookingRecord[]> => {
       return {
         id:                  b.id,
         confirmation_no:     b.confirmation_no ?? `VYU-${String(b.id ?? "").slice(0, 6).toUpperCase()}`,
+        attorney_user_id:    attorneyUser.id ?? attorney.user_id ?? null,
         attorney_name:       [attorneyUser.first_name, attorneyUser.last_name].filter(Boolean).join(" ") || "Attorney",
         attorney_email:      attorneyUser.email ?? null,
         attorney_photo_url:  attorney.profile_photo_url ?? null,
