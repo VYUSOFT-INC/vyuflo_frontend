@@ -55,12 +55,37 @@ export function useNotifications(params?: {
         limit:  PAGE_SIZE,
         offset: currentOffset,
       });
+
+      // Merge local intake-request notifications (dev bridge) — hides
+      // automatically once backend also surfaces the same session via
+      // its own Notification row. De-dup by application_id + title.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let localIntakeNotifs: any[] = [];
+      if (reset) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+          const { readIntakeRequests, toEmployeeNotification } = require('../../lib/intakeRequests');
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const reqs = readIntakeRequests().filter((r: any) => !r.completed);
+          // Skip local notif if backend already returned a notification
+          // for the same intake (same title matches backend's insert).
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const backendTitles = new Set(data.items.map((n: any) => n.title));
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          localIntakeNotifs = reqs
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .map((r: any) => toEmployeeNotification(r))
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .filter((n: any) => !backendTitles.has(n.title));
+        } catch { /* ignore */ }
+      }
+
       setNotifications(prev =>
-        reset ? data.items : [...prev, ...data.items]
+        reset ? [...localIntakeNotifs, ...data.items] : [...prev, ...data.items]
       );
-      setTotal(data.total);
-      setUnreadCount(data.unread_count);
-      setUrgentCount(data.urgent_count);
+      setTotal(data.total + (reset ? localIntakeNotifs.length : 0));
+      setUnreadCount(data.unread_count + (reset ? localIntakeNotifs.length : 0));
+      setUrgentCount(data.urgent_count + (reset ? localIntakeNotifs.length : 0));
       setHasMore(data.has_more);
       if (reset) setOffset(PAGE_SIZE);
       else setOffset(currentOffset + PAGE_SIZE);

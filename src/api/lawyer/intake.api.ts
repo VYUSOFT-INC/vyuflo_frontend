@@ -127,6 +127,54 @@ export async function getClientProfile(clientId: string) {
   return res.data;
 }
 
+/* ── Lawyer review — ACCEPT the submitted intake ─────────────────────
+ * POST /intake/sessions/{id}/accept
+ * Backend converts intake into active case, sets Application.
+ * intake_accepted_at, emits "Your intake was accepted" notification
+ * to the employee. Row disappears from the Client Intake queue.
+ * ─────────────────────────────────────────────────────────────────── */
+export async function acceptIntake(
+  sessionId: string,
+  note?: string,
+): Promise<IntakeReviewDecisionResponse> {
+  const res = await axios.post<IntakeReviewDecisionResponse>(
+    `/intake/sessions/${sessionId}/accept`,
+    { note: note?.trim() || null },
+  );
+  return res.data;
+}
+
+/* ── Lawyer review — REQUEST CHANGES (send whole form back) ──────────
+ * POST /intake/sessions/{id}/request-changes
+ * Backend resets is_submitted, clears all step_*_completed flags,
+ * pins current_step=1, increments revision_count, and emits
+ * "Your intake needs corrections" notification (priority=high) to
+ * the employee with the correction_note as the body.
+ * ─────────────────────────────────────────────────────────────────── */
+export async function requestIntakeChanges(
+  sessionId: string,
+  correctionNote: string,
+): Promise<IntakeReviewDecisionResponse> {
+  const res = await axios.post<IntakeReviewDecisionResponse>(
+    `/intake/sessions/${sessionId}/request-changes`,
+    { correction_note: correctionNote },
+  );
+  return res.data;
+}
+
+/* Response type — matches IntakeReviewDecisionResponse in backend
+ * app/schemas/attorney/intake.py. */
+export interface IntakeReviewDecisionResponse {
+  detail:              string;
+  session_id:          string;
+  application_id:      string;
+  review_status:       'changes_requested' | 'accepted';
+  reviewed_at:         string;
+  revision_count:      number;
+  intake_accepted_at?: string | null;
+  case_pipeline_stage?: 'intake' | 'filed' | 'rfe' | 'decision' | null;
+}
+
 /* ── Bundled export — easier to mock in tests ───────────────────────── */
 export const intakeApi = {
   getVisaStatusOptions,
@@ -140,4 +188,6 @@ export const intakeApi = {
   saveIntakeData,
   verifyDisclosures,
   getClientProfile,
+  acceptIntake,
+  requestIntakeChanges,
 };

@@ -317,7 +317,6 @@
 //   );
 // }
 
-
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useSearchParams } from 'react-router-dom';
 
 import { useAuthStore }      from './store/authStore';
@@ -355,10 +354,12 @@ import DocumentViewer        from './pages/employee/DocumentViewer';
 import SecureMessaging       from './pages/employee/SecureMessaging';
 import NotificationsCenterV2 from './pages/employee/NotificationsCenterV2';
 import ProfileSecurity       from './pages/employee/ProfileSecurity';
-import PaymentsScreen        from './pages/employee/PaymentsScreen';
+//import PaymentsScreen        from './pages/employee/PaymentsScreen';
 import SelectAttorney        from './pages/employee/SelectAttorney';
 import AttorneyDetail        from './pages/employee/AttorneyDetail';
 import BookConsultation      from './pages/employee/BookConsultation';
+import MyBookingsPage        from './pages/employee/MyBookingsPage';
+import EmployeeIntakePage    from './pages/employee/EmployeeIntakePage';
 import ConnectEmployer       from './pages/employee/ConnectEmployer';
 
 // ── hr pages ──────────────────────────────────────────────────────────────────
@@ -415,6 +416,9 @@ import LawyerSettingsPage         from './pages/lawyer/settings/LawyerSettingsPa
 import CaseListPage               from './pages/lawyer/cases/CaseListPage';
 import CaseDetailPage             from './pages/lawyer/cases/CaseDetailPage';
 import LawyerDashboardPage        from './pages/lawyer/dashboard/LawyerDashboardPage';
+
+// ── public — personal email verification ──────────────────────────────────────
+import VerifyPersonalEmailPage from './pages/public/VerifyPersonalEmailPage';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -490,6 +494,9 @@ export default function App() {
           {/* ── HR invite acceptance ────────────────────────────────────────── */}
           <Route path="/accept-invite" element={<AcceptInvitePage />} />
 
+          {/* ── Personal email verification (post-invite-accept flow) ───────── */}
+          <Route path="/verify-personal-email" element={<VerifyPersonalEmailPage />} />
+
           {/* ── Client Intake Portal ────────────────────────────────────────── */}
           <Route path="/intake/:token" element={<ClientIntakePortal />} />
 
@@ -513,10 +520,12 @@ export default function App() {
               <Route path="/documents/viewer"                 element={<DocumentViewer />} />
               <Route path="/messages"                         element={<SecureMessaging />} />
               <Route path="/notifications"                    element={<NotificationsCenterV2 />} />
-               <Route path="/payments"                         element={<PaymentsScreen />} /> 
+              {/* <Route path="/payments"                         element={<PaymentsScreen />} /> */}
               <Route path="/consultations"                      element={<SelectAttorney />} />
+              <Route path="/consultations/my-bookings"          element={<MyBookingsPage />} />
               <Route path="/consultations/attorney/:attorneyId" element={<AttorneyDetail />} />
               <Route path="/consultations/book/:attorneyId"     element={<BookConsultation />} />
+              <Route path="/my-intake/:sessionId"               element={<EmployeeIntakePage />} />
               <Route path="/profile"                          element={<ProfileSecurity />} />
               <Route path="/profile/authentication"           element={<ProfileSecurity />} />
               <Route path="/profile/mfa"                      element={<ProfileSecurity />} />
@@ -607,7 +616,7 @@ export default function App() {
             </Route>
             <Route path="/lawyer/intake/:sessionId" element={<IntakeWizard />} />
           </Route>
-          // In App.tsx, add this ABOVE the catch-all:
+
           {/* ── Catch-all (MUST be LAST) ────────────────────────────────────── */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

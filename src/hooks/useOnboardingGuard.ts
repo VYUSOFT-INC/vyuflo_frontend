@@ -1,7 +1,7 @@
 // src/hooks/useOnboardingGuard.ts
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getMeApi } from '../api/auth.api';
+import { getMeApi } from '../api/auth/auth.api';
 import { getOnboardingRoute, getDashboardRoute } from '../utils/navigation';
 
 export function useOnboardingGuard() {

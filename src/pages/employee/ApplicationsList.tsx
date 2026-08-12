@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { PageHeader, PageContent } from '../../components/layout/Pageheader';
 import { useApplications } from '../../hooks/employee/useApplications';
-import { useCurrentUser } from '../../hooks/useAuth';
+import { useCurrentUser } from '../../hooks/auth/useAuth';
 import type { Application, ApplicationStatus } from '../../types/employee/application.types';
 
 const PRIMARY_GRADIENT = 'linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)';

@@ -20,7 +20,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { useCurrentUser } from '../../../hooks/useAuth';
+import { useCurrentUser } from '../../../hooks/auth/useAuth';
 
 import { documentsApi } from '../../../api/lawyer/documents.api';
 import { documentRequestsApi } from '../../../api/lawyer/documentRequests.api';

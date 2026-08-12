@@ -393,10 +393,10 @@
 
 // src/pages/public/Login.tsx
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useGoogleLogin } from "@react-oauth/google";
 import { useMsal } from "@azure/msal-react";
-import { authApi } from "../../api/auth.api";
+import { authApi } from "../../api/auth/auth.api";
 import { callSSOEndpoint } from "../../lib/sso";
 import { useAuthStore } from '../../store/authStore';
 import { writeUiSessionFromLogin } from '../../utils/uiSession';
@@ -420,6 +420,17 @@ import { ErrorAlert } from '../../components/ui/Alert';
 
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Same guard as PublicRoute in App.tsx and safeRedirectPath in
+  // ProfileSetupPage.tsx — prevents an open-redirect via a crafted
+  // "?redirect=//evil.com" query param, while honoring a legitimate
+  // "?redirect=/accept-invite?token=..." set by AcceptInvitePage's
+  // "Sign In to Accept" link.
+  function getSafeRedirect(): string | null {
+    const raw = searchParams.get('redirect');
+    return raw && raw.startsWith('/') && !raw.startsWith('//') ? raw : null;
+  }
   const { instance: msalInstance } = useMsal();
 
   const [email,      setEmail]      = useState("");
@@ -463,7 +474,13 @@ export default function Login() {
         tour_admin_seen:    data.tour_admin_seen    ?? false,
       });
 
-      navigate('/dashboard');
+      // FIXED: previously always navigated to '/dashboard', silently
+      // discarding the ?redirect= param that AcceptInvitePage's
+      // NeedsLoginCard sets when a person needs to log in before they
+      // can accept an invitation. That meant "Sign In to Accept" always
+      // dropped them on their normal dashboard instead of back on the
+      // invite they were trying to accept.
+      navigate(getSafeRedirect() ?? '/dashboard');
     } catch (e: unknown) {
       const err = e as AxiosError<{ detail: string }>;
       setApiError(err.response?.data?.detail ?? (e instanceof Error ? e.message : 'Invalid email or password.'));
@@ -491,7 +508,7 @@ export default function Login() {
         tour_admin_seen:    data.tour_admin_seen    ?? false,
       });
 
-      navigate('/dashboard');
+      navigate(getSafeRedirect() ?? '/dashboard');
     } catch (e: unknown) {
       setSsoError(e instanceof Error ? e.message : 'SSO sign-in failed. Please try again.');
     } finally {

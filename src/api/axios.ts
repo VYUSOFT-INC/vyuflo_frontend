@@ -115,15 +115,8 @@ instance.interceptors.response.use(
         return Promise.reject(error);
       }
     }
-
-    // ✅ 403 — no permission
-    //if (status === 403) {
-      //window.location.href = '/dashboard';
-    }
-
-    // All other errors — pass through to the calling function
-   // return Promise.reject(error);
-  //}
+    return Promise.reject(error);
+  }
 );
 
 export default instance;

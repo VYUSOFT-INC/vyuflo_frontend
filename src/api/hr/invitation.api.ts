@@ -1,12 +1,10 @@
-
-// src/api/invitation.api.ts
+// src/api/hr/invitation.api.ts
 
 import axios from "../axios";
 
 import type {
   InviteByEmailRequest,
   InviteByCodeRequest,
-  InviteByLinkRequest,
   AcceptInviteRequest,
   UpdateEmployeeRequest,
   InvitationResponse,
@@ -30,13 +28,6 @@ export const invitationApi = {
     data: InviteByCodeRequest
   ): Promise<InvitationResponse> => {
     const res = await axios.post(`${BASE}/code`, data);
-    return res.data;
-  },
-
-  inviteByLink: async (
-    data: InviteByLinkRequest
-  ): Promise<InvitationResponse> => {
-    const res = await axios.post(`${BASE}/link`, data);
     return res.data;
   },
 

@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, Link ,useSearchParams} from "react-router-dom";
 import { useGoogleLogin } from "@react-oauth/google";
 import { useMsal } from "@azure/msal-react";
-import { authApi } from "../../api/auth.api";
+import { authApi } from "../../api/auth/auth.api";
 import { callSSOEndpoint } from "../../lib/sso";
 import imgLogo         from "../../assets/icons/logo-icon.svg";
 import imgSecurityIcon from "../../assets/icons/signup-security.svg";

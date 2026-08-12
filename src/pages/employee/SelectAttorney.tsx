@@ -284,11 +284,22 @@ export default function SelectAttorney() {
     <div className="flex flex-col gap-[24px] px-[24px] sm:px-[32px] pt-[12px] pb-[48px]">
 
       {/* ── Page heading ── */}
-      <div>
-        <h1 className="text-[24px] font-bold text-[#111827]">Find Your Immigration Attorney</h1>
-        <p className="text-[14px] text-[#6B7280] mt-[4px]">
-          Search by ZIP code to find qualified immigration attorneys near you
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-[24px] font-bold text-[#111827]">Find Your Immigration Attorney</h1>
+          <p className="text-[14px] text-[#6B7280] mt-[4px]">
+            Search by ZIP code to find qualified immigration attorneys near you
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate('/consultations/my-bookings')}
+          className="group relative inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-[#4F46E5] via-[#6D28D9] to-[#7C3AED] px-5 py-2.5 text-[13px] font-bold text-white shadow-[0_4px_14px_rgba(79,70,229,0.35)] hover:shadow-[0_6px_20px_rgba(124,58,237,0.45)] hover:from-[#4338CA] hover:via-[#5B21B6] hover:to-[#6D28D9] transition-all cursor-pointer shrink-0"
+        >
+          <span className="text-base leading-none">📅</span>
+          <span>My Bookings</span>
+          <span className="ml-0.5 opacity-70 group-hover:translate-x-0.5 transition-transform">→</span>
+        </button>
       </div>
 
       {/* ── Body: sidebar + list ── */}

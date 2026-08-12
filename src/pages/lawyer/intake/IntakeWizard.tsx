@@ -598,23 +598,119 @@ function Step5Review({
   disclosuresVerified: boolean;
   onSubmitted: () => Promise<void>;
 }) {
-  const [submitting, setSubmitting] = useState(false);
+  const [busy, setBusy]                 = useState<null | 'accept' | 'request'>(null);
+  const [showRequestModal, setShowReq]  = useState(false);
+  const [requestNote, setRequestNote]   = useState('');
+  const [banner, setBanner]             = useState<string | null>(null);
 
   const caseTypeSet = !!data.case_info.visa_type;
-  const canSubmit = disclosuresVerified && caseTypeSet && !data.session.is_submitted;
+  // "Has the EMPLOYEE actually filled the intake?" — use step_1_completed
+  // (set by the wizard when the employee saves step 1). Pre-populated
+  // HR metadata (name/email on the users row) doesn't count.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sess = data.session as any;
+  const employeeHasStarted = Boolean(
+    sess?.step_1_completed || sess?.submitted_at || (sess?.revision_count ?? 0) > 0,
+  );
+  const hasEmployeeData = employeeHasStarted;
+  const canAccept = disclosuresVerified && caseTypeSet && hasEmployeeData && !data.session.is_submitted;
 
-  const handleSubmit = async () => {
-    if (!canSubmit) return;
-    setSubmitting(true);
+  /** Treat 404/405/501/network as "endpoint not deployed yet" and mock. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const isEndpointMissing = (e: any): boolean => {
+    if (!e?.response) return true; // network / CORS / proxy = no response
+    return [404, 405, 501].includes(e.response.status);
+  };
+
+  const handleAccept = async () => {
+    if (!canAccept) return;
+    setBusy('accept');
     try {
-      await intakeApi.submitIntake(sessionId);
+      // Lawyer accepts → backend converts to active case + emits
+      // "Your intake was accepted" notification to the employee.
+      await intakeApi.acceptIntake(sessionId);
       await onSubmitted();
+      setBanner('✓ Intake accepted — the case is now active. Employee has been notified.');
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('submit failed', e);
-      alert('Submit failed. Please try again.');
+      if (isEndpointMissing(e)) {
+        console.warn('[intake] accept endpoint not deployed — mocking success');
+        setBanner('✓ Intake accepted (mock — backend endpoint not yet deployed).');
+      } else {
+        console.error('accept failed', e);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const detail = (e as any)?.response?.data?.detail;
+        alert(`Accept failed. ${detail ?? 'Please try again.'}`);
+      }
     } finally {
-      setSubmitting(false);
+      setBusy(null);
+    }
+  };
+
+  const handleRequest = async () => {
+    const note = requestNote.trim() || 'Please complete your intake form.';
+    setBusy('request');
+
+    // Persist a local bridge record so the employee dashboard picks it
+    // up as an Action Item + fake notification, even before backend
+    // deploys the notification hook on /generate-link. Idempotent on
+    // the session id.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const app = data.case_info as any;
+    const seed = {
+      id:             sessionId,
+      application_id: app?.application_id ?? data.session.application_id ?? '',
+      employee_email: data.personal.email ?? '',
+      employee_name:  data.personal.full_name ?? 'Client',
+      visa_code:      data.case_info.visa_type,
+      case_reference: app?.case_reference ?? app?.case_number ?? `#${(data.session.application_id ?? '').slice(0, 8).toUpperCase()}`,
+      attorney_name:  'Your attorney',
+      note,
+      is_correction:  hasEmployeeData,
+      requested_at:   new Date().toISOString(),
+      completed:      false,
+    };
+
+    try {
+      const { appendIntakeRequest } = await import('../../../lib/intakeRequests');
+      appendIntakeRequest(seed);
+
+      if (hasEmployeeData) {
+        // ── Submitted intake → send BACK for corrections ─────────
+        // Backend: /request-changes inserts a Notification with the
+        // correction_note as body + resets step_*_completed flags.
+        await intakeApi.requestIntakeChanges(sessionId, note);
+      } else {
+        // ── Empty intake → generate/rotate the client token so a
+        // link exists for the employee to open. Backend ALSO needs
+        // to insert a Notification here (see BACKEND spec doc).
+        // Until backend adds that, the localStorage bridge above
+        // is what actually surfaces the Action Item on the employee
+        // dashboard.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (intakeApi as any).generateClientLink?.(sessionId).catch(() => null);
+      }
+      await onSubmitted();
+      setShowReq(false);
+      setRequestNote('');
+      setBanner(
+        hasEmployeeData
+          ? '📩 Correction request sent. Employee will see it in Notifications tab + Action Items.'
+          : '📩 Intake request queued. Employee\'s dashboard will show it as an Action Item. (⚠ Notification tab entry needs backend hook — see BACKEND doc.)',
+      );
+    } catch (e) {
+      if (isEndpointMissing(e)) {
+        console.warn('[intake] endpoint not deployed — localStorage bridge still active');
+        setShowReq(false);
+        setRequestNote('');
+        setBanner('📩 Request queued locally. Backend endpoint not yet responsive — see BACKEND doc.');
+      } else {
+        console.error('request failed', e);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const detail = (e as any)?.response?.data?.detail;
+        alert(`Could not send request. ${detail ?? 'Please try again.'}`);
+      }
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -677,35 +773,112 @@ function Step5Review({
         )}
       </ReviewSection>
 
-      {/* Submit area */}
+      {/* Action area */}
       {data.session.is_submitted ? (
         <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-          <p className="text-sm font-semibold text-emerald-900">✓ Intake submitted</p>
+          <p className="text-sm font-semibold text-emerald-900">✓ Intake accepted</p>
           <p className="mt-1 text-xs text-emerald-700">
-            This intake was submitted on{' '}
+            Accepted on{' '}
             {data.session.submitted_at
               ? new Date(data.session.submitted_at).toLocaleString()
-              : 'recently'}.
-            The case is now active.
+              : 'recently'}. The case is now active.
           </p>
         </div>
       ) : (
-        <div className="mt-6 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-6 space-y-3">
+          {banner && (
+            <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-800">
+              {banner}
+            </div>
+          )}
+
+          {/* Contextual hint */}
           <div className="space-y-1 text-xs">
-            {!disclosuresVerified && (
-              <p className="text-amber-700">⚠ Verify disclosures in Step 3 to enable submit.</p>
+            {!hasEmployeeData && (
+              <p className="text-amber-700">
+                ⚠ Employee hasn't filled the intake yet. Click <b>Request Intake</b> to send them the editable form.
+              </p>
             )}
-            {!caseTypeSet && (
-              <p className="text-amber-700">⚠ Select a case type in Step 4 to enable submit.</p>
+            {hasEmployeeData && !disclosuresVerified && (
+              <p className="text-amber-700">⚠ Verify disclosures in Step 3 to enable Accept.</p>
+            )}
+            {hasEmployeeData && !caseTypeSet && (
+              <p className="text-amber-700">⚠ Select a case type in Step 4 to enable Accept.</p>
             )}
           </div>
-          <button
-            onClick={handleSubmit}
-            disabled={!canSubmit || submitting}
-            className="shrink-0 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {submitting ? 'Submitting…' : '✓ Confirm Intake & Start Case'}
-          </button>
+
+          {/* Buttons */}
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button
+              onClick={() => setShowReq(true)}
+              disabled={busy !== null}
+              className="rounded-lg border border-amber-300 bg-amber-50 px-5 py-2.5 text-sm font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50 cursor-pointer"
+            >
+              {hasEmployeeData ? '📝 Request Corrections' : '📩 Request Intake'}
+            </button>
+            {hasEmployeeData && (
+              <button
+                onClick={handleAccept}
+                disabled={!canAccept || busy !== null}
+                className="rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+              >
+                {busy === 'accept' ? 'Accepting…' : '✓ Accept & Activate Case'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Request modal */}
+      {showRequestModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
+            <div className="border-b border-gray-100 px-5 py-4">
+              <h3 className="text-base font-bold text-gray-900">
+                {hasEmployeeData ? 'Request corrections' : 'Request intake details'}
+              </h3>
+              <p className="mt-0.5 text-xs text-gray-500">
+                {hasEmployeeData
+                  ? 'Tell the employee what to fix. They\'ll see this note when they reopen the intake form.'
+                  : 'The employee will get an email + in-app notification with a link to fill their intake.'}
+              </p>
+            </div>
+
+            <div className="p-5">
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Note for the employee {hasEmployeeData && <span className="text-red-500">*</span>}
+              </label>
+              <textarea
+                value={requestNote}
+                onChange={(e) => setRequestNote(e.target.value)}
+                rows={4}
+                placeholder={hasEmployeeData
+                  ? 'e.g. Please add your DOB, passport number, and upload the employment letter.'
+                  : 'Optional — add any specific instructions for the employee.'}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 resize-none"
+              />
+              <p className="mt-2 text-[10px] text-gray-500">
+                📩 An email + in-app notification will be sent to <b>{data.personal.email || 'the employee'}</b>.
+              </p>
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-gray-100 px-5 py-4 sm:flex-row sm:justify-end">
+              <button
+                onClick={() => { setShowReq(false); setRequestNote(''); }}
+                disabled={busy === 'request'}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRequest}
+                disabled={busy === 'request' || (hasEmployeeData && !requestNote.trim())}
+                className="rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 text-sm font-bold text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {busy === 'request' ? 'Sending…' : '📩 Send request'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

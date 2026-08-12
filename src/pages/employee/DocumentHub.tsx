@@ -1,13 +1,17 @@
 
+
 // // src/pages/employee/DocumentHub.tsx
 // //
 // // CHANGED: handleDrop() and handleFileChange() now navigate to DocumentViewer
 // // after upload succeeds, instead of just refreshing the list.
+// // CHANGED: Added delete functionality — trash icon on each document + a
+// // confirmation modal before actually deleting.
 
 // import { useRef, useState, useEffect, useCallback, type ReactNode } from "react";
 // import { useNavigate, useSearchParams } from "react-router-dom";
-// import { CheckCircle2, XCircle, AlertTriangle, Info, X } from "lucide-react";
+// import { CheckCircle2, XCircle, AlertTriangle, Info, X, Trash2 } from "lucide-react";
 // import { useDocumentHub }   from "../../hooks/employee/useDocumentHub";
+// import documentHubApi from "../../api/employee/documentHub.api";
 // import type { HubDocument, RequirementItem } from "../../types/employee/documentHub.types";
 
 // import imgUpload      from "../../assets/icons/appdetail-upload-cloud.svg";
@@ -57,6 +61,68 @@
 //         );
 //       })}
 //     </div>
+//   );
+// }
+
+// // ─────────────────────────────────────────────────────────────────────────────
+// // CONFIRM DELETE MODAL
+// // ─────────────────────────────────────────────────────────────────────────────
+
+// function ConfirmDeleteModal({ open, docName, deleting, onConfirm, onCancel }: {
+//   open:      boolean;
+//   docName:   string;
+//   deleting:  boolean;
+//   onConfirm: () => void;
+//   onCancel:  () => void;
+// }) {
+//   if (!open) return null;
+//   return (
+//     <>
+//       <div className="fixed inset-0 bg-black/40 z-[80]" onClick={deleting ? undefined : onCancel} />
+//       <div className="fixed inset-0 z-[81] flex items-center justify-center p-[16px]">
+//         <div className="w-full max-w-[400px] bg-white rounded-[16px] shadow-2xl p-[24px] flex flex-col gap-[16px]">
+//           <div className="flex items-start gap-[14px]">
+//             <div className="size-[44px] rounded-full bg-[#fee2e2] flex items-center justify-center shrink-0">
+//               <Trash2 size={20} className="text-[#dc2626]" />
+//             </div>
+//             <div className="min-w-0">
+//               <h3 className="text-[16px] font-bold text-[#0f172a]">Delete this document?</h3>
+//               <p className="text-[13px] text-[#64748b] mt-[4px] leading-[19px]">
+//                 <span className="font-medium text-[#374151]">{docName}</span> will be permanently
+//                 deleted from your account and storage. This action cannot be undone, and any
+//                 task linked to this document will be reset to pending.
+//               </p>
+//             </div>
+//           </div>
+//           <div className="flex items-center justify-end gap-[10px] mt-[4px]">
+//             <button
+//               onClick={onCancel}
+//               disabled={deleting}
+//               className="h-[38px] px-[16px] rounded-[10px] border border-[#e5e7eb] text-[13px] font-medium text-[#374151] hover:bg-[#f8fafc] transition disabled:opacity-50"
+//             >
+//               Cancel
+//             </button>
+//             <button
+//               onClick={onConfirm}
+//               disabled={deleting}
+//               className="h-[38px] px-[16px] rounded-[10px] bg-[#dc2626] text-white text-[13px] font-semibold hover:bg-[#b91c1c] transition disabled:opacity-60 flex items-center gap-[6px]"
+//             >
+//               {deleting ? (
+//                 <>
+//                   <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+//                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+//                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+//                   </svg>
+//                   Deleting…
+//                 </>
+//               ) : (
+//                 "Yes, Delete"
+//               )}
+//             </button>
+//           </div>
+//         </div>
+//       </div>
+//     </>
 //   );
 // }
 
@@ -112,11 +178,21 @@
 //   return <img src={imgMissing} alt="" className="size-[20px] shrink-0" />;
 // }
 
-// function DocCard({ doc }: { doc: HubDocument }) {
+// function DocCard({ doc, onDelete }: { doc: HubDocument; onDelete: (doc: HubDocument) => void }) {
 //   const navigate = useNavigate();
 //   return (
 //     <div onClick={() => doc.id && navigate(`/documents/viewer?doc_id=${doc.id}&return_url=${encodeURIComponent('/documents')}`)}
-//          className="bg-white border border-[#f1f5f9] rounded-[16px] shadow-[0px_1px_4px_rgba(0,0,0,0.04)] flex flex-col gap-[12px] p-[20px] cursor-pointer hover:border-indigo-600/30 hover:shadow-[0px_4px_16px_rgba(99,102,241,0.08)] transition-all duration-200">
+//          className="bg-white border border-[#f1f5f9] rounded-[16px] shadow-[0px_1px_4px_rgba(0,0,0,0.04)] flex flex-col gap-[12px] p-[20px] cursor-pointer hover:border-indigo-600/30 hover:shadow-[0px_4px_16px_rgba(99,102,241,0.08)] transition-all duration-200 relative group">
+//       <button
+//         onClick={e => { e.stopPropagation(); onDelete(doc); }}
+//         className="absolute top-[12px] right-[12px] size-[28px] rounded-[8px] flex items-center justify-center
+//                    text-[#94a3b8] opacity-0 group-hover:opacity-100 hover:bg-[#fee2e2] hover:text-[#dc2626]
+//                    transition-all duration-150 z-10"
+//         title="Delete document"
+//       >
+//         <Trash2 size={14} />
+//       </button>
+
 //       <div className="flex items-start justify-between">
 //         <img src={getFileIcon(doc.file_type)} alt={doc.file_type} className="w-[44px] h-[52px] object-contain" />
 //         <span className="text-[#94a3b8] text-[11px] font-semibold tracking-[0.5px] uppercase">{getFileLabel(doc.file_type)}</span>
@@ -133,11 +209,11 @@
 //   );
 // }
 
-// function DocRow({ doc }: { doc: HubDocument }) {
+// function DocRow({ doc, onDelete }: { doc: HubDocument; onDelete: (doc: HubDocument) => void }) {
 //   const navigate = useNavigate();
 //   return (
 //     <div onClick={() => doc.id && navigate(`/documents/viewer?doc_id=${doc.id}&return_url=${encodeURIComponent('/documents')}`)}
-//          className="flex items-center gap-[16px] px-[20px] py-[14px] border-b border-[#f8fafc] last:border-0 hover:bg-[#f8fafc] cursor-pointer transition-colors">
+//          className="flex items-center gap-[16px] px-[20px] py-[14px] border-b border-[#f8fafc] last:border-0 hover:bg-[#f8fafc] cursor-pointer transition-colors group">
 //       <img src={getFileIcon(doc.file_type)} alt={doc.file_type} className="w-[32px] h-[38px] object-contain shrink-0" />
 //       <div className="flex-1 min-w-0">
 //         <p className="text-[#111827] text-[13px] font-semibold truncate">{doc.name}</p>
@@ -145,6 +221,14 @@
 //       </div>
 //       <StatusBadge status={doc.status} />
 //       <span className="text-[#94a3b8] text-[12px] shrink-0 hidden sm:block">{fmtDate(doc.uploaded_at)}</span>
+//       <button
+//         onClick={e => { e.stopPropagation(); onDelete(doc); }}
+//         className="size-[30px] rounded-[8px] flex items-center justify-center shrink-0
+//                    text-[#94a3b8] hover:bg-[#fee2e2] hover:text-[#dc2626] transition-colors"
+//         title="Delete document"
+//       >
+//         <Trash2 size={14} />
+//       </button>
 //     </div>
 //   );
 // }
@@ -186,22 +270,25 @@
 //     activeFilter, setActiveFilter,
 //     searchQuery, setSearchQuery,
 //     uploadDocument,
+//     // ⚠️ ADJUST: if your hook exports a refetch/reload function under a
+//     // different name (e.g. `refresh`, `reload`, `mutate`), rename this
+//     // destructure and the call inside handleConfirmDelete() below to match.
+//     refetch,
 //   } = useDocumentHub();
 
 //   const [searchParams] = useSearchParams();
 
-//   // Auto-select the application tab when navigated from ApplicationDetail
-//   // e.g. /documents?application_id=xyz  → pre-selects the H-1B tab for that app
 //   useEffect(() => {
 //     const paramAppId = searchParams.get("application_id");
 //     if (paramAppId && paramAppId !== activeFilter) {
 //       void setActiveFilter(paramAppId);
 //     }
-//   // Only run on mount — don't re-run when activeFilter changes
 //   // eslint-disable-next-line react-hooks/exhaustive-deps
 //   }, []);
 
-//   const [toasts,   setToasts]   = useState<ToastItem[]>([]);
+//   const [toasts, setToasts] = useState<ToastItem[]>([]);
+//   const [docToDelete, setDocToDelete] = useState<HubDocument | null>(null);
+//   const [deleting, setDeleting] = useState(false);
 
 //   const pushToast = useCallback((tone: ToastTone, title: string, message?: string) => {
 //     const tid = `${Date.now()}-${Math.random()}`;
@@ -212,7 +299,6 @@
 //   const storagePct = Math.min(100, Math.round((storage.used_mb / storage.total_mb) * 100));
 //   const usedLabel  = `${storage.used_mb.toFixed(1)} MB of ${storage.total_mb} MB`;
 
-//   // ── CHANGED: navigate to viewer after upload ──────────────────────────────
 //   async function handleUploadAndNavigate(file: File) {
 //     const appId = activeFilter !== "all" ? activeFilter : undefined;
 
@@ -226,7 +312,6 @@
 //         `/documents/viewer?doc_id=${doc.id}${appId ? `&application_id=${appId}` : ""}&return_url=${encodeURIComponent("/documents")}`
 //       );
 //     } else {
-//       // uploadError is set by the hook — surface it as a toast
 //       pushToast('error', 'Upload failed', uploadError ?? 'Please try again.');
 //     }
 //   }
@@ -245,8 +330,29 @@
 
 //   function handleUploadToTask(taskId: string) {
 //     const appId = activeFilter !== "all" ? activeFilter : requirements?.application_id;
-//     if (!appId) return;   // no application context — nothing to route to
+//     if (!appId) return;
 //     navigate(`/applications/${appId}?tab=tasks&task_id=${taskId}`);
+//   }
+
+//   function handleDeleteClick(doc: HubDocument) {
+//     setDocToDelete(doc);
+//   }
+
+//   async function handleConfirmDelete() {
+//     if (!docToDelete) return;
+//     setDeleting(true);
+//     try {
+//       await documentHubApi.deleteDocument(docToDelete.id);
+//       pushToast('success', 'Deleted', `${docToDelete.name} has been removed.`);
+//       setDocToDelete(null);
+//       // ⚠️ ADJUST: refetch() must match your hook's actual exported name —
+//       // see the destructure comment above.
+//       await refetch?.();
+//     } catch (e) {
+//       pushToast('error', 'Delete failed', e instanceof Error ? e.message : 'Please try again.');
+//     } finally {
+//       setDeleting(false);
+//     }
 //   }
 
 //   function tabDot(status: string) {
@@ -259,12 +365,18 @@
 //   return (
 //     <div className="flex flex-col flex-1 min-h-0 overflow-hidden" style={{ fontFamily: "Inter, sans-serif" }}>
 //       <ToastStack items={toasts} onDismiss={tid => setToasts(p => p.filter(x => x.id !== tid))} />
+//       <ConfirmDeleteModal
+//         open={!!docToDelete}
+//         docName={docToDelete?.name ?? ''}
+//         deleting={deleting}
+//         onConfirm={handleConfirmDelete}
+//         onCancel={() => setDocToDelete(null)}
+//       />
 
 //       {/* TOP HEADER */}
 //       <header className="bg-white border-b border-[#f1f5f9] shrink-0 flex items-center justify-between px-[24px] sm:px-[32px] h-[64px] gap-[16px]">
 //         <h1 className="text-[#0f172a] text-[20px] font-bold tracking-[-0.5px] shrink-0">Document Hub</h1>
 
-//         {/* Dynamic filter tabs */}
 //         <div className="flex items-center gap-[4px] overflow-x-auto">
 //           <button onClick={() => setActiveFilter("all")}
 //                   className={`px-[14px] py-[6px] rounded-full text-[13px] font-medium whitespace-nowrap transition-colors ${activeFilter === "all" ? "bg-indigo-600 text-white" : "text-[#64748b] hover:bg-[#f1f5f9]"}`}>
@@ -279,9 +391,7 @@
 //           ))}
 //         </div>
 
-//         {/* Right controls */}
 //         <div className="flex items-center gap-[12px] shrink-0">
-//           {/* Search */}
 //           <div className="relative hidden md:block">
 //             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" className="absolute left-[11px] top-1/2 -translate-y-1/2 text-[#94a3b8]">
 //               <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2"/>
@@ -292,7 +402,6 @@
 //                    style={{ fontFamily: "Inter, sans-serif" }} />
 //           </div>
 
-//           {/* Storage */}
 //           <div className="hidden lg:flex items-center gap-[8px]">
 //             <img src={imgStorage} alt="" className="w-[16px] h-[16px]" />
 //             <div className="flex flex-col gap-[2px]">
@@ -304,7 +413,6 @@
 //             </div>
 //           </div>
 
-//           {/* Notification */}
 //           <button onClick={() => navigate("/notifications")}
 //                   className="bg-white border border-[#e2e8f0] rounded-[10px] flex items-center justify-center size-[36px] hover:bg-[#f8fafc] transition relative">
 //             <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -318,10 +426,8 @@
 //       <main className="flex-1 overflow-y-auto px-[16px] sm:px-[24px] lg:px-[32px] py-[24px] sm:py-[28px]">
 //         <div className="flex gap-[24px] items-start max-w-[1400px] mx-auto">
 
-//           {/* LEFT — Upload + Docs */}
 //           <div className="flex flex-col gap-[24px] flex-1 min-w-0">
 
-//             {/* Upload zone */}
 //             <div className="bg-white border border-[#f1f5f9] rounded-[16px] shadow-[0px_1px_4px_rgba(0,0,0,0.04)] p-[24px]">
 //               <div className="flex items-center justify-between mb-[16px]">
 //                 <h2 className="text-[#0f172a] text-[16px] font-bold tracking-[-0.3px]">Upload New Document</h2>
@@ -381,11 +487,9 @@
 //                 )}
 //               </div>
 
-//               {/* upload errors are surfaced via the toast system */}
 //               <input ref={fileRef} type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.docx,.doc" onChange={handleFileChange} />
 //             </div>
 
-//             {/* Documents list */}
 //             <div className="bg-white border border-[#f1f5f9] rounded-[16px] shadow-[0px_1px_4px_rgba(0,0,0,0.04)] overflow-hidden">
 //               <div className="flex items-center justify-between px-[20px] py-[16px] border-b border-[#f8fafc]">
 //                 <div className="flex items-center gap-[8px]">
@@ -425,19 +529,17 @@
 //               )}
 //               {!isLoading && !error && documents.length > 0 && viewMode === "grid" && (
 //                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-[16px] p-[20px]">
-//                   {documents.map(doc => <DocCard key={doc.id} doc={doc} />)}
+//                   {documents.map(doc => <DocCard key={doc.id} doc={doc} onDelete={handleDeleteClick} />)}
 //                 </div>
 //               )}
 //               {!isLoading && !error && documents.length > 0 && viewMode === "list" && (
-//                 <div className="flex flex-col">{documents.map(doc => <DocRow key={doc.id} doc={doc} />)}</div>
+//                 <div className="flex flex-col">{documents.map(doc => <DocRow key={doc.id} doc={doc} onDelete={handleDeleteClick} />)}</div>
 //               )}
 //             </div>
 //           </div>
 
-//           {/* RIGHT sidebar */}
 //           <div className="hidden lg:flex flex-col gap-[20px] w-[280px] shrink-0">
 
-//             {/* Requirements */}
 //             {requirements ? (
 //               <div className="bg-white border border-[#f1f5f9] rounded-[16px] shadow-[0px_1px_4px_rgba(0,0,0,0.04)] p-[20px]">
 //                 <div className="flex items-center justify-between mb-[16px]">
@@ -467,7 +569,6 @@
 //               </div>
 //             ) : null}
 
-//             {/* Recent Activity */}
 //             <div className="bg-white border border-[#f1f5f9] rounded-[16px] shadow-[0px_1px_4px_rgba(0,0,0,0.04)] p-[20px]">
 //               <h3 className="text-[#0f172a] text-[15px] font-bold tracking-[-0.3px] mb-[16px]">Recent Activity</h3>
 //               {activity.length === 0 ? (
@@ -496,16 +597,31 @@
 
 
 
+
+
+
 // src/pages/employee/DocumentHub.tsx
 //
-// CHANGED: handleDrop() and handleFileChange() now navigate to DocumentViewer
-// after upload succeeds, instead of just refreshing the list.
-// CHANGED: Added delete functionality — trash icon on each document + a
-// confirmation modal before actually deleting.
+// CHANGED: Clicking a document card/row no longer navigates to
+// DocumentViewer (that page triggers OCR extraction, which isn't wanted
+// for a simple "let me see the file" click). Instead it opens a lightweight
+// PreviewModal that just fetches and displays the file. DocumentViewer is
+// still reachable via a "Full Editor" link inside the preview, for anyone
+// who explicitly wants to review/edit OCR fields.
+// (Delete-from-DB-and-storage already handled server-side in
+// delete_document() — no frontend change needed for that part.)
+//
+// FIXED: TS18047 "'doc' is possibly 'null'" — `if (!doc) return null` only
+// narrows `doc` in the outer component scope. TypeScript does NOT carry that
+// narrowing into a nested `function handleDownload() {...}` declared below
+// it, because that closure could in theory run later after `doc` changes.
+// Fix: capture the narrowed value into its own `const activeDoc = doc;`
+// right after the null check, and use `activeDoc` (not `doc`) everywhere
+// below that point in the component.
 
 import { useRef, useState, useEffect, useCallback, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { CheckCircle2, XCircle, AlertTriangle, Info, X, Trash2 } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, Info, X, Trash2, Download } from "lucide-react";
 import { useDocumentHub }   from "../../hooks/employee/useDocumentHub";
 import documentHubApi from "../../api/employee/documentHub.api";
 import type { HubDocument, RequirementItem } from "../../types/employee/documentHub.types";
@@ -561,6 +677,130 @@ function ToastStack({ items, onDismiss }: { items: ToastItem[]; onDismiss: (id: 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// PREVIEW MODAL — click-to-view, no OCR, no navigation
+// ─────────────────────────────────────────────────────────────────────────────
+
+function PreviewModal({ doc, onClose, onDelete }: {
+  doc:      HubDocument | null;
+  onClose:  () => void;
+  onDelete: (doc: HubDocument) => void;
+}) {
+  const [fileUrl, setFileUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!doc) {
+      setFileUrl(null);
+      return;
+    }
+    let objectUrl: string | undefined;
+    setLoading(true);
+    setLoadError(null);
+
+    documentHubApi.getFileBlob(doc.id)
+      .then(({ blob }) => {
+        objectUrl = URL.createObjectURL(blob);
+        setFileUrl(objectUrl);
+      })
+      .catch(() => setLoadError("Couldn't load this file. Please try again."))
+      .finally(() => setLoading(false));
+
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [doc]);
+
+  if (!doc) return null;
+
+  // FIX (TS18047): narrow once here and use `activeDoc` for the rest of this
+  // component. `doc` itself is not safely narrowed inside nested function
+  // declarations like handleDownload() below — `activeDoc` is a plain const
+  // of type HubDocument (never null), so it's always safe to reference.
+  const activeDoc = doc;
+
+  const isPdf = activeDoc.file_type === "pdf";
+  const isImg = activeDoc.file_type === "img";
+
+  function handleDownload() {
+    if (!fileUrl) return;
+    const a = document.createElement("a");
+    a.href = fileUrl;
+    a.download = activeDoc.name;
+    a.click();
+  }
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/50 z-[80]" onClick={onClose} />
+      <div className="fixed inset-0 z-[81] flex items-center justify-center p-[16px]">
+        <div className="w-full max-w-[820px] max-h-[90vh] bg-white rounded-[16px] shadow-2xl flex flex-col overflow-hidden">
+
+          {/* header */}
+          <div className="flex items-center justify-between px-[20px] py-[14px] border-b border-[#f1f5f9] shrink-0">
+            <div className="min-w-0">
+              <p className="text-[14px] font-semibold text-[#0f172a] truncate">{activeDoc.name}</p>
+              <p className="text-[11px] text-[#94a3b8]">{activeDoc.document_type}</p>
+            </div>
+            <div className="flex items-center gap-[8px] shrink-0">
+              <button onClick={handleDownload} disabled={!fileUrl}
+                className="size-[34px] rounded-[8px] flex items-center justify-center text-[#64748b] hover:bg-[#f1f5f9] transition disabled:opacity-40"
+                title="Download">
+                <Download size={16} />
+              </button>
+              {!activeDoc.in_use && (
+                <button onClick={() => { onClose(); onDelete(activeDoc); }}
+                  className="size-[34px] rounded-[8px] flex items-center justify-center text-[#dc2626] hover:bg-[#fee2e2] transition"
+                  title="Delete document">
+                  <Trash2 size={16} />
+                </button>
+              )}
+              <button onClick={onClose}
+                className="size-[34px] rounded-[8px] flex items-center justify-center text-[#94a3b8] hover:bg-[#f1f5f9] transition"
+                title="Close">
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* body */}
+          <div className="flex-1 overflow-auto bg-[#f1f5f9] flex items-center justify-center p-[20px] min-h-[300px]">
+            {loading && (
+              <svg className="w-8 h-8 animate-spin text-indigo-600" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              </svg>
+            )}
+            {!loading && loadError && (
+              <p className="text-[#dc2626] text-[13px]">{loadError}</p>
+            )}
+            {!loading && !loadError && fileUrl && isPdf && (
+              <iframe src={fileUrl} title={activeDoc.name} className="w-full h-[70vh] bg-white rounded-[8px] border-none" />
+            )}
+            {!loading && !loadError && fileUrl && isImg && (
+              <img src={fileUrl} alt={activeDoc.name} className="max-w-full max-h-[70vh] object-contain rounded-[8px] shadow-sm" />
+            )}
+            {!loading && !loadError && fileUrl && !isPdf && !isImg && (
+              <div className="text-center">
+                <p className="text-[#64748b] text-[13px] mb-[10px]">Preview isn't available for this file type.</p>
+                <button onClick={handleDownload}
+                  className="text-indigo-600 text-[13px] font-medium hover:underline">
+                  Download to view
+                </button>
+              </div>
+            )}
+          </div>
+
+          {activeDoc.in_use && (
+            <div className="px-[20px] py-[10px] bg-[#f8fafc] border-t border-[#f1f5f9] text-[11px] text-[#94a3b8] italic shrink-0">
+              This document is used in a case and can't be deleted from here.
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CONFIRM DELETE MODAL
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -574,8 +814,8 @@ function ConfirmDeleteModal({ open, docName, deleting, onConfirm, onCancel }: {
   if (!open) return null;
   return (
     <>
-      <div className="fixed inset-0 bg-black/40 z-[80]" onClick={deleting ? undefined : onCancel} />
-      <div className="fixed inset-0 z-[81] flex items-center justify-center p-[16px]">
+      <div className="fixed inset-0 bg-black/40 z-[85]" onClick={deleting ? undefined : onCancel} />
+      <div className="fixed inset-0 z-[86] flex items-center justify-center p-[16px]">
         <div className="w-full max-w-[400px] bg-white rounded-[16px] shadow-2xl p-[24px] flex flex-col gap-[16px]">
           <div className="flex items-start gap-[14px]">
             <div className="size-[44px] rounded-full bg-[#fee2e2] flex items-center justify-center shrink-0">
@@ -674,17 +914,23 @@ function ReqIcon({ status }: { status: string }) {
   return <img src={imgMissing} alt="" className="size-[20px] shrink-0" />;
 }
 
-function DocCard({ doc, onDelete }: { doc: HubDocument; onDelete: (doc: HubDocument) => void }) {
-  const navigate = useNavigate();
+function DocCard({ doc, onOpen, onDelete }: {
+  doc: HubDocument;
+  onOpen: (doc: HubDocument) => void;
+  onDelete: (doc: HubDocument) => void;
+}) {
   return (
-    <div onClick={() => doc.id && navigate(`/documents/viewer?doc_id=${doc.id}&return_url=${encodeURIComponent('/documents')}`)}
+    <div onClick={() => onOpen(doc)}
          className="bg-white border border-[#f1f5f9] rounded-[16px] shadow-[0px_1px_4px_rgba(0,0,0,0.04)] flex flex-col gap-[12px] p-[20px] cursor-pointer hover:border-indigo-600/30 hover:shadow-[0px_4px_16px_rgba(99,102,241,0.08)] transition-all duration-200 relative group">
       <button
-        onClick={e => { e.stopPropagation(); onDelete(doc); }}
-        className="absolute top-[12px] right-[12px] size-[28px] rounded-[8px] flex items-center justify-center
-                   text-[#94a3b8] opacity-0 group-hover:opacity-100 hover:bg-[#fee2e2] hover:text-[#dc2626]
-                   transition-all duration-150 z-10"
-        title="Delete document"
+        onClick={e => { e.stopPropagation(); if (!doc.in_use) onDelete(doc); }}
+        disabled={doc.in_use}
+        title={doc.in_use ? "Used in a case — remove it from there first" : "Delete document"}
+        className={`absolute top-[12px] right-[12px] size-[28px] rounded-[8px] flex items-center justify-center
+                   transition-all duration-150 z-10
+                   ${doc.in_use
+                     ? "text-[#cbd5e1] opacity-0 group-hover:opacity-100 cursor-not-allowed"
+                     : "text-[#94a3b8] opacity-0 group-hover:opacity-100 hover:bg-[#fee2e2] hover:text-[#dc2626]"}`}
       >
         <Trash2 size={14} />
       </button>
@@ -701,27 +947,37 @@ function DocCard({ doc, onDelete }: { doc: HubDocument; onDelete: (doc: HubDocum
         <StatusBadge status={doc.status} />
         <span className="text-[#94a3b8] text-[11px]">{fmtDate(doc.uploaded_at)}</span>
       </div>
+      {doc.in_use && (
+        <span className="text-[10px] text-[#94a3b8] italic">Used in a case</span>
+      )}
     </div>
   );
 }
 
-function DocRow({ doc, onDelete }: { doc: HubDocument; onDelete: (doc: HubDocument) => void }) {
-  const navigate = useNavigate();
+function DocRow({ doc, onOpen, onDelete }: {
+  doc: HubDocument;
+  onOpen: (doc: HubDocument) => void;
+  onDelete: (doc: HubDocument) => void;
+}) {
   return (
-    <div onClick={() => doc.id && navigate(`/documents/viewer?doc_id=${doc.id}&return_url=${encodeURIComponent('/documents')}`)}
+    <div onClick={() => onOpen(doc)}
          className="flex items-center gap-[16px] px-[20px] py-[14px] border-b border-[#f8fafc] last:border-0 hover:bg-[#f8fafc] cursor-pointer transition-colors group">
       <img src={getFileIcon(doc.file_type)} alt={doc.file_type} className="w-[32px] h-[38px] object-contain shrink-0" />
       <div className="flex-1 min-w-0">
         <p className="text-[#111827] text-[13px] font-semibold truncate">{doc.name}</p>
-        <p className="text-[#94a3b8] text-[11px] truncate">{doc.application_name ?? doc.document_type} • {fmtSize(doc.file_size_bytes)}</p>
+        <p className="text-[#94a3b8] text-[11px] truncate">
+          {doc.application_name ?? doc.document_type} • {fmtSize(doc.file_size_bytes)}
+          {doc.in_use && <span className="ml-[6px] italic">• Used in a case</span>}
+        </p>
       </div>
       <StatusBadge status={doc.status} />
       <span className="text-[#94a3b8] text-[12px] shrink-0 hidden sm:block">{fmtDate(doc.uploaded_at)}</span>
       <button
-        onClick={e => { e.stopPropagation(); onDelete(doc); }}
-        className="size-[30px] rounded-[8px] flex items-center justify-center shrink-0
-                   text-[#94a3b8] hover:bg-[#fee2e2] hover:text-[#dc2626] transition-colors"
-        title="Delete document"
+        onClick={e => { e.stopPropagation(); if (!doc.in_use) onDelete(doc); }}
+        disabled={doc.in_use}
+        title={doc.in_use ? "Used in a case — remove it from there first" : "Delete document"}
+        className={`size-[30px] rounded-[8px] flex items-center justify-center shrink-0 transition-colors
+                   ${doc.in_use ? "text-[#cbd5e1] cursor-not-allowed" : "text-[#94a3b8] hover:bg-[#fee2e2] hover:text-[#dc2626]"}`}
       >
         <Trash2 size={14} />
       </button>
@@ -766,9 +1022,6 @@ export default function DocumentHub() {
     activeFilter, setActiveFilter,
     searchQuery, setSearchQuery,
     uploadDocument,
-    // ⚠️ ADJUST: if your hook exports a refetch/reload function under a
-    // different name (e.g. `refresh`, `reload`, `mutate`), rename this
-    // destructure and the call inside handleConfirmDelete() below to match.
     refetch,
   } = useDocumentHub();
 
@@ -783,6 +1036,7 @@ export default function DocumentHub() {
   }, []);
 
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [previewDoc, setPreviewDoc] = useState<HubDocument | null>(null);
   const [docToDelete, setDocToDelete] = useState<HubDocument | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -795,6 +1049,7 @@ export default function DocumentHub() {
   const storagePct = Math.min(100, Math.round((storage.used_mb / storage.total_mb) * 100));
   const usedLabel  = `${storage.used_mb.toFixed(1)} MB of ${storage.total_mb} MB`;
 
+  // ── Upload — stays on the Hub, no navigation to DocumentViewer ────────────
   async function handleUploadAndNavigate(file: File) {
     const appId = activeFilter !== "all" ? activeFilter : undefined;
 
@@ -803,10 +1058,7 @@ export default function DocumentHub() {
     const doc = await uploadDocument(file, { applicationId: appId });
 
     if (doc?.id) {
-      pushToast('success', 'Uploaded!', 'Reviewing extracted data…');
-      navigate(
-        `/documents/viewer?doc_id=${doc.id}${appId ? `&application_id=${appId}` : ""}&return_url=${encodeURIComponent("/documents")}`
-      );
+      pushToast('success', 'Uploaded!', `${file.name} has been added to your documents.`);
     } else {
       pushToast('error', 'Upload failed', uploadError ?? 'Please try again.');
     }
@@ -830,7 +1082,13 @@ export default function DocumentHub() {
     navigate(`/applications/${appId}?tab=tasks&task_id=${taskId}`);
   }
 
+  // ── Click a document → open the preview modal, not DocumentViewer ────────
+  function handleOpenPreview(doc: HubDocument) {
+    setPreviewDoc(doc);
+  }
+
   function handleDeleteClick(doc: HubDocument) {
+    if (doc.in_use) return; // guarded in UI already, belt-and-braces
     setDocToDelete(doc);
   }
 
@@ -838,14 +1096,16 @@ export default function DocumentHub() {
     if (!docToDelete) return;
     setDeleting(true);
     try {
+      // Backend delete_document() removes both the DB row and the S3/Spaces
+      // object, and refuses (409) if the document is reused elsewhere or
+      // already confirmed on a completed task — nothing extra needed here.
       await documentHubApi.deleteDocument(docToDelete.id);
       pushToast('success', 'Deleted', `${docToDelete.name} has been removed.`);
       setDocToDelete(null);
-      // ⚠️ ADJUST: refetch() must match your hook's actual exported name —
-      // see the destructure comment above.
       await refetch?.();
-    } catch (e) {
-      pushToast('error', 'Delete failed', e instanceof Error ? e.message : 'Please try again.');
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } };
+      pushToast('error', "Can't delete", err?.response?.data?.detail ?? 'Please try again.');
     } finally {
       setDeleting(false);
     }
@@ -861,6 +1121,13 @@ export default function DocumentHub() {
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden" style={{ fontFamily: "Inter, sans-serif" }}>
       <ToastStack items={toasts} onDismiss={tid => setToasts(p => p.filter(x => x.id !== tid))} />
+
+      <PreviewModal
+        doc={previewDoc}
+        onClose={() => setPreviewDoc(null)}
+        onDelete={handleDeleteClick}
+      />
+
       <ConfirmDeleteModal
         open={!!docToDelete}
         docName={docToDelete?.name ?? ''}
@@ -973,7 +1240,7 @@ export default function DocumentHub() {
                     <img src={imgUpload} alt="" className="w-[48px] h-[48px]" />
                     <div className="text-center">
                       <p className="text-[#0f172a] text-[15px] font-semibold">Drag and drop files here</p>
-                      <p className="text-[#94a3b8] text-[13px] mt-[2px]">or click to browse — you'll review extracted data before saving</p>
+                      <p className="text-[#94a3b8] text-[13px] mt-[2px]">or click to browse</p>
                     </div>
                     <button onClick={e => { e.stopPropagation(); fileRef.current?.click(); }}
                             className="bg-white border border-[#e2e8f0] text-[#374151] text-[13px] font-medium px-[20px] py-[8px] rounded-[8px] hover:bg-[#f8fafc] transition">
@@ -1025,11 +1292,17 @@ export default function DocumentHub() {
               )}
               {!isLoading && !error && documents.length > 0 && viewMode === "grid" && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-[16px] p-[20px]">
-                  {documents.map(doc => <DocCard key={doc.id} doc={doc} onDelete={handleDeleteClick} />)}
+                  {documents.map(doc => (
+                    <DocCard key={doc.id} doc={doc} onOpen={handleOpenPreview} onDelete={handleDeleteClick} />
+                  ))}
                 </div>
               )}
               {!isLoading && !error && documents.length > 0 && viewMode === "list" && (
-                <div className="flex flex-col">{documents.map(doc => <DocRow key={doc.id} doc={doc} onDelete={handleDeleteClick} />)}</div>
+                <div className="flex flex-col">
+                  {documents.map(doc => (
+                    <DocRow key={doc.id} doc={doc} onOpen={handleOpenPreview} onDelete={handleDeleteClick} />
+                  ))}
+                </div>
               )}
             </div>
           </div>

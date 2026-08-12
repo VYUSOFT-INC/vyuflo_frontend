@@ -5,7 +5,7 @@
 // - NO persist middleware — page refresh triggers silent refresh via AuthProvider
 
 import { create } from 'zustand';
-import type { User } from '../types/auth.types';
+import type { User } from '../types/auth/auth.types';
 
 interface AuthState {
   accessToken:     string | null;
