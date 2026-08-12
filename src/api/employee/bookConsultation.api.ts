@@ -71,11 +71,17 @@ export const getBookConsultationData = async (
   try {
     const query = attorneyId ? `?attorney_id=${attorneyId}` : "";
     const res = await axios.get<BookConsultationData>(`/consultations/book-page${query}`);
-    // Fill in defaults if backend returns partial payload
+    // Only synthesise slots when the backend attorney is missing entirely
+    // (i.e. we're in a fully-mocked state). If a real attorney exists but
+    // has no slots, show the honest empty state instead of synthesising
+    // fake IDs — otherwise POST /bookings 422s with "invalid UUID".
+    const hasRealAttorney = !!res.data?.attorney;
     return {
       attorney:          res.data?.attorney ?? null,
       appointment_types: res.data?.appointment_types?.length ? res.data.appointment_types : APPOINTMENT_TYPES,
-      slots:             res.data?.slots?.length ? res.data.slots : synthesiseSlots(browserTz()),
+      slots:             res.data?.slots?.length
+        ? res.data.slots
+        : (hasRealAttorney ? [] : synthesiseSlots(browserTz())),
     };
   } catch {
     // Backend not ready — fall back to a fully synthetic response
@@ -163,6 +169,7 @@ export const listMyBookings = async (): Promise<MyBookingRecord[]> => {
       return {
         id:                  b.id,
         confirmation_no:     b.confirmation_no ?? `VYU-${String(b.id ?? "").slice(0, 6).toUpperCase()}`,
+        attorney_user_id:    attorneyUser.id ?? attorney.user_id ?? null,
         attorney_name:       [attorneyUser.first_name, attorneyUser.last_name].filter(Boolean).join(" ") || "Attorney",
         attorney_email:      attorneyUser.email ?? null,
         attorney_photo_url:  attorney.profile_photo_url ?? null,
