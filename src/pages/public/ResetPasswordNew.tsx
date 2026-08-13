@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { forgotPasswordApi } from "../../api/auth.api";
+import { forgotPasswordApi } from "../../api/auth/auth.api";
 
 // // ── Figma Assets ──────────────────────────────────────────────────────────────
 // const imgLogoIcon   = "https://www.figma.com/api/mcp/asset/c8ec1a79-00cd-4b3f-81db-ee82a5c81701"; // plane icon

@@ -5,24 +5,10 @@
 // import { useDocument }                  from "../../hooks/employee/useDocuments";
 // import { useOCR }                       from "../../hooks/employee/useOCR";
 // import documentsApi                     from "../../api/employee/documents.api";
-// // import axiosInstance                    from "../../api/axios";
- 
+// import type { OCRField }                from "../../types/employee/ocr.types";
+// import type { Document }                from "../../types/employee/document.types";
+
 // // ── Helpers ───────────────────────────────────────────────────────────────────
-// function confBadge(score: number) {
-//   if (score >= 90) return { bg: "bg-[#dcfce7]", text: "text-[#16a34a]" };
-//   if (score >= 75) return { bg: "bg-[#fef9c3]", text: "text-[#ca8a04]" };
-//   return               { bg: "bg-[#fee2e2]",    text: "text-[#dc2626]" };
-// }
- 
-// function PageStatus({ status }: { status: string }) {
-//   if (status === "processed" || status === "confirmed")
-//     return <span className="text-[#16a34a] text-[10px] font-semibold">Processed</span>;
-//   if (status === "review_needed")
-//     return <span className="text-[#d97706] text-[10px] font-semibold">Review</span>;
-//   return <span className="text-indigo-600 text-[10px] font-semibold">Processing</span>;
-// }
- 
-// // ── Spinner ───────────────────────────────────────────────────────────────────
 // function Spinner({ color = "text-indigo-600" }: { color?: string }) {
 //   return (
 //     <svg className={`w-8 h-8 animate-spin ${color}`} fill="none" viewBox="0 0 24 24">
@@ -31,7 +17,347 @@
 //     </svg>
 //   );
 // }
- 
+
+// function MiniSpinner({ color = "text-[#94a3b8]" }: { color?: string }) {
+//   return (
+//     <svg className={`w-4 h-4 animate-spin ${color}`} fill="none" viewBox="0 0 24 24">
+//       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+//       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+//     </svg>
+//   );
+// }
+
+// // ── Poor extraction popup ──────────────────────────────────────────────────
+// function PoorExtractionModal({ open, onReupload, onDismiss }: {
+//   open: boolean;
+//   onReupload: () => void;
+//   onDismiss: () => void;
+// }) {
+//   if (!open) return null;
+//   return (
+//     <>
+//       <div className="fixed inset-0 bg-black/40 z-[80]" onClick={onDismiss} />
+//       <div className="fixed inset-0 z-[81] flex items-center justify-center p-[16px]">
+//         <div className="w-full max-w-[420px] bg-white rounded-[16px] shadow-2xl p-[24px] flex flex-col gap-[16px]">
+//           <div className="flex items-start gap-[14px]">
+//             <div className="size-[44px] rounded-full bg-[#fef3c7] flex items-center justify-center shrink-0">
+//               <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+//                 <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"
+//                   stroke="#d97706" strokeWidth="2" strokeLinecap="round"/>
+//               </svg>
+//             </div>
+//             <div className="min-w-0">
+//               <h3 className="text-[16px] font-bold text-[#0f172a]">Most fields couldn't be read</h3>
+//               <p className="text-[13px] text-[#64748b] mt-[4px] leading-[19px]">
+//                 We couldn't reliably extract the required information from this document.
+//                 Please check the image on the left and try uploading a clearer version, or
+//                 continue and fill in the missing fields manually.
+//               </p>
+//             </div>
+//           </div>
+//           <div className="flex items-center justify-end gap-[10px] mt-[4px]">
+//             <button onClick={onDismiss}
+//               className="h-[38px] px-[16px] rounded-[10px] border border-[#e5e7eb] text-[13px] font-medium text-[#374151] hover:bg-[#f8fafc] transition">
+//               Fill In Manually
+//             </button>
+//             <button onClick={onReupload}
+//               className="h-[38px] px-[16px] rounded-[10px] text-white text-[13px] font-semibold hover:opacity-90 transition"
+//               style={{ background: "linear-gradient(135deg, var(--theme-primary), var(--theme-gradient-end))" }}>
+//               Re-upload a Clearer File
+//             </button>
+//           </div>
+//         </div>
+//       </div>
+//     </>
+//   );
+// }
+
+// // ─────────────────────────────────────────────────────────────────────────────
+// // ── LEFT — real scanned image, large, zoomable ─────────────────────────────
+// // HOISTED to a real top-level component — this is the fix. Previously this
+// // was defined INSIDE DocumentViewer's render body, so React created a brand
+// // new component type on every keystroke (any state update in the parent),
+// // unmounting and remounting this entire panel each time — which is why
+// // typing in the fields felt like it accepted one character at a time before
+// // losing focus. A stable, top-level component fixes that: React now
+// // correctly re-renders the SAME component in place instead of replacing it.
+// // ─────────────────────────────────────────────────────────────────────────────
+
+// interface ViewerPanelProps {
+//   doc: Document;
+//   fileUrl: string | null;
+//   isPdf: boolean;
+//   zoom: number;
+//   rotation: number;
+//   currentPage: number;
+//   totalPages: number;
+//   setCurrentPage: (updater: (p: number) => number) => void;
+// }
+
+// function ViewerPanel({ doc, fileUrl, isPdf, zoom, rotation, currentPage, totalPages, setCurrentPage }: ViewerPanelProps) {
+//   return (
+//     <div className="flex-1 min-w-0 bg-[#e8ecf0] flex flex-col overflow-hidden relative h-full">
+//       <div className="absolute top-[12px] right-[14px] z-10 bg-white/90 backdrop-blur-sm border border-[#e5e7eb] rounded-[6px] px-[8px] py-[3px] text-[11px] text-[#64748b] font-medium shadow-sm">
+//         Page {currentPage} of {totalPages}
+//       </div>
+
+//       <div className="flex-1 overflow-auto flex items-center justify-center p-[16px] sm:p-[28px]">
+//         {!fileUrl ? (
+//           <div className="flex flex-col items-center gap-[12px]">
+//             <Spinner /><p className="text-[#64748b] text-[13px]">Loading document…</p>
+//           </div>
+//         ) : isPdf ? (
+//           <iframe
+//             src={fileUrl}
+//             title={doc.name}
+//             className="bg-white shadow-[0_8px_32px_rgba(0,0,0,0.12)] rounded-[8px]"
+//             style={{
+//               width: "min(900px, 100%)",
+//               height: "80vh",
+//               border: "none",
+//               transform: `scale(${zoom / 100}) rotate(${rotation}deg)`,
+//               transformOrigin: "center center",
+//             }}
+//           />
+//         ) : (
+//           <img
+//             src={fileUrl}
+//             alt={doc.name}
+//             className="shadow-[0_8px_32px_rgba(0,0,0,0.12)] rounded-[8px] max-w-full max-h-full object-contain transition-transform duration-200"
+//             style={{ transform: `scale(${zoom / 100}) rotate(${rotation}deg)` }}
+//           />
+//         )}
+//       </div>
+
+//       {totalPages > 1 && (
+//         <div className="bg-white border-t border-[#e5e7eb] flex items-center justify-between px-[16px] sm:px-[20px] h-[44px] shrink-0">
+//           <button disabled={currentPage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+//             className="flex items-center gap-[4px] text-[#374151] text-[12px] font-medium disabled:opacity-40 hover:text-indigo-600 transition">
+//             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+//             Previous
+//           </button>
+//           <span className="text-[#64748b] text-[12px]">Page {currentPage} of {totalPages}</span>
+//           <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+//             className="flex items-center gap-[4px] text-[#374151] text-[12px] font-medium disabled:opacity-40 hover:text-indigo-600 transition">
+//             Next
+//             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+//           </button>
+//         </div>
+//       )}
+//     </div>
+//   );
+// }
+
+// // ─────────────────────────────────────────────────────────────────────────────
+// // ── RIGHT — clean grid of directly-editable input boxes ────────────────────
+// // Also hoisted to a top-level component, same reasoning as ViewerPanel above.
+// // ─────────────────────────────────────────────────────────────────────────────
+
+// interface DataPanelProps {
+//   doc: Document;
+//   fields: OCRField[];
+//   avgConfidence: number;
+//   ocrLoading: boolean;
+//   ocrError: string | null;
+//   typeMismatch: boolean;
+//   qualityIssue: string | null;
+//   detectedType: string | null;
+//   missingMandatoryFields: string[];
+//   anyLocked: boolean;
+//   source: "db" | "ocr" | null;
+//   fileBlob: Blob | null;
+//   fileName: string;
+//   onUpdateEditValue: (id: string, value: string) => void;
+//   onDismissMismatch: () => void;
+//   onReupload: () => void;
+//   onRetryOcr: () => void;
+//   onSubmit: () => void;
+//   onClosePanel: () => void;
+// }
+
+// function DataPanel({
+//   doc, fields, avgConfidence, ocrLoading, ocrError, typeMismatch, qualityIssue,
+//   detectedType, missingMandatoryFields, anyLocked, source,
+//   onUpdateEditValue, onDismissMismatch, onReupload, onRetryOcr, onSubmit, onClosePanel,
+// }: DataPanelProps) {
+//   return (
+//     <div className="flex flex-col h-full overflow-hidden bg-[#f9fafb]">
+//       <div className="flex-1 overflow-y-auto p-[24px] sm:p-[32px]">
+//         <div className="bg-white rounded-[12px] shadow-[0_1px_4px_rgba(0,0,0,0.04)] p-[24px] sm:p-[32px] flex flex-col gap-[20px]">
+
+//           <div className="flex items-center justify-between">
+//             <h2 className="text-[#111827] text-[20px] sm:text-[24px] font-bold tracking-[-0.5px]">
+//               {doc.name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ").toUpperCase()}
+//             </h2>
+//             <button onClick={onClosePanel}
+//               className="hidden lg:flex text-[#94a3b8] hover:text-[#374151] transition p-[4px] shrink-0">
+//               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+//                 <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+//               </svg>
+//             </button>
+//           </div>
+
+//           {avgConfidence > 0 && (
+//             <div className="flex flex-col gap-[4px]">
+//               <div className="bg-[#f1f5f9] rounded-full h-[6px] overflow-hidden">
+//                 <div className="h-full rounded-full bg-[#22c55e] transition-all duration-700" style={{ width: `${avgConfidence}%` }} />
+//               </div>
+//               <div className="flex items-center justify-between">
+//                 <span className="text-[#94a3b8] text-[11px]">Average confidence</span>
+//                 <span className="text-[#0f172a] text-[12px] font-bold">{avgConfidence}%</span>
+//               </div>
+//             </div>
+//           )}
+
+//           {anyLocked && (
+//             <div className="bg-[#f1f5f9] border border-[#e2e8f0] rounded-[10px] p-[12px] flex items-center gap-[8px]">
+//               <MiniSpinner />
+//               <p className="text-[#64748b] text-[12px] font-medium">Extracting real data from the document…</p>
+//             </div>
+//           )}
+
+//           {qualityIssue === "blurry" && (
+//             <div className="bg-[#fffbeb] border border-[#fde68a] rounded-[10px] p-[14px] flex flex-col gap-[8px]">
+//               <p className="text-[#92400e] text-[13px] font-semibold">Image too blurry to read</p>
+//               <p className="text-[#92400e] text-[12px] leading-[17px]">
+//                 Please re-upload a clearer photo — steady the camera, use good lighting,
+//                 and fill the frame with the document.
+//               </p>
+//               <button onClick={onReupload}
+//                 className="text-[12px] font-semibold text-[#92400e] bg-white border border-[#fde68a] rounded-[7px] px-[12px] py-[6px] hover:bg-[#fef3c7] transition self-start">
+//                 Remove &amp; upload a clearer photo
+//               </button>
+//             </div>
+//           )}
+
+//           {!ocrLoading && typeMismatch && (
+//             <div className="bg-[#fffbeb] border border-[#fde68a] rounded-[10px] p-[14px] flex flex-col gap-[8px]">
+//               <p className="text-[#92400e] text-[13px] font-semibold leading-[18px]">
+//                 This doesn't look like the expected document
+//               </p>
+//               <p className="text-[#92400e] text-[12px] leading-[17px]">
+//                 We expected <span className="font-medium">{doc?.document_type ?? "this document type"}</span>, but
+//                 the file looks like{" "}
+//                 <span className="font-medium">
+//                   {detectedType && detectedType !== "other" ? detectedType.replace(/_/g, " ") : "something else"}
+//                 </span>.
+//               </p>
+//               <div className="flex gap-[8px]">
+//                 <button onClick={onReupload}
+//                   className="text-[12px] font-semibold text-[#92400e] bg-white border border-[#fde68a] rounded-[7px] px-[12px] py-[6px] hover:bg-[#fef3c7] transition">
+//                   Remove &amp; upload a different file
+//                 </button>
+//                 <button onClick={onDismissMismatch}
+//                   className="text-[12px] font-medium text-[#92400e] hover:underline px-[6px] py-[6px]">
+//                   This is correct, continue
+//                 </button>
+//               </div>
+//             </div>
+//           )}
+
+//           {ocrLoading && fields.length === 0 && (
+//             <div className="flex flex-col items-center gap-[10px] py-[40px]">
+//               <Spinner /><p className="text-[#64748b] text-[13px]">Extracting data…</p>
+//             </div>
+//           )}
+
+//           {!ocrLoading && ocrError && (
+//             <div className="bg-[#fef2f2] border border-[#fca5a5] rounded-[10px] p-[14px]">
+//               <p className="text-[#dc2626] text-[13px] leading-[18px]">{ocrError}</p>
+//               <button onClick={onRetryOcr}
+//                 className="mt-[8px] text-indigo-600 text-[12px] font-medium hover:underline">Retry OCR</button>
+//             </div>
+//           )}
+
+//           {!ocrLoading && !ocrError && fields.length === 0 && (
+//             <div className="text-center py-[40px]">
+//               <p className="text-[#94a3b8] text-[13px]">No fields extracted yet.</p>
+//               <button onClick={onRetryOcr}
+//                 className="mt-[10px] text-indigo-600 text-[13px] font-medium hover:underline">Run OCR</button>
+//             </div>
+//           )}
+
+//           {fields.length > 0 && (
+//             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-[16px] gap-y-[16px]">
+//               {fields.map(field => {
+//                 const isMissingMandatory = field.is_mandatory && !field.is_locked && !(field.edit_value || field.extracted_value).trim();
+//                 const borderColor = field.is_locked
+//                   ? "#e2e8f0"
+//                   : isMissingMandatory
+//                   ? "#ef4444"
+//                   : field.needs_review ? "#f59e0b" : "#d1d5db";
+//                 const bgColor = field.is_locked
+//                   ? "#f8fafc"
+//                   : isMissingMandatory
+//                   ? "rgba(254,242,242,0.6)"
+//                   : field.needs_review ? "rgba(255,251,235,0.5)" : "white";
+//                 return (
+//                   <div key={field.id} className="flex flex-col gap-[4px]">
+//                     <label className="text-[#64748b] text-[11px] font-medium leading-[14px]">
+//                       {field.field_name}
+//                       {field.is_mandatory && <span className="text-[#ef4444] ml-[3px]">*</span>}
+//                     </label>
+//                     <div className="relative">
+//                       <input
+//                         value={field.edit_value ?? field.extracted_value}
+//                         onChange={e => onUpdateEditValue(field.id, e.target.value)}
+//                         disabled={field.is_locked}
+//                         placeholder={field.is_locked ? "" : "Type the value from the document…"}
+//                         className="w-full h-[44px] px-[14px] rounded-[8px] text-[#111827] text-[15px] font-semibold border-2 focus:outline-none focus:border-indigo-600 disabled:cursor-not-allowed placeholder:text-[13px] placeholder:font-normal placeholder:text-[#94a3b8]"
+//                         style={{ borderColor, backgroundColor: bgColor }}
+//                       />
+//                       {field.is_locked && (
+//                         <div className="absolute right-[12px] top-1/2 -translate-y-1/2">
+//                           <MiniSpinner />
+//                         </div>
+//                       )}
+//                     </div>
+//                     {field.is_locked ? (
+//                       <p className="text-[#94a3b8] text-[10px] italic">Extracting…</p>
+//                     ) : isMissingMandatory ? (
+//                       <p className="text-[#dc2626] text-[10px]">This field is required.</p>
+//                     ) : field.needs_review && (
+//                       <p className="text-[#d97706] text-[10px]">Please verify this is correct.</p>
+//                     )}
+//                   </div>
+//                 );
+//               })}
+//             </div>
+//           )}
+
+//           {fields.length > 0 && (
+//             <div className="flex items-center gap-[12px] pt-[12px] border-t border-[#f1f5f9]">
+//               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" className="shrink-0">
+//                 <rect x="3" y="10" width="18" height="11" rx="2" stroke="#94a3b8" strokeWidth="1.5"/>
+//                 <circle cx="12" cy="5" r="2" stroke="#94a3b8" strokeWidth="1.5"/>
+//                 <path d="M12 7v3M8 14h.01M16 14h.01M9 17h6" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round"/>
+//               </svg>
+//               <div className="flex-1 min-w-0">
+//                 {anyLocked ? (
+//                   <p className="text-[#64748b] text-[12px] font-medium flex items-center gap-[6px]">
+//                     <MiniSpinner /> Extracting real data — please wait…
+//                   </p>
+//                 ) : missingMandatoryFields.length > 0 ? (
+//                   <p className="text-[#dc2626] text-[12px] font-medium">
+//                     Missing required: {missingMandatoryFields.join(", ")}
+//                   </p>
+//                 ) : null}
+//               </div>
+//               <button onClick={onSubmit}
+//                 disabled={missingMandatoryFields.length > 0 || anyLocked}
+//                 className="shrink-0 h-[38px] px-[24px] rounded-[8px] text-white text-[13px] font-semibold transition
+//                            disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 active:scale-[0.98]"
+//                 style={{ background: "linear-gradient(135deg, var(--theme-primary), var(--theme-gradient-end))" }}>
+//                 {anyLocked ? "Extracting…" : source === "db" ? "Update" : "Submit"}
+//               </button>
+//             </div>
+//           )}
+//         </div>
+//       </div>
+//     </div>
+//   );
+// }
+
 // // ─────────────────────────────────────────────────────────────────────────────
 // export default function DocumentViewer() {
 //   const navigate       = useNavigate();
@@ -43,9 +369,9 @@
 //   : returnAppId
 //   ? `/applications/${returnAppId}`
 //   : "/documents";
- 
+
 //   const { data: doc, isLoading: docLoading, error: docError } = useDocument(docId);
- 
+
 //   const [fileUrl,     setFileUrl]     = useState<string | null>(null);
 //   const [fileName,    setFileName]    = useState<string>("");
 //   const [fileBlob,    setFileBlob]    = useState<Blob | null>(null);
@@ -53,21 +379,23 @@
 //   const [rotation,    setRotation]    = useState(0);
 //   const [currentPage, setCurrentPage] = useState(1);
 //   const [rightOpen,   setRightOpen]   = useState(true);
- 
-//   // Mobile tab: "pages" | "viewer" | "data"
-//   const [mobileTab, setMobileTab] = useState<"pages" | "viewer" | "data">("viewer");
- 
+
+//   const [mobileTab, setMobileTab] = useState<"viewer" | "data">("viewer");
+//   const [showPoorExtractionModal, setShowPoorExtractionModal] = useState(false);
+
 //   const totalPages = doc?.total_pages ?? 1;
 //   const isPdf      = doc?.file_type === "pdf" || fileName.endsWith(".pdf");
- 
+
 //   const {
 //     fields, avgConfidence, source,
 //     isLoading: ocrLoading, error: ocrError,
-//     detectedType, typeMismatch, dismissMismatch,
-//     loadFields, submitFields, confirmField,
-//     saveEdit, startEdit, cancelEdit, updateEditValue,
+//     detectedType, typeMismatch, dismissMismatch, qualityIssue,
+//     missingMandatoryFields,
+//     loadFields, submitFields, updateEditValue,
 //   } = useOCR(docId);
- 
+
+//   const anyLocked = fields.some(f => f.is_locked);
+
 //   useEffect(() => {
 //     if (!docId) return;
 //     let objectUrl: string;
@@ -81,27 +409,19 @@
 //       .catch(err => console.error("Failed to load document file:", err));
 //     return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
 //   }, [docId]);
- 
+
 //   useEffect(() => {
 //     if (fileBlob && fileName && fields.length === 0 && !ocrLoading) {
 //       void loadFields(fileBlob, fileName);
 //     }
 //   }, [fileBlob, fileName]); // eslint-disable-line react-hooks/exhaustive-deps
- 
-//   // async function handleNextDocument() {
-//   //   if (!returnAppId) { navigate("/documents"); return; }
-//   //   try {
-//   //     const res  = await axiosInstance.get(`/documents?application_id=${returnAppId}`);
-//   //     const docs = (res.data?.items ?? res.data ?? []) as { id: string }[];
-//   //     const idx  = docs.findIndex(d => d.id === docId);
-//   //     const next = docs[idx + 1];
-//   //     if (next) navigate(`/documents/viewer?doc_id=${next.id}&application_id=${returnAppId}`);
-//   //     else      navigate(`/applications/${returnAppId}`);
-//   //   } catch {
-//   //     navigate(returnAppId ? `/applications/${returnAppId}` : "/documents");
-//   //   }
-//   // }
- 
+
+//   useEffect(() => {
+//     if (qualityIssue === "poor_extraction") {
+//       setShowPoorExtractionModal(true);
+//     }
+//   }, [qualityIssue]);
+
 //   function exportData() {
 //     const rows = fields.map(f =>
 //       `"${f.field_name}","${f.extracted_value}",${f.confidence_score},${f.is_confirmed}`
@@ -113,17 +433,32 @@
 //     a.href = url; a.download = `${doc?.name ?? "document"}_data.csv`; a.click();
 //     URL.revokeObjectURL(url);
 //   }
- 
+
 //   function handleDownload() {
 //     if (!fileUrl || !doc) return;
 //     const a = document.createElement("a");
 //     a.href = fileUrl; a.download = doc.name; a.click();
 //   }
- 
+
+//   async function handleReupload() {
+//     setShowPoorExtractionModal(false);
+//     if (!docId) return;
+//     try { await documentsApi.delete(docId); } catch { /* ignore */ }
+//     navigate(returnUrl);
+//   }
+
+//   async function handleSubmit() {
+//     await submitFields();
+//     navigate(returnUrl);
+//   }
+
+//   function handleRetryOcr() {
+//     if (fileBlob) void loadFields(fileBlob, fileName);
+//   }
+
 //   const confirmedCount = fields.filter(f => f.is_confirmed).length;
-//   const reviewCount    = fields.filter(f => f.needs_review && !f.is_confirmed).length;
- 
-//   // ── Loading / Error ────────────────────────────────────────────────────────
+//   const reviewCount    = fields.filter(f => f.needs_review && !f.is_confirmed && !f.is_locked).length;
+
 //   if (docLoading) {
 //     return <div className="flex items-center justify-center h-full py-[64px]"><Spinner /></div>;
 //   }
@@ -140,362 +475,18 @@
 //       </div>
 //     );
 //   }
- 
-//   // ── Reusable panel contents ────────────────────────────────────────────────
- 
-//   // Pages panel
-//   const PagesPanel = () => (
-//     <div className="flex flex-col h-full overflow-hidden bg-[#f8fafc]">
- 
-//       {/* Header */}
-//       <div className="px-[16px] pt-[14px] pb-[12px] bg-white border-b border-[#f1f5f9] shrink-0">
-//         <p className="text-[#0f172a] text-[14px] font-bold">Document Pages</p>
-//         <p className="text-[#94a3b8] text-[11px] mt-[1px]">{totalPages} {totalPages === 1 ? "page" : "pages"}</p>
-//       </div>
- 
-//       {/* Page grid */}
-//       <div className="flex-1 overflow-y-auto p-[16px]">
-//         <div className={totalPages === 1 ? "flex justify-center" : "grid grid-cols-2 gap-[12px]"}>
-//           {Array.from({ length: totalPages > 0 ? totalPages : 1 }).map((_, i) => {
-//             const pageNum  = i + 1;
-//             const isActive = currentPage === pageNum;
-//             const status   = i === 0 ? "processed" : i === 2 ? "processing" : "processed";
-//             return (
-//               <div key={pageNum} onClick={() => { setCurrentPage(pageNum); setMobileTab("viewer"); }}
-//                 className={`cursor-pointer rounded-[10px] overflow-hidden border-2 transition-all bg-white shadow-sm w-full max-w-[220px] ${
-//                   isActive
-//                     ? "border-indigo-600 shadow-[0_0_0_3px_rgba(58,70,229,0.12)]"
-//                     : "border-[#e5e7eb] hover:border-indigo-200"
-//                 }`}>
-//                 {/* Thumbnail */}
-//                 <div className="bg-[#f1f5f9] relative overflow-hidden" style={{ paddingTop: "70%" }}>
-//                   <div className="absolute inset-0 flex items-center justify-center">
-//                     {fileUrl && !isPdf ? (
-//                       <img src={fileUrl} alt={`Page ${pageNum}`}
-//                         className="w-full h-full object-cover"
-//                         style={{ transform: `rotate(${rotation}deg)` }} />
-//                     ) : (
-//                       <div className="flex flex-col items-center gap-[6px]">
-//                         <svg width="32" height="40" viewBox="0 0 28 34" fill="none">
-//                           <rect width="28" height="34" rx="4" fill="#fef2f2"/>
-//                           <path d="M6 4h12l6 6v20a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2z" fill="#fee2e2"/>
-//                           <path d="M16 4l6 6h-6V4z" fill="#fca5a5"/>
-//                           <text x="5" y="24" fontSize="5" fill="#ef4444" fontWeight="bold">PDF</text>
-//                         </svg>
-//                       </div>
-//                     )}
-//                   </div>
-//                   {/* Active indicator */}
-//                   {isActive && (
-//                     <div className="absolute top-[6px] left-[6px] bg-indigo-600 rounded-full w-[18px] h-[18px] flex items-center justify-center shadow-sm">
-//                       <svg width="9" height="9" viewBox="0 0 24 24" fill="none">
-//                         <path d="M20 6L9 17l-5-5" stroke="white" strokeWidth="3" strokeLinecap="round"/>
-//                       </svg>
-//                     </div>
-//                   )}
-//                 </div>
-//                 {/* Label */}
-//                 <div className="px-[8px] py-[6px] flex items-center justify-between bg-white border-t border-[#f1f5f9]">
-//                   <span className="text-[#374151] text-[11px] font-medium">Page {pageNum}</span>
-//                   <PageStatus status={status} />
-//                 </div>
-//               </div>
-//             );
-//           })}
-//         </div>
-//       </div>
-//     </div>
-//   );
- 
-//   // Viewer panel
-//   const ViewerPanel = () => (
-//     <div className="flex-1 min-w-0 bg-[#e8ecf0] flex flex-col overflow-hidden relative h-full">
-//       <div className="absolute top-[12px] right-[14px] z-10 bg-white/90 backdrop-blur-sm border border-[#e5e7eb] rounded-[6px] px-[8px] py-[3px] text-[11px] text-[#64748b] font-medium shadow-sm">
-//         Page {currentPage} of {totalPages}
-//       </div>
-//       <div className="flex-1 overflow-auto flex items-start justify-center p-[16px] sm:p-[28px] pt-[24px]">
-//         {!fileUrl && !ocrLoading && fields.length === 0 && (
-//           <div className="flex flex-col items-center gap-[12px] pt-[80px]">
-//             <Spinner /><p className="text-[#64748b] text-[13px]">Loading document…</p>
-//           </div>
-//         )}
-//         {ocrLoading && fields.length === 0 && (
-//           <div className="flex flex-col items-center gap-[12px] pt-[80px]">
-//             <Spinner /><p className="text-[#64748b] text-[13px]">Extracting data from document…</p>
-//           </div>
-//         )}
-//         {fields.length > 0 && (
-//           <div className="bg-white shadow-[0_8px_32px_rgba(0,0,0,0.12)] rounded-[8px] w-full max-w-[1000px] p-[16px] sm:p-[32px] flex flex-col gap-[20px] sm:gap-[24px] transition-transform duration-200 origin-top"
-//             style={{ transform: `scale(${zoom / 100})` }}>
-//             <div className="flex flex-col gap-[2px]">
-//               <h2 className="text-[#111827] text-[20px] sm:text-[28px] font-bold leading-tight tracking-[-0.5px]">
-//                 {doc.name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ").toUpperCase()}
-//               </h2>
-//             </div>
-//             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-[16px] gap-y-[16px] sm:gap-y-[20px]">
-//               {fields.map(field => {
-//                 const isFullWidth = field.field_name.toLowerCase().includes("address") ||
-//                   field.field_name.toLowerCase().includes("employer") ||
-//                   field.field_name.toLowerCase().includes("issuing authority") ||
-//                   field.field_name.toLowerCase().includes("mrz");
-//                 const borderColor = field.is_confirmed ? "#22c55e" : field.needs_review ? "#f59e0b" : "#d1d5db";
-//                 const bgColor     = field.is_confirmed ? "rgba(240,253,244,0.5)" : field.needs_review ? "rgba(255,251,235,0.5)" : "white";
-//                 return (
-//                   <div key={field.id} className={`flex flex-col gap-[4px] ${isFullWidth ? "sm:col-span-2" : ""}`}>
-//                     <label className="text-[#64748b] text-[11px] font-medium leading-[14px] tracking-[0.2px]">{field.field_name}</label>
-//                     {field.is_editing ? (
-//                       <input autoFocus value={field.edit_value} onChange={e => updateEditValue(field.id, e.target.value)}
-//                         onKeyDown={e => { if (e.key === "Enter") void saveEdit(field.id); }}
-//                         className="h-[44px] px-[14px] rounded-[6px] text-[#111827] text-[15px] font-semibold border-2 border-indigo-600 focus:outline-none" />
-//                     ) : (
-//                       <div onClick={() => startEdit(field.id)}
-//                         className="h-[44px] px-[14px] rounded-[6px] flex items-center text-[#111827] text-[15px] font-semibold border-2 cursor-pointer transition-colors hover:border-indigo-600/50"
-//                         style={{ borderColor, backgroundColor: bgColor }}>
-//                         {field.extracted_value || <span className="text-[#94a3b8] font-normal text-[13px]">—</span>}
-//                       </div>
-//                     )}
-//                     {field.needs_review && !field.is_confirmed && (
-//                       <p className="flex items-center gap-[3px] text-[#d97706] text-[10px] leading-[14px]">
-//                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
-//                           <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01" stroke="#d97706" strokeWidth="2" strokeLinecap="round"/>
-//                         </svg>
-//                         Please verify this is correct
-//                       </p>
-//                     )}
-//                   </div>
-//                 );
-//               })}
-//             </div>
-//             <div className="flex items-center gap-[12px] pt-[8px] border-t border-[#f1f5f9] mt-[4px]">
-//               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" className="shrink-0">
-//                 <rect x="3" y="10" width="18" height="11" rx="2" stroke="#94a3b8" strokeWidth="1.5"/>
-//                 <circle cx="12" cy="5" r="2" stroke="#94a3b8" strokeWidth="1.5"/>
-//                 <path d="M12 7v3M8 14h.01M16 14h.01M9 17h6" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round"/>
-//               </svg>
 
-//               {/* Compact copy of the sidebar mismatch banner, filling the gap
-//                   next to Submit. On mobile the sidebar ("data" tab) is
-//                   separate from this viewer tab, so without this someone
-//                   could hit Submit here and never see the warning at all. */}
-//               <div className="flex-1 min-w-0">
-//                 {!ocrLoading && typeMismatch && (
-//                   <div className="flex items-center gap-[6px] bg-[#fffbeb] border border-[#fde68a] rounded-[8px] px-[10px] py-[6px]">
-//                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="shrink-0">
-//                       <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"
-//                         stroke="#d97706" strokeWidth="2" strokeLinecap="round"/>
-//                     </svg>
-//                     <p className="text-[#92400e] text-[11px] font-medium leading-[14px] truncate">
-//                       Expected <span className="font-semibold">{doc?.document_type ?? "a different document"}</span> — this looks like{" "}
-//                       <span className="font-semibold">
-//                         {detectedType && detectedType !== "other" ? detectedType.replace(/_/g, " ") : "something else"}
-//                       </span>.
-//                     </p>
-//                     <button onClick={dismissMismatch}
-//                       className="text-[11px] font-semibold text-[#92400e] underline shrink-0 ml-auto whitespace-nowrap">
-//                       Looks right
-//                     </button>
-//                   </div>
-//                 )}
-//               </div>
-
-//               <button onClick={async () => { await submitFields(); navigate(returnUrl); }}
-//                 className="shrink-0 flex items-center gap-[6px] h-[34px] px-[20px] rounded-[8px] text-white text-[12px] font-semibold cursor-pointer hover:opacity-90 active:scale-[0.98] transition"
-//                 style={{ background: "linear-gradient(135deg, var(--theme-primary), var(--theme-gradient-end))" }}>
-//                 {source === "db" ? "Update" : "Submit"}
-//               </button>
-//             </div>
-//           </div>
-//         )}
-//       </div>
-//       {/* Bottom nav */}
-//       <div className="bg-white border-t border-[#e5e7eb] flex items-center justify-between px-[16px] sm:px-[20px] h-[44px] shrink-0">
-//         <button disabled={currentPage <= 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-//           className="flex items-center gap-[4px] text-[#374151] text-[12px] font-medium disabled:opacity-40 hover:text-indigo-600 transition">
-//           <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-//           Previous
-//         </button>
-//         <span className="text-[#64748b] text-[12px]">Page {currentPage} of {totalPages}</span>
-//         <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-//           className="flex items-center gap-[4px] text-[#374151] text-[12px] font-medium disabled:opacity-40 hover:text-indigo-600 transition">
-//           Next
-//           <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-//         </button>
-//       </div>
-//     </div>
-//   );
- 
-//   // Data panel
-//   const DataPanel = () => (
-//     <div className="flex flex-col h-full overflow-hidden bg-white">
-//       <div className="px-[14px] py-[12px] border-b border-[#f1f5f9] shrink-0">
-//         <div className="flex items-center justify-between mb-[10px]">
-//           <span className="text-[#0f172a] text-[13px] font-bold tracking-[-0.3px]">Extracted Data</span>
-//           <button onClick={() => { setRightOpen(false); setMobileTab("viewer"); }}
-//             className="text-[#94a3b8] hover:text-[#374151] transition p-[2px]">
-//             <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-//               <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-//             </svg>
-//           </button>
-//         </div>
-//         <div className="bg-[#f1f5f9] rounded-full h-[6px] overflow-hidden mb-[4px]">
-//           <div className="h-full rounded-full bg-[#22c55e] transition-all duration-700" style={{ width: `${avgConfidence}%` }} />
-//         </div>
-//         <div className="flex items-center justify-between">
-//           <span className="text-[#94a3b8] text-[11px]">Average confidence</span>
-//           <span className="text-[#0f172a] text-[12px] font-bold">{avgConfidence}%</span>
-//         </div>
-//       </div>
-//       <div className="flex-1 overflow-y-auto px-[10px] py-[10px] flex flex-col gap-[8px]">
-//         {!ocrLoading && typeMismatch && (
-//           <div className="bg-[#fffbeb] border border-[#fde68a] rounded-[10px] p-[12px] flex flex-col gap-[8px]">
-//             <div className="flex items-start gap-[8px]">
-//               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="shrink-0 mt-[1px]">
-//                 <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"
-//                   stroke="#d97706" strokeWidth="2" strokeLinecap="round"/>
-//               </svg>
-//               <div>
-//                 <p className="text-[#92400e] text-[12px] font-semibold leading-[16px]">
-//                   This doesn't look like the expected document
-//                 </p>
-//                 <p className="text-[#92400e] text-[11px] leading-[15px] mt-[2px]">
-//                   We expected <span className="font-medium">{doc?.document_type ?? "this document type"}</span>, but
-//                   the file you uploaded looks like{" "}
-//                   <span className="font-medium">
-//                     {detectedType && detectedType !== "other" ? detectedType.replace(/_/g, " ") : "something else"}
-//                   </span>. Double-check you selected the right file.
-//                 </p>
-//               </div>
-//             </div>
-//             <div className="flex gap-[8px] pl-[24px]">
-//               <button
-//                 onClick={async () => {
-//                   if (!docId) return;
-//                   try { await documentsApi.delete(docId); } catch { /* ignore */ }
-//                   navigate(returnUrl);
-//                 }}
-//                 className="text-[11px] font-semibold text-[#92400e] bg-white border border-[#fde68a] rounded-[6px] px-[10px] py-[5px] hover:bg-[#fef3c7] transition">
-//                 Remove &amp; upload a different file
-//               </button>
-//               <button
-//                 onClick={dismissMismatch}
-//                 className="text-[11px] font-medium text-[#92400e] hover:underline px-[4px] py-[5px]">
-//                 This is correct, continue
-//               </button>
-//             </div>
-//           </div>
-//         )}
-//         {ocrLoading && (
-//           <div className="flex flex-col items-center gap-[8px] py-[40px]">
-//             <Spinner /><p className="text-[#64748b] text-[12px] text-center">Extracting data…</p>
-//           </div>
-//         )}
-//         {!ocrLoading && ocrError && (
-//           <div className="bg-[#fef2f2] border border-[#fca5a5] rounded-[8px] p-[12px]">
-//             <p className="text-[#dc2626] text-[12px] leading-[16px]">{ocrError}</p>
-//             <button onClick={() => fileBlob && void loadFields(fileBlob, fileName)}
-//               className="mt-[6px] text-indigo-600 text-[11px] font-medium hover:underline">Retry OCR</button>
-//           </div>
-//         )}
-//         {!ocrLoading && !ocrError && fields.length === 0 && (
-//           <div className="text-center py-[40px]">
-//             <p className="text-[#94a3b8] text-[12px]">No fields extracted yet.</p>
-//             <button onClick={() => fileBlob && void loadFields(fileBlob, fileName)}
-//               className="mt-[8px] text-indigo-600 text-[12px] font-medium hover:underline">Run OCR</button>
-//           </div>
-//         )}
-//         {fields.map(field => {
-//           const cb = confBadge(field.confidence_score);
-//           return (
-//             <div key={field.id} className={`rounded-[10px] border overflow-hidden ${
-//               field.is_confirmed ? "border-[#d1fae5]" : field.needs_review ? "border-[#fde68a]" : "border-[#e5e7eb]"
-//             }`}>
-//               <div className={`flex items-center justify-between px-[10px] py-[7px] ${
-//                 field.is_confirmed ? "bg-[#dcfce7]" : field.needs_review ? "bg-[#fef3c7]" : "bg-[#f8fafc]"
-//               }`}>
-//                 <div className="flex items-center gap-[5px] min-w-0">
-//                   <div className={`size-[14px] rounded-[3px] flex items-center justify-center shrink-0 ${
-//                     field.is_confirmed ? "bg-[#16a34a]" : field.needs_review ? "bg-[#d97706]" : "bg-indigo-600"
-//                   } bg-opacity-20`}>
-//                     <svg width="8" height="8" viewBox="0 0 24 24" fill="none">
-//                       <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"
-//                         stroke={field.is_confirmed ? "#16a34a" : field.needs_review ? "#d97706" : "#6366f1"}
-//                         strokeWidth="2" strokeLinecap="round"/>
-//                     </svg>
-//                   </div>
-//                   <span className="text-[#111827] text-[11px] font-semibold truncate">{field.field_name}</span>
-//                 </div>
-//                 <span className={`${cb.bg} ${cb.text} text-[10px] font-bold px-[5px] py-[1px] rounded-full shrink-0 ml-[4px]`}>
-//                   {field.confidence_score}%
-//                 </span>
-//               </div>
-//               <div className="px-[10px] pt-[8px]">
-//                 {field.is_editing ? (
-//                   <input autoFocus value={field.edit_value} onChange={e => updateEditValue(field.id, e.target.value)}
-//                     onKeyDown={e => { if (e.key === "Enter") saveEdit(field.id); }}
-//                     className="w-full text-[12px] text-[#0f172a] bg-white border border-indigo-600 rounded-[6px] px-[8px] py-[5px] focus:outline-none" />
-//                 ) : (
-//                   <p className="text-[#0f172a] text-[13px] font-medium leading-[18px] break-words">
-//                     {field.extracted_value || <span className="text-[#94a3b8]">—</span>}
-//                   </p>
-//                 )}
-//                 {field.needs_review && !field.is_confirmed && (
-//                   <p className="flex items-center gap-[3px] text-[#d97706] text-[10px] mt-[3px] leading-[14px]">
-//                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
-//                       <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01" stroke="#d97706" strokeWidth="2" strokeLinecap="round"/>
-//                     </svg>
-//                     Please verify this date is correct
-//                   </p>
-//                 )}
-//               </div>
-//               <div className="flex items-center gap-[4px] px-[10px] py-[7px]">
-//                 {field.is_editing ? (
-//                   <>
-//                     <button onClick={() => saveEdit(field.id)} className="text-indigo-600 text-[11px] font-medium hover:underline">Save</button>
-//                     <span className="text-[#e5e7eb] text-[10px]">•</span>
-//                     <button onClick={() => cancelEdit(field.id)} className="text-[#94a3b8] text-[11px] hover:text-[#374151] transition">Cancel</button>
-//                   </>
-//                 ) : (
-//                   <>
-//                     <button onClick={() => startEdit(field.id)}
-//                       className="flex items-center gap-[3px] text-[#64748b] text-[11px] font-medium hover:text-[#374151] transition">
-//                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
-//                         <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-//                         <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-//                       </svg>
-//                       Edit
-//                     </button>
-//                     <span className="text-[#e5e7eb] text-[10px]">•</span>
-//                     {field.is_confirmed ? (
-//                       <span className="flex items-center gap-[3px] text-[#16a34a] text-[11px] font-medium">
-//                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
-//                           <path d="M20 6L9 17l-5-5" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round"/>
-//                         </svg>
-//                         Confirmed
-//                       </span>
-//                     ) : (
-//                       <button onClick={() => confirmField(field.id)}
-//                         className="flex items-center gap-[3px] text-[#64748b] text-[11px] font-medium hover:text-[#16a34a] transition">
-//                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
-//                           <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
-//                         </svg>
-//                         Confirm
-//                       </button>
-//                     )}
-//                   </>
-//                 )}
-//               </div>
-//             </div>
-//           );
-//         })}
-//       </div>
-//     </div>
-//   );
- 
 //   // ─────────────────────────────────────────────────────────────────────────
 //   return (
 //     <div className="flex flex-col bg-[#f9fafb] overflow-hidden"
 //       style={{ fontFamily: "Inter, sans-serif", height: "calc(100dvh - 56px)" }}>
- 
+
+//       <PoorExtractionModal
+//         open={showPoorExtractionModal}
+//         onReupload={handleReupload}
+//         onDismiss={() => setShowPoorExtractionModal(false)}
+//       />
+
 //       {/* ── TOP BAR ── */}
 //       <div className="bg-white border-b border-[#e5e7eb] flex items-center h-[48px] sm:h-[52px] px-[12px] sm:px-[16px] shrink-0 gap-[8px] sm:gap-[12px]">
 //         <button onClick={() => navigate(returnAppId ? `/applications/${returnAppId}` : "/documents")}
@@ -506,9 +497,9 @@
 //           <span className="hidden sm:inline">Back to Case</span>
 //           <span className="sm:hidden">Back</span>
 //         </button>
- 
+
 //         <div className="h-[20px] w-px bg-[#e5e7eb] shrink-0" />
- 
+
 //         <div className="flex items-center gap-[8px] min-w-0 flex-1">
 //           <div className="bg-[#fee2e2] rounded-[5px] flex items-center justify-center w-[28px] h-[32px] shrink-0">
 //             <span className="text-[#ef4444] text-[7px] font-black">PDF</span>
@@ -516,19 +507,17 @@
 //           <div className="flex flex-col min-w-0">
 //             <span className="text-[#0f172a] text-[12px] sm:text-[13px] font-semibold leading-[16px] truncate">{doc.name}</span>
 //             <span className="text-[#94a3b8] text-[10px] sm:text-[11px] leading-[14px] hidden sm:block">
-//               Uploaded 2 hours ago {doc.file_size_bytes ? `• ${(doc.file_size_bytes / 1024 / 1024).toFixed(1)} MB` : ""}
+//               {doc.file_size_bytes ? `${(doc.file_size_bytes / 1024 / 1024).toFixed(1)} MB` : ""}
 //             </span>
 //           </div>
 //         </div>
- 
-//         {/* Zoom — hidden on mobile */}
+
 //         <div className="hidden sm:flex items-center gap-[3px] shrink-0">
 //           <button onClick={() => setZoom(z => Math.max(50, z - 10))} className="size-[26px] border border-[#e5e7eb] rounded-[5px] text-[#374151] flex items-center justify-center hover:bg-[#f9fafb] transition text-[14px] font-medium">−</button>
 //           <span className="text-[#374151] text-[12px] font-medium w-[42px] text-center">{zoom}%</span>
-//           <button onClick={() => setZoom(z => Math.min(200, z + 10))} className="size-[26px] border border-[#e5e7eb] rounded-[5px] text-[#374151] flex items-center justify-center hover:bg-[#f9fafb] transition text-[14px] font-medium">+</button>
+//           <button onClick={() => setZoom(z => Math.min(300, z + 10))} className="size-[26px] border border-[#e5e7eb] rounded-[5px] text-[#374151] flex items-center justify-center hover:bg-[#f9fafb] transition text-[14px] font-medium">+</button>
 //         </div>
- 
-//         {/* Rotate */}
+
 //         <button onClick={() => setRotation(r => (r + 90) % 360)}
 //           className="hidden sm:flex items-center gap-[5px] h-[30px] px-[10px] border border-[#e5e7eb] rounded-[7px] text-[#374151] text-[12px] font-medium hover:bg-[#f9fafb] transition shrink-0">
 //           <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
@@ -537,8 +526,7 @@
 //           </svg>
 //           Rotate
 //         </button>
- 
-//         {/* Download */}
+
 //         <button onClick={handleDownload}
 //           className="flex items-center gap-[5px] h-[30px] px-[8px] sm:px-[10px] border border-[#e5e7eb] rounded-[7px] text-[#374151] text-[12px] font-medium hover:bg-[#f9fafb] transition shrink-0">
 //           <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
@@ -547,13 +535,12 @@
 //           <span className="hidden sm:inline">Download</span>
 //         </button>
 //       </div>
- 
+
 //       {/* ── MOBILE TABS ── */}
 //       <div className="lg:hidden flex items-center border-b border-[#e5e7eb] bg-white shrink-0">
 //         {([
-//           { id: "pages",  label: "Pages"  },
-//           { id: "viewer", label: "Viewer" },
-//           { id: "data",   label: `Data${fields.length > 0 ? ` (${fields.length})` : ""}` },
+//           { id: "viewer", label: "Document" },
+//           { id: "data",   label: `Fields${fields.length > 0 ? ` (${fields.length})` : ""}` },
 //         ] as const).map(tab => (
 //           <button key={tab.id} onClick={() => setMobileTab(tab.id)}
 //             className={`flex-1 py-[10px] text-[13px] font-medium border-b-2 transition-colors ${
@@ -565,32 +552,64 @@
 //           </button>
 //         ))}
 //       </div>
- 
+
 //       {/* ── BODY ── */}
-//       {/* Mobile: show one tab at a time */}
 //       <div className="lg:hidden flex-1 min-h-0 overflow-hidden">
-//         {mobileTab === "pages"  && <PagesPanel />}
-//         {mobileTab === "viewer" && <ViewerPanel />}
-//         {mobileTab === "data"   && <DataPanel  />}
-//       </div>
- 
-//       {/* Desktop: 3-panel side by side */}
-//       <div className="hidden lg:flex flex-1 min-h-0 overflow-hidden">
-//         <div className="w-[168px] shrink-0 border-r border-[#e5e7eb]"><PagesPanel /></div>
-//         <ViewerPanel />
-//         {rightOpen && (
-//           <div className="w-[280px] shrink-0 border-l border-[#e5e7eb]"><DataPanel /></div>
+//         {mobileTab === "viewer" && (
+//           <ViewerPanel
+//             doc={doc} fileUrl={fileUrl} isPdf={isPdf} zoom={zoom} rotation={rotation}
+//             currentPage={currentPage} totalPages={totalPages} setCurrentPage={setCurrentPage}
+//           />
 //         )}
-//         {!rightOpen && fields.length > 0 && (
-//           <div className="absolute bottom-[56px] right-[16px]">
-//             <button onClick={async () => { await submitFields(); navigate(returnUrl); }}
-//               className="flex items-center gap-[6px] h-[34px] px-[12px] rounded-[8px] bg-white border border-[#e5e7eb] text-[#374151] text-[12px] font-medium shadow-md hover:bg-[#f9fafb] transition">
-//               {source === "db" ? "Update" : "Submit"}
+//         {mobileTab === "data" && (
+//           <DataPanel
+//             doc={doc} fields={fields} avgConfidence={avgConfidence} ocrLoading={ocrLoading}
+//             ocrError={ocrError} typeMismatch={typeMismatch} qualityIssue={qualityIssue}
+//             detectedType={detectedType} missingMandatoryFields={missingMandatoryFields}
+//             anyLocked={anyLocked} source={source} fileBlob={fileBlob} fileName={fileName}
+//             onUpdateEditValue={updateEditValue} onDismissMismatch={dismissMismatch}
+//             onReupload={handleReupload} onRetryOcr={handleRetryOcr} onSubmit={handleSubmit}
+//             onClosePanel={() => { setRightOpen(false); setMobileTab("viewer"); }}
+//           />
+//         )}
+//       </div>
+
+//       <div className="hidden lg:flex flex-1 min-h-0 overflow-hidden">
+//         <div className="flex-1 min-w-0">
+//           <ViewerPanel
+//             doc={doc} fileUrl={fileUrl} isPdf={isPdf} zoom={zoom} rotation={rotation}
+//             currentPage={currentPage} totalPages={totalPages} setCurrentPage={setCurrentPage}
+//           />
+//         </div>
+//         {rightOpen ? (
+//           <div className="flex-1 min-w-0 border-l border-[#e5e7eb]">
+//             <DataPanel
+//               doc={doc} fields={fields} avgConfidence={avgConfidence} ocrLoading={ocrLoading}
+//               ocrError={ocrError} typeMismatch={typeMismatch} qualityIssue={qualityIssue}
+//               detectedType={detectedType} missingMandatoryFields={missingMandatoryFields}
+//               anyLocked={anyLocked} source={source} fileBlob={fileBlob} fileName={fileName}
+//               onUpdateEditValue={updateEditValue} onDismissMismatch={dismissMismatch}
+//               onReupload={handleReupload} onRetryOcr={handleRetryOcr} onSubmit={handleSubmit}
+//               onClosePanel={() => setRightOpen(false)}
+//             />
+//           </div>
+//         ) : fields.length > 0 && (
+//           <div className="absolute bottom-[64px] left-1/2 -translate-x-1/2 z-20">
+//             <button onClick={() => setRightOpen(true)}
+//               className="flex items-center gap-[8px] h-[44px] px-[20px] rounded-full bg-white border border-[#e5e7eb] text-[#374151] text-[13px] font-semibold shadow-[0_4px_16px_rgba(0,0,0,0.12)] hover:bg-[#f9fafb] hover:shadow-[0_6px_20px_rgba(0,0,0,0.16)] transition-all whitespace-nowrap">
+//               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" className="shrink-0">
+//                 <rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="2"/>
+//                 <path d="M9 4v16" stroke="currentColor" strokeWidth="2"/>
+//               </svg>
+//               Show Fields
+//               {missingMandatoryFields.length > 0 && (
+//                 <span className="size-[7px] rounded-full bg-[#ef4444] shrink-0" />
+//               )}
 //             </button>
 //           </div>
 //         )}
 //       </div>
- 
+
 //       {/* ── BOTTOM STATUS BAR ── */}
 //       <div className="bg-white border-t border-[#e5e7eb] flex items-center justify-between h-[48px] px-[12px] sm:px-[16px] shrink-0">
 //         <div className="flex items-center gap-[10px] sm:gap-[14px]">
@@ -602,6 +621,17 @@
 //             <span className="flex items-center gap-[5px] text-[10px] sm:text-[11px] text-[#d97706]">
 //               <span className="size-[7px] rounded-full bg-[#f59e0b] shrink-0" />
 //               {reviewCount} review
+//             </span>
+//           )}
+//           {missingMandatoryFields.length > 0 && !anyLocked && (
+//             <span className="flex items-center gap-[5px] text-[10px] sm:text-[11px] text-[#dc2626]">
+//               <span className="size-[7px] rounded-full bg-[#ef4444] shrink-0" />
+//               {missingMandatoryFields.length} required
+//             </span>
+//           )}
+//           {anyLocked && (
+//             <span className="flex items-center gap-[5px] text-[10px] sm:text-[11px] text-[#64748b]">
+//               <MiniSpinner /> extracting
 //             </span>
 //           )}
 //         </div>
@@ -619,7 +649,18 @@
 //   );
 // }
 
+
 // src/pages/employee/DocumentViewer.tsx
+//
+// FIXED: isFreshUpload was driven only by a ?fresh=1 URL flag, which nothing
+// sets anymore now that DocumentHub no longer navigates here after upload
+// (and DocCard/DocRow's onClick never added it either). That silently killed
+// the "warn before leaving an unconfirmed upload" feature — Back just left
+// without asking, even mid-extraction.
+// Fix: derive "needs confirmation" from the document's own ocr_status
+// instead of a URL flag, so it works regardless of entry point. isFreshUpload
+// (the URL flag) is still respected if present, but is no longer required.
+
 import { useState, useEffect }         from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useDocument }                  from "../../hooks/employee/useDocuments";
@@ -692,15 +733,64 @@ function PoorExtractionModal({ open, onReupload, onDismiss }: {
   );
 }
 
+// ── Leave / Cancel confirmation ────────────────────────────────────────────
+function LeaveModal({ open, mode, saving, onSave, onDiscard, onLeaveWithoutSaving, onKeepEditing }: {
+  open:  boolean;
+  mode:  "fresh" | "edit" | null;
+  saving: boolean;
+  onSave: () => void;
+  onDiscard: () => void;
+  onLeaveWithoutSaving: () => void;
+  onKeepEditing: () => void;
+}) {
+  if (!open || !mode) return null;
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/40 z-[80]" onClick={saving ? undefined : onKeepEditing} />
+      <div className="fixed inset-0 z-[81] flex items-center justify-center p-[16px]">
+        <div className="w-full max-w-[420px] bg-white rounded-[16px] shadow-2xl p-[24px] flex flex-col gap-[16px]">
+          <div>
+            <h3 className="text-[16px] font-bold text-[#0f172a]">
+              {mode === "fresh" ? "This document hasn't been confirmed" : "You have unsaved changes"}
+            </h3>
+            <p className="text-[13px] text-[#64748b] mt-[6px] leading-[19px]">
+              {mode === "fresh"
+                ? "You haven't submitted this document's fields yet. Save it, discard it, or keep reviewing."
+                : "Save your changes before leaving, or leave without saving."}
+            </p>
+          </div>
+          <div className="flex items-center justify-end gap-[10px] flex-wrap">
+            {mode === "fresh" && (
+              <button onClick={onDiscard} disabled={saving}
+                className="h-[38px] px-[14px] rounded-[10px] border border-[#fecaca] text-[#dc2626] text-[13px] font-medium hover:bg-[#fef2f2] transition disabled:opacity-50">
+                Discard Upload
+              </button>
+            )}
+            {mode === "edit" && (
+              <button onClick={onLeaveWithoutSaving} disabled={saving}
+                className="h-[38px] px-[14px] rounded-[10px] border border-[#e5e7eb] text-[#374151] text-[13px] font-medium hover:bg-[#f8fafc] transition disabled:opacity-50">
+                Leave Without Saving
+              </button>
+            )}
+            <button onClick={onKeepEditing} disabled={saving}
+              className="h-[38px] px-[14px] rounded-[10px] border border-[#e5e7eb] text-[13px] font-medium text-[#374151] hover:bg-[#f8fafc] transition disabled:opacity-50">
+              Keep Editing
+            </button>
+            <button onClick={onSave} disabled={saving}
+              className="h-[38px] px-[16px] rounded-[10px] text-white text-[13px] font-semibold hover:opacity-90 transition disabled:opacity-60 flex items-center gap-[6px]"
+              style={{ background: "linear-gradient(135deg, var(--theme-primary), var(--theme-gradient-end))" }}>
+              {saving && <MiniSpinner color="text-white" />}
+              Save & Leave
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ── LEFT — real scanned image, large, zoomable ─────────────────────────────
-// HOISTED to a real top-level component — this is the fix. Previously this
-// was defined INSIDE DocumentViewer's render body, so React created a brand
-// new component type on every keystroke (any state update in the parent),
-// unmounting and remounting this entire panel each time — which is why
-// typing in the fields felt like it accepted one character at a time before
-// losing focus. A stable, top-level component fixes that: React now
-// correctly re-renders the SAME component in place instead of replacing it.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ViewerPanelProps {
@@ -770,7 +860,6 @@ function ViewerPanel({ doc, fileUrl, isPdf, zoom, rotation, currentPage, totalPa
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ── RIGHT — clean grid of directly-editable input boxes ────────────────────
-// Also hoisted to a top-level component, same reasoning as ViewerPanel above.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface DataPanelProps {
@@ -787,18 +876,20 @@ interface DataPanelProps {
   source: "db" | "ocr" | null;
   fileBlob: Blob | null;
   fileName: string;
+  showCancelUpload: boolean;
   onUpdateEditValue: (id: string, value: string) => void;
   onDismissMismatch: () => void;
   onReupload: () => void;
   onRetryOcr: () => void;
   onSubmit: () => void;
+  onCancelUpload: () => void;
   onClosePanel: () => void;
 }
 
 function DataPanel({
   doc, fields, avgConfidence, ocrLoading, ocrError, typeMismatch, qualityIssue,
-  detectedType, missingMandatoryFields, anyLocked, source,
-  onUpdateEditValue, onDismissMismatch, onReupload, onRetryOcr, onSubmit, onClosePanel,
+  detectedType, missingMandatoryFields, anyLocked, source, showCancelUpload,
+  onUpdateEditValue, onDismissMismatch, onReupload, onRetryOcr, onSubmit, onCancelUpload, onClosePanel,
 }: DataPanelProps) {
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[#f9fafb]">
@@ -946,7 +1037,7 @@ function DataPanel({
           )}
 
           {fields.length > 0 && (
-            <div className="flex items-center gap-[12px] pt-[12px] border-t border-[#f1f5f9]">
+            <div className="flex items-center gap-[12px] pt-[12px] border-t border-[#f1f5f9] flex-wrap">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" className="shrink-0">
                 <rect x="3" y="10" width="18" height="11" rx="2" stroke="#94a3b8" strokeWidth="1.5"/>
                 <circle cx="12" cy="5" r="2" stroke="#94a3b8" strokeWidth="1.5"/>
@@ -963,6 +1054,17 @@ function DataPanel({
                   </p>
                 ) : null}
               </div>
+
+              {/* Cancel Upload — shown for any document not yet confirmed, not
+                  just ones opened with ?fresh=1 (see showCancelUpload derivation
+                  in the parent — driven by doc.ocr_status now, not a URL flag) */}
+              {showCancelUpload && (
+                <button onClick={onCancelUpload}
+                  className="shrink-0 h-[38px] px-[16px] rounded-[8px] border border-[#fecaca] text-[#dc2626] text-[13px] font-medium hover:bg-[#fef2f2] transition">
+                  Cancel Upload
+                </button>
+              )}
+
               <button onClick={onSubmit}
                 disabled={missingMandatoryFields.length > 0 || anyLocked}
                 className="shrink-0 h-[38px] px-[24px] rounded-[8px] text-white text-[13px] font-semibold transition
@@ -984,6 +1086,7 @@ export default function DocumentViewer() {
   const [searchParams] = useSearchParams();
   const docId          = searchParams.get("doc_id")         ?? undefined;
   const returnAppId    = searchParams.get("application_id") ?? undefined;
+  const freshFlag      = searchParams.get("fresh") === "1"; // still respected if present
   const returnUrl = searchParams.get("return_url")
   ? decodeURIComponent(searchParams.get("return_url")!)
   : returnAppId
@@ -1003,8 +1106,20 @@ export default function DocumentViewer() {
   const [mobileTab, setMobileTab] = useState<"viewer" | "data">("viewer");
   const [showPoorExtractionModal, setShowPoorExtractionModal] = useState(false);
 
+  // ── Leave/Cancel tracking ──────────────────────────────────────────────
+  const [isDirty, setIsDirty] = useState(false);
+  const [leaveModalMode, setLeaveModalMode] = useState<"fresh" | "edit" | null>(null);
+  const [leaveSaving, setLeaveSaving] = useState(false);
+
   const totalPages = doc?.total_pages ?? 1;
   const isPdf      = doc?.file_type === "pdf" || fileName.endsWith(".pdf");
+
+  // FIX: this document counts as "needs confirmation" if its backend
+  // ocr_status isn't "confirmed" yet — regardless of how the viewer was
+  // opened. This is what actually decides the Cancel Upload button and the
+  // "fresh" leave-modal, replacing the old URL-only isFreshUpload check.
+  const isUnconfirmedDoc = doc ? doc.ocr_status !== "confirmed" : false;
+  const treatAsFresh     = freshFlag || isUnconfirmedDoc;
 
   const {
     fields, avgConfidence, source,
@@ -1042,6 +1157,11 @@ export default function DocumentViewer() {
     }
   }, [qualityIssue]);
 
+  function handleFieldEdit(id: string, value: string) {
+    setIsDirty(true);
+    updateEditValue(id, value);
+  }
+
   function exportData() {
     const rows = fields.map(f =>
       `"${f.field_name}","${f.extracted_value}",${f.confidence_score},${f.is_confirmed}`
@@ -1076,6 +1196,56 @@ export default function DocumentViewer() {
     if (fileBlob) void loadFields(fileBlob, fileName);
   }
 
+  // ── Back button ───────────────────────────────────────────────────────
+  // Unconfirmed document (fresh OR just never confirmed) OR dirty edits on
+  // an already-confirmed doc → confirm before leaving. Otherwise, just go.
+  function handleBackClick() {
+    if (treatAsFresh) {
+      setLeaveModalMode("fresh");
+    } else if (isDirty) {
+      setLeaveModalMode("edit");
+    } else {
+      navigate(returnAppId ? `/applications/${returnAppId}` : returnUrl);
+    }
+  }
+
+  function handleCancelUploadClick() {
+    setLeaveModalMode("fresh");
+  }
+
+  async function handleLeaveModalSave() {
+    setLeaveSaving(true);
+    try {
+      await submitFields();
+      setLeaveModalMode(null);
+      navigate(returnUrl);
+    } finally {
+      setLeaveSaving(false);
+    }
+  }
+
+  async function handleLeaveModalDiscard() {
+    setLeaveSaving(true);
+    try {
+      if (docId) {
+        try { await documentsApi.delete(docId); } catch { /* already gone, ignore */ }
+      }
+      setLeaveModalMode(null);
+      navigate(returnUrl);
+    } finally {
+      setLeaveSaving(false);
+    }
+  }
+
+  function handleLeaveModalLeaveWithoutSaving() {
+    setLeaveModalMode(null);
+    navigate(returnAppId ? `/applications/${returnAppId}` : returnUrl);
+  }
+
+  function handleLeaveModalKeepEditing() {
+    setLeaveModalMode(null);
+  }
+
   const confirmedCount = fields.filter(f => f.is_confirmed).length;
   const reviewCount    = fields.filter(f => f.needs_review && !f.is_confirmed && !f.is_locked).length;
 
@@ -1107,9 +1277,19 @@ export default function DocumentViewer() {
         onDismiss={() => setShowPoorExtractionModal(false)}
       />
 
+      <LeaveModal
+        open={leaveModalMode !== null}
+        mode={leaveModalMode}
+        saving={leaveSaving}
+        onSave={handleLeaveModalSave}
+        onDiscard={handleLeaveModalDiscard}
+        onLeaveWithoutSaving={handleLeaveModalLeaveWithoutSaving}
+        onKeepEditing={handleLeaveModalKeepEditing}
+      />
+
       {/* ── TOP BAR ── */}
       <div className="bg-white border-b border-[#e5e7eb] flex items-center h-[48px] sm:h-[52px] px-[12px] sm:px-[16px] shrink-0 gap-[8px] sm:gap-[12px]">
-        <button onClick={() => navigate(returnAppId ? `/applications/${returnAppId}` : "/documents")}
+        <button onClick={handleBackClick}
           className="flex items-center gap-[6px] text-[#64748b] text-[12px] sm:text-[13px] font-medium hover:text-[#0f172a] transition whitespace-nowrap shrink-0">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
             <path d="M19 12H5M5 12l7 7M5 12l7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -1187,8 +1367,10 @@ export default function DocumentViewer() {
             ocrError={ocrError} typeMismatch={typeMismatch} qualityIssue={qualityIssue}
             detectedType={detectedType} missingMandatoryFields={missingMandatoryFields}
             anyLocked={anyLocked} source={source} fileBlob={fileBlob} fileName={fileName}
-            onUpdateEditValue={updateEditValue} onDismissMismatch={dismissMismatch}
+            showCancelUpload={treatAsFresh}
+            onUpdateEditValue={handleFieldEdit} onDismissMismatch={dismissMismatch}
             onReupload={handleReupload} onRetryOcr={handleRetryOcr} onSubmit={handleSubmit}
+            onCancelUpload={handleCancelUploadClick}
             onClosePanel={() => { setRightOpen(false); setMobileTab("viewer"); }}
           />
         )}
@@ -1208,8 +1390,10 @@ export default function DocumentViewer() {
               ocrError={ocrError} typeMismatch={typeMismatch} qualityIssue={qualityIssue}
               detectedType={detectedType} missingMandatoryFields={missingMandatoryFields}
               anyLocked={anyLocked} source={source} fileBlob={fileBlob} fileName={fileName}
-              onUpdateEditValue={updateEditValue} onDismissMismatch={dismissMismatch}
+              showCancelUpload={treatAsFresh}
+              onUpdateEditValue={handleFieldEdit} onDismissMismatch={dismissMismatch}
               onReupload={handleReupload} onRetryOcr={handleRetryOcr} onSubmit={handleSubmit}
+              onCancelUpload={handleCancelUploadClick}
               onClosePanel={() => setRightOpen(false)}
             />
           </div>

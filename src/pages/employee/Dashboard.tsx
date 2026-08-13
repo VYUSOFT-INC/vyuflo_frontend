@@ -9,7 +9,7 @@ import {
   ClipboardList, CalendarClock, ExternalLink, HelpCircle,
 } from 'lucide-react';
 import { PageHeader, PageContent } from '../../components/layout/Pageheader';
-import { useCurrentUser } from '../../hooks/useAuth';
+import { useCurrentUser } from '../../hooks/auth/useAuth';
 import { useDashboard } from '../../hooks/employee/useDashboard';
 import { DashboardTour } from '../../components/tour/DashboardTour';
 import { ComingSoonModal } from '../../components/common/ComingSoonModal';

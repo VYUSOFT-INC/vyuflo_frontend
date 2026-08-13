@@ -317,7 +317,6 @@
 //   );
 // }
 
-
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useSearchParams } from 'react-router-dom';
 
 import { useAuthStore }      from './store/authStore';
@@ -418,6 +417,9 @@ import CaseListPage               from './pages/lawyer/cases/CaseListPage';
 import CaseDetailPage             from './pages/lawyer/cases/CaseDetailPage';
 import LawyerDashboardPage        from './pages/lawyer/dashboard/LawyerDashboardPage';
 
+// ── public — personal email verification ──────────────────────────────────────
+import VerifyPersonalEmailPage from './pages/public/VerifyPersonalEmailPage';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -491,6 +493,9 @@ export default function App() {
 
           {/* ── HR invite acceptance ────────────────────────────────────────── */}
           <Route path="/accept-invite" element={<AcceptInvitePage />} />
+
+          {/* ── Personal email verification (post-invite-accept flow) ───────── */}
+          <Route path="/verify-personal-email" element={<VerifyPersonalEmailPage />} />
 
           {/* ── Client Intake Portal ────────────────────────────────────────── */}
           <Route path="/intake/:token" element={<ClientIntakePortal />} />
@@ -611,7 +616,7 @@ export default function App() {
             </Route>
             <Route path="/lawyer/intake/:sessionId" element={<IntakeWizard />} />
           </Route>
-          // In App.tsx, add this ABOVE the catch-all:
+
           {/* ── Catch-all (MUST be LAST) ────────────────────────────────────── */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

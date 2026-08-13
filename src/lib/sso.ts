@@ -24,7 +24,7 @@
 
 // src/lib/sso.ts
 import { PublicClientApplication } from "@azure/msal-browser";
-import { authApi } from "../api/auth.api";
+import { authApi } from "../api/auth/auth.api";
 
 export const isMsalSupported = window.isSecureContext;
 

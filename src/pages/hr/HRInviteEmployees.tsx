@@ -1,18 +1,16 @@
-
 // src/pages/hr/HRInviteEmployees.tsx
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   // UserPlus,
-  Mail, Link2, KeyRound, Bell, Search, Send, RefreshCw, Copy, Share2,
-  Check, RotateCw, Trash2, X, ChevronLeft, ChevronRight, ChevronDown, Inbox,
+  Mail, KeyRound, Bell, Search, Send, Copy,
+ RotateCw, Trash2, X, ChevronLeft, ChevronRight, ChevronDown, Inbox,
   Eye, AlertTriangle, Info, CheckCircle2, XCircle,
 } from 'lucide-react';
 
 import { PageHeader, PageContent } from '../../components/layout/Pageheader';
 import { useMyInvitations, useSendEmailInvite, useGenerateCode } from '../../hooks/hr/useInvitations';
-import { invitationApi } from '../../api/hr/invitation.api';
 import type { InvitationResponse, InviteMethod, InviteStatus } from '../../types/hr/invitation.types';
 
 const PRIMARY_GRADIENT = 'linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)';
@@ -31,7 +29,6 @@ type ToastItem = {
 type ConfirmAction =
   | { type: 'resend'; invitation: InvitationResponse }
   | { type: 'revoke'; invitation: InvitationResponse }
-  | { type: 'regenerate_link' }
   | { type: 'generate_code' }
   | null;
 
@@ -54,11 +51,6 @@ function fmtDateTime(iso?: string): string {
     hour: 'numeric',
     minute: '2-digit',
   });
-}
-
-function daysUntil(iso?: string): number | null {
-  if (!iso) return null;
-  return Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000);
 }
 
 function nameFromEmail(email?: string): string {
@@ -93,10 +85,14 @@ function methodToken(m: InviteMethod): { icon: ReactNode; bg: string; text: stri
   switch (m) {
     case 'email':
       return { icon: <Mail size={13} />, bg: '#eef2ff', text: '#4338ca', label: 'Email' };
-    case 'link':
-      return { icon: <Link2 size={13} />, bg: '#ecfeff', text: '#0e7490', label: 'Link' };
     case 'code':
       return { icon: <KeyRound size={13} />, bg: '#faf5ff', text: '#7e22ce', label: 'Code' };
+    default:
+      // Defensive fallback — covers legacy rows still in the DB with
+      // invite_method values ("link", or anything else) that predate
+      // removing the shareable-link invite feature. Prevents a hard
+      // crash (m.label on undefined) if any such row is ever rendered.
+      return { icon: <Mail size={13} />, bg: '#f1f5f9', text: '#475569', label: String(m) };
   }
 }
 
@@ -110,6 +106,8 @@ function statusToken(s: InviteStatus): { bg: string; text: string; dot: string; 
       return { bg: '#f1f5f9', text: '#475569', dot: '#94a3b8', label: 'Expired' };
     case 'revoked':
       return { bg: '#fef2f2', text: '#dc2626', dot: '#ef4444', label: 'Revoked' };
+    default:
+      return { bg: '#f1f5f9', text: '#475569', dot: '#94a3b8', label: String(s) };
   }
 }
 
@@ -146,8 +144,7 @@ function pageWindow(current: number, total: number): (number | 'ellipsis')[] {
 
 function inviteDisplayValue(inv: InvitationResponse) {
   if (inv.invite_method === 'email') return inv.invited_email ?? '—';
-  if (inv.invite_method === 'code') return inv.invite_code ?? '—';
-  return inv.invite_token ? `https://app.Vyflo.io/invite/${inv.invite_token}` : '—';
+  return inv.invite_code ?? '—';
 }
 
 function inferredUses(inv: InvitationResponse): string {
@@ -166,8 +163,8 @@ function getEmptyTitle(tab: 'all' | InviteStatus, search: string) {
 }
 
 function getEmptyDesc(tab: 'all' | InviteStatus, search: string) {
-  if (search.trim()) return 'Try another email, code, or token search.';
-  if (tab === 'all') return 'Send your first invitation using email, link, or code.';
+  if (search.trim()) return 'Try another email or code search.';
+  if (tab === 'all') return 'Send your first invitation using email or code.';
   return 'There is nothing in this section right now.';
 }
 
@@ -229,33 +226,32 @@ function CardHead({
 }
 
 const sectionLabel = 'text-[11px] font-semibold uppercase tracking-[0.04em] text-[#64748b]';
-// const LEDGER_GRID = 'grid-cols-[1.8fr_0.9fr_1fr_1fr_1fr_1.1fr_auto]';
-const LEDGER_GRID_STYLE: React.CSSProperties = {
+const LEDGER_GRID_STYLE: CSSProperties = {
   gridTemplateColumns: '1.8fr 0.9fr 1fr 1fr 1fr 1.1fr 120px',
 };
 
-function InfoRow({
-  left,
-  right,
-  rightTone,
-}: {
-  left: string;
-  right: string;
-  rightTone: 'good' | 'muted';
-}) {
-  return (
-    <div className="flex items-center justify-between bg-[#f8fafc] rounded-[10px] px-[12px] py-[9px]">
-      <span className="text-[12px] text-[#475569] tracking-[-0.5px]">{left}</span>
-      <span
-        className="text-[12px] font-medium tracking-[-0.5px] inline-flex items-center gap-[5px]"
-        style={{ color: rightTone === 'good' ? '#16a34a' : '#94a3b8' }}
-      >
-        {rightTone === 'good' && <span className="size-[6px] rounded-full bg-[#22c55e]" />}
-        {right}
-      </span>
-    </div>
-  );
-}
+// function InfoRow({
+//   left,
+//   right,
+//   rightTone,
+// }: {
+//   left: string;
+//   right: string;
+//   rightTone: 'good' | 'muted';
+// }) {
+//   return (
+//     <div className="flex items-center justify-between bg-[#f8fafc] rounded-[10px] px-[12px] py-[9px]">
+//       <span className="text-[12px] text-[#475569] tracking-[-0.5px]">{left}</span>
+//       <span
+//         className="text-[12px] font-medium tracking-[-0.5px] inline-flex items-center gap-[5px]"
+//         style={{ color: rightTone === 'good' ? '#16a34a' : '#94a3b8' }}
+//       >
+//         {rightTone === 'good' && <span className="size-[6px] rounded-full bg-[#22c55e]" />}
+//         {right}
+//       </span>
+//     </div>
+//   );
+// }
 
 function IconAction({
   active,
@@ -302,18 +298,14 @@ function LedgerRow({
 }) {
   const m = methodToken(inv.invite_method);
   const s = statusToken(inv.status);
-  const recipient =
-    inv.invited_email ??
-    (inv.invite_method === 'code' ? 'Company code' : 'Shareable link');
+  const recipient = inv.invited_email ?? 'Company code';
 
   const name = inv.invited_email
     ? nameFromEmail(inv.invited_email)
     : `${m.label} invite`;
 
   const canResend = inv.status === 'pending';
-  const canCopy =
-    inv.invite_method !== 'email' &&
-    (!!inv.invite_code || !!inv.invite_token);
+  const canCopy = inv.invite_method !== 'email' && !!inv.invite_code;
   const canRevoke = inv.status !== 'revoked';
 
   return (
@@ -373,7 +365,6 @@ function LedgerRow({
         {s.label}
       </span>
 
-      {/* <div className="w-[120px] flex items-center justify-end gap-[2px]"> */}
       <div className="w-[120px] flex items-center justify-end gap-[2px] pr-[8px]">
         <IconAction
           active={true}
@@ -626,28 +617,18 @@ export default function HRInviteEmployees() {
   const [emailInput, setEmailInput] = useState('');
   const [role, setRole] = useState(ROLE_OPTIONS[0]);
   const [emailErr, setEmailErr] = useState<string | null>(null);
+  const [passportNumber, setPassportNumber] = useState('');
 
   const [tab, setTab] = useState<'all' | InviteStatus>('all');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [linkBusy, setLinkBusy] = useState(false);
 
   const [selectedInvite, setSelectedInvite] = useState<InvitationResponse | null>(null);
   const [confirm, setConfirm] = useState<ConfirmAction>(null);
   const [toastItems, setToastItems] = useState<ToastItem[]>([]);
 
-  const latest = (method: InviteMethod) =>
-    invitations
-      .filter(i => i.invite_method === method && i.status !== 'revoked' && i.status !== 'expired')
-      .sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at))[0] ?? null;
-
-  const linkInv = useMemo(() => latest('link'), [invitations]);
-  // const codeInv = useMemo(() => latest('code'), [invitations]);
-
-  const linkUrl = linkInv?.invite_token ? `https://app.Vyuflo.io/invite/${linkInv.invite_token}` : null;
-  const linkCopy = useCopied();
   const codeCopy = useCopied();
 
   const counts = useMemo(() => {
@@ -660,7 +641,7 @@ export default function HRInviteEmployees() {
     const q = search.trim().toLowerCase();
     return invitations.filter(i => {
       if (tab !== 'all' && i.status !== tab) return false;
-      if (q && !(`${i.invited_email ?? ''} ${i.invite_code ?? ''} ${i.invite_token ?? ''}`.toLowerCase().includes(q))) {
+      if (q && !(`${i.invited_email ?? ''} ${i.invite_code ?? ''}`.toLowerCase().includes(q))) {
         return false;
       }
       return true;
@@ -727,40 +708,45 @@ export default function HRInviteEmployees() {
     }
   };
 
+  // passport_number is mandatory (backend enforces this), and only makes
+  // sense for a single recipient — one person, one passport. So the Send
+  // button requires exactly one queued email plus a passport number.
+  const pendingCount = emails.length + (emailInput.trim() ? 1 : 0);
+  const canSend = pendingCount === 1 && passportNumber.trim().length >= 6;
+
   const sendInvites = async () => {
     const list = emailInput ? [...emails, emailInput.trim()] : emails;
     const clean = list.filter(e => EMAIL_RE.test(e));
 
     if (!clean.length) {
-      setEmailErr('Add at least one valid email.');
+      setEmailErr('Add exactly one valid email.');
+      return;
+    }
+    if (clean.length > 1) {
+      setEmailErr('Only one recipient at a time — passport verification is per person.');
+      return;
+    }
+    if (!passportNumber.trim() || passportNumber.trim().length < 6) {
+      setEmailErr('Passport number is required (min 6 characters).');
       return;
     }
 
-    try {
-      for (const email of clean) {
-        await emailInvite.send({ email });
-      }
-      setEmails([]);
-      setEmailInput('');
-      emailInvite.reset();
-      await refetch();
-      pushToast('success', 'Invitation sent successfully!', `${clean.length} email invitation(s) have been sent.`);
-    } catch {
-      pushToast('error', 'Failed to send invitation', 'Please check the email addresses and try again.');
-    }
-  };
+    const results = await Promise.allSettled(
+      clean.map(email => emailInvite.send({ email, passport_number: passportNumber.trim() }))
+    );
+    const succeeded = results.filter(r => r.status === 'fulfilled').length;
+    const failed = results.length - succeeded;
 
-  const shareLink = async () => {
-    if (!linkUrl) return;
-    if (navigator.share) {
-      try {
-        await navigator.share({ url: linkUrl, title: 'Join us on Vyuflo' });
-      } catch {
-        //
-      }
+    setEmails([]);
+    setEmailInput('');
+    setPassportNumber('');
+    emailInvite.reset();
+    await refetch();
+
+    if (failed === 0) {
+      pushToast('success', 'Invitation sent successfully!', `${succeeded} email invitation(s) have been sent.`);
     } else {
-      await linkCopy.copy(linkUrl);
-      pushToast('success', 'Link copied to clipboard!', 'Invite link has been copied.');
+      pushToast('error', 'Failed to send invitation', 'Please check the email and passport number, then try again.');
     }
   };
 
@@ -769,9 +755,6 @@ export default function HRInviteEmployees() {
       if (i.invite_code) {
         await navigator.clipboard?.writeText(i.invite_code);
         pushToast('success', 'Code copied to clipboard!', 'Invite code has been copied.');
-      } else if (i.invite_token) {
-        await navigator.clipboard?.writeText(`https://app.Vyuflo.io/invite/${i.invite_token}`);
-        pushToast('success', 'Link copied to clipboard!', 'Invite link has been copied.');
       }
     } catch {
       pushToast('error', 'Copy failed', 'Clipboard copy is not available here.');
@@ -806,13 +789,6 @@ export default function HRInviteEmployees() {
         }
       }
 
-      if (confirm.type === 'regenerate_link') {
-        setLinkBusy(true);
-        await invitationApi.inviteByLink({ expires_days: 7 });
-        await refetch();
-        pushToast('success', 'New invite link generated', 'Previous link has been replaced.');
-      }
-
       if (confirm.type === 'generate_code') {
         await codeGen.generate({});
         await refetch();
@@ -821,15 +797,9 @@ export default function HRInviteEmployees() {
     } catch {
       pushToast('error', 'Something went wrong', 'Please try again.');
     } finally {
-      setLinkBusy(false);
       setConfirm(null);
     }
   };
-
-  useEffect(() => {
-    if (linkCopy.copied) pushToast('success', 'Link copied to clipboard!', 'Invite link has been copied.');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [linkCopy.copied]);
 
   useEffect(() => {
     if (codeCopy.copied) pushToast('success', 'Code copied to clipboard!', 'Invite code has been copied.');
@@ -847,14 +817,6 @@ export default function HRInviteEmployees() {
         <Bell size={16} className="text-[#64748b]" />
         <span className="absolute top-[9px] right-[10px] size-[7px] rounded-full bg-[#ef4444] border border-white" />
       </button>
-{/* 
-      <button
-        onClick={() => emailInputRef.current?.focus()}
-        className="flex items-center gap-[8px] h-[40px] px-[16px] rounded-[10px] text-white text-[13px] font-semibold tracking-[-0.5px] hover:opacity-90 active:scale-[0.98] transition whitespace-nowrap shrink-0"
-        style={{ backgroundImage: PRIMARY_GRADIENT }}
-      >
-        <UserPlus size={16} /> Invite Employee
-      </button> */}
     </>
   );
 
@@ -864,7 +826,7 @@ export default function HRInviteEmployees() {
 
       <PageHeader
         title="Invite Employees"
-        subtitle="Onboard new employees by sending invitations via email, link, or code."
+        subtitle="Onboard new employees by sending invitations via email or code."
         showSearch={false}
         showBell={false}
         actions={headerActions}
@@ -895,20 +857,20 @@ export default function HRInviteEmployees() {
               <StatCard value={counts.revoked} label="Revoked" sublabel="Access removed" dot="#ef4444" />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-[16px] sm:gap-[20px] items-start">
-              {/* Email Invite */}
-              <div className="relative overflow-hidden bg-white border border-[#f1f5f9] rounded-[16px] p-[20px] sm:p-[24px] flex flex-col gap-[16px] shadow-[0px_1px_1px_rgba(0,0,0,0.05)]">
+            {/* Email Invite — now the only invite method, so it's full width */}
+            <div className="grid grid-cols-1 gap-[16px] sm:gap-[20px] items-start">
+              <div className="relative overflow-hidden bg-white border border-[#f1f5f9] rounded-[16px] p-[20px] sm:p-[24px] flex flex-col gap-[16px] shadow-[0px_1px_1px_rgba(0,0,0,0.05)] max-w-[640px]">
                 <div className="absolute inset-x-0 top-0 h-[3px]" style={{ backgroundImage: PRIMARY_GRADIENT }} />
                 <CardHead
                   icon={<Mail size={18} />}
                   iconBg="#eef2ff"
                   iconColor="#4f46e5"
                   title="Email Invite"
-                  subtitle="Send direct invitations to employees"
+                  subtitle="Send a direct invitation to one employee"
                 />
 
                 <div className="flex flex-col gap-[8px]">
-                  <span className={sectionLabel}>Recipient Emails</span>
+                  <span className={sectionLabel}>Recipient Email</span>
                   <div className="min-h-[44px] border border-[#e2e8f0] rounded-[10px] px-[10px] py-[8px] flex flex-wrap gap-[6px] focus-within:ring-2 focus-within:ring-[#c7d2fe] focus-within:border-[#a5b4fc] transition">
                     {emails.map(e => (
                       <span
@@ -935,13 +897,14 @@ export default function HRInviteEmployees() {
                       }}
                       onKeyDown={onEmailKey}
                       onBlur={() => emailInput && addEmail(emailInput)}
-                      placeholder={emails.length ? '' : 'Add email, press Enter…'}
-                      className="flex-1 min-w-[120px] h-[26px] bg-transparent text-[13px] text-[#0f172a] tracking-[-0.5px] placeholder:text-[#94a3b8] focus:outline-none"
+                      placeholder={emails.length ? '' : 'Enter employee email…'}
+                      disabled={emails.length >= 1}
+                      className="flex-1 min-w-[120px] h-[26px] bg-transparent text-[13px] text-[#0f172a] tracking-[-0.5px] placeholder:text-[#94a3b8] focus:outline-none disabled:cursor-not-allowed"
                     />
                   </div>
 
                   <p className="text-[11px] tracking-[-0.5px]" style={{ color: emailErr ? '#dc2626' : '#94a3b8' }}>
-                    {emailErr ?? 'Press Enter or , after each email to add.'}
+                    {emailErr ?? 'One recipient per invite — passport verification is per person.'}
                   </p>
                 </div>
 
@@ -966,11 +929,29 @@ export default function HRInviteEmployees() {
                   </div>
                 </div>
 
+                <div className="flex flex-col gap-[8px]">
+                  <span className={sectionLabel}>Passport Number</span>
+                  <input
+                    value={passportNumber}
+                    onChange={e => {
+                      setPassportNumber(e.target.value);
+                      setEmailErr(null);
+                    }}
+                    placeholder="e.g. N1234567"
+                    className="h-[42px] bg-white border border-[#e2e8f0] rounded-[10px] px-[14px] text-[13px]
+                               text-[#334155] tracking-[-0.5px] placeholder:text-[#94a3b8]
+                               focus:outline-none focus:ring-2 focus:ring-[#c7d2fe] focus:border-[#a5b4fc] transition"
+                  />
+                  <p className="text-[11px] text-[#94a3b8] tracking-[-0.5px]">
+                    Required — the employee must correctly re-enter this number before their acceptance is allowed.
+                  </p>
+                </div>
+
                 {emailInvite.error && <p className="text-[12px] text-[#dc2626] tracking-[-0.5px]">{emailInvite.error}</p>}
 
                 <button
                   onClick={() => void sendInvites()}
-                  disabled={emailInvite.loading}
+                  disabled={emailInvite.loading || !canSend}
                   className="h-[44px] rounded-[10px] text-white text-[14px] font-semibold tracking-[-0.5px] flex items-center justify-center gap-[8px] hover:opacity-90 active:scale-[0.99] transition disabled:opacity-60"
                   style={{ backgroundImage: PRIMARY_GRADIENT }}
                 >
@@ -984,69 +965,6 @@ export default function HRInviteEmployees() {
                   )}
                   Send Invite
                 </button>
-              </div>
-
-              {/* Invite Link */}
-              <div className="bg-white border border-[#f1f5f9] rounded-[16px] p-[20px] sm:p-[24px] flex flex-col gap-[16px] shadow-[0px_1px_1px_rgba(0,0,0,0.05)]">
-                <CardHead
-                  icon={<Link2 size={18} />}
-                  iconBg="#ecfeff"
-                  iconColor="#0e7490"
-                  title="Invite Link"
-                  subtitle="Share a link for self-registration"
-                />
-
-                <div className="flex flex-col gap-[8px]">
-                  <span className={sectionLabel}>Shareable URL</span>
-                  {linkUrl ? (
-                    <div className="flex items-center gap-[8px] h-[42px] border border-[#e2e8f0] rounded-[10px] pl-[12px] pr-[6px]">
-                      <Link2 size={14} className="text-[#94a3b8] shrink-0" />
-                      <span className="flex-1 text-[12px] text-[#475569] tracking-[-0.5px] truncate">{linkUrl}</span>
-                      <button
-                        onClick={() => void linkCopy.copy(linkUrl)}
-                        aria-label="Copy link"
-                        className="size-[30px] rounded-[8px] flex items-center justify-center text-[#64748b] hover:bg-[#f1f5f9] transition"
-                      >
-                        {linkCopy.copied ? <Check size={15} className="text-[#16a34a]" /> : <Copy size={15} />}
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="h-[42px] border border-dashed border-[#e2e8f0] rounded-[10px] flex items-center px-[12px] text-[12px] text-[#94a3b8] tracking-[-0.5px]">
-                      No active link yet — generate one below.
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex flex-col gap-[8px]">
-                  <InfoRow
-                    left={linkInv ? `Expires in ${Math.max(0, daysUntil(linkInv.expires_at) ?? 0)} days` : 'No expiry set'}
-                    right={linkInv ? 'Active' : '—'}
-                    rightTone={linkInv ? 'good' : 'muted'}
-                  />
-                  <InfoRow
-                    left={`${linkInv?.used_count ?? 0} uses so far`}
-                    right={linkInv?.max_uses != null ? `${linkInv.max_uses} max` : 'No usage limit'}
-                    rightTone="muted"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between pt-[4px] mt-auto">
-                  <button
-                    onClick={() => setConfirm({ type: 'regenerate_link' })}
-                    disabled={linkBusy}
-                    className="inline-flex items-center gap-[6px] text-[13px] font-medium text-indigo-600 tracking-[-0.5px] hover:underline disabled:opacity-60"
-                  >
-                    <RefreshCw size={14} className={linkBusy ? 'animate-spin' : ''} /> Regenerate Link
-                  </button>
-
-                  <button
-                    onClick={() => void shareLink()}
-                    disabled={!linkUrl}
-                    className="inline-flex items-center gap-[6px] text-[13px] font-medium text-[#334155] tracking-[-0.5px] hover:text-[#0f172a] disabled:opacity-40"
-                  >
-                    <Share2 size={14} /> Share
-                  </button>
-                </div>
               </div>
 
               {/* Invite Code */}
@@ -1331,8 +1249,6 @@ export default function HRInviteEmployees() {
             ? 'Resend invitation'
             : confirm?.type === 'revoke'
             ? 'Revoke invitation'
-            : confirm?.type === 'regenerate_link'
-            ? 'Generate new link'
             : 'Generate new code'
         }
         message={
@@ -1340,8 +1256,6 @@ export default function HRInviteEmployees() {
             ? 'This will send a fresh invitation to the recipient.'
             : confirm?.type === 'revoke'
             ? 'This invitation will no longer work once revoked.'
-            : confirm?.type === 'regenerate_link'
-            ? 'This will deactivate the current link and create a new one.'
             : 'This will generate a fresh company code for onboarding.'
         }
         confirmLabel={
@@ -1349,11 +1263,9 @@ export default function HRInviteEmployees() {
             ? 'Resend'
             : confirm?.type === 'revoke'
             ? 'Revoke'
-            : confirm?.type === 'regenerate_link'
-            ? 'Generate Link'
             : 'Generate Code'
         }
-        busy={busyId != null || linkBusy || codeGen.loading}
+        busy={busyId != null || codeGen.loading}
         onCancel={() => setConfirm(null)}
         onConfirm={() => void handleConfirm()}
       />

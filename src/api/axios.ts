@@ -115,19 +115,8 @@ instance.interceptors.response.use(
         return Promise.reject(error);
       }
     }
-
-    // ✅ 403 — no permission
-    // if (status === 403) {
-    //   window.location.href = '/dashboard';
-    // }
-
-    // All other errors (502, 500, network, etc.) — pass through so the
-    // calling function's try/catch can handle it. Without this reject the
-    // interceptor returns undefined → axios treats it as a successful
-    // empty response → caller reads `res.data` on undefined → crash
-    // "Cannot read properties of undefined (reading 'data')".
     return Promise.reject(error);
-  },
+  }
 );
 
 export default instance;
