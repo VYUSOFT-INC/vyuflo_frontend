@@ -27,6 +27,44 @@ import {
   toEmployeeNotification as sharedReminderToNotif,
 } from "../../lib/sharedReminders";
 import { useCurrentUser } from "../useAuth";
+import { getUiSession } from "../../utils/uiSession";
+import { notifRemindersApi } from "../../api/lawyer/notifReminders.api";
+import type { NotificationUpdate } from "../../types/lawyer/notifReminders.types";
+
+/** Convert a lawyer-side NotificationUpdate row into the generic
+ *  Notification shape the bell + list use. */
+function updateToNotification(u: NotificationUpdate): Notification {
+  return {
+    id:                u.id,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    user_id:           '' as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    notification_type: u.notification_type as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    category:          u.category as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    priority:          u.priority as any,
+    title:             u.title,
+    body:              u.body,
+    application_id:    null,
+    case_reference:    u.case_reference ?? null,
+    actor_id:          null,
+    actor_label:       u.client_name ?? null,
+    cta_primary_label: null,
+    cta_primary_url:   null,
+    is_read:           u.is_read,
+    read_at:           null,
+    is_dismissed:      u.is_dismissed,
+    dismissed_at:      null,
+    sent_via_email:    false,
+    sent_via_push:     false,
+    sent_via_sms:      false,
+    expires_at:        null,
+    created_at:        u.created_at,
+    updated_at:        u.created_at,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any;
+}
 
 const PAGE_SIZE = 20;
 
@@ -96,12 +134,37 @@ export function useNotifications(params?: {
         } catch { /* ignore */ }
       }
 
-      const localExtras = [...localEventNotifs, ...localIntakeNotifs];
+      // Lawyer & HR use a different reader endpoint (/notifications-reminders/*)
+      // for calendar reminders / deadlines / updates. Merge those into the
+      // bell + list so the icon shows the same items as the full page.
+      let lawyerUpdates: Notification[] = [];
+      let lawyerUnread  = 0;
+      if (reset) {
+        const roles = getUiSession()?.roles ?? [];
+        const wantsLawyerFeed = roles.includes('attorney') || roles.includes('hr');
+        if (wantsLawyerFeed) {
+          try {
+            const res = await notifRemindersApi.listUpdates({ limit: PAGE_SIZE });
+            const backendIds = new Set(data.items.map((n) => n.id));
+            const backendTitles = new Set(data.items.map((n) => n.title));
+            lawyerUpdates = (res.items ?? [])
+              .filter((u) => !backendIds.has(u.id) && !backendTitles.has(u.title))
+              .map(updateToNotification);
+            lawyerUnread = res.total_unread ?? 0;
+          } catch { /* silent */ }
+        }
+      }
+
+      const localExtras = [...lawyerUpdates, ...localEventNotifs, ...localIntakeNotifs];
       setNotifications(prev =>
         reset ? [...localExtras, ...data.items] : [...prev, ...data.items]
       );
       setTotal(data.total + (reset ? localExtras.length : 0));
-      setUnreadCount(data.unread_count + (reset ? localExtras.length : 0));
+      setUnreadCount(
+        data.unread_count +
+        (reset ? (lawyerUnread || lawyerUpdates.filter((n) => !n.is_read).length) : 0) +
+        (reset ? localEventNotifs.length + localIntakeNotifs.length : 0),
+      );
       setUrgentCount(data.urgent_count + (reset ? localExtras.length : 0));
       setHasMore(data.has_more);
       if (reset) setOffset(PAGE_SIZE);
