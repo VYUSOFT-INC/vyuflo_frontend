@@ -26,7 +26,7 @@ import {
   readSharedRemindersFor,
   toEmployeeNotification as sharedReminderToNotif,
 } from "../../lib/sharedReminders";
-import { useCurrentUser } from "../useAuth";
+import { useCurrentUser } from "../auth/useAuth";
 import { getUiSession } from "../../utils/uiSession";
 import { notifRemindersApi } from "../../api/lawyer/notifReminders.api";
 import type { NotificationUpdate } from "../../types/lawyer/notifReminders.types";
