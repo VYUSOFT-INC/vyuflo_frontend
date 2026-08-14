@@ -62,11 +62,11 @@ export interface NavItem {
 // All lucide-react icons so they inherit the dynamic theme color.
 
 const employeeNav: NavItem[] = [
-  { to: '/dashboard',         label: 'Application Dashboard', icon: { kind: 'lucide', Icon: PieChart      } },
+  { to: '/dashboard',         label: 'Dashboard', icon: { kind: 'lucide', Icon: PieChart      } },
   { to: '/applications/list', label: 'Applications',          icon: { kind: 'lucide', Icon: FolderOpen    } },
   { to: '/messages',          label: 'Messages',              icon: { kind: 'lucide', Icon: Mail          } },
   { to: '/documents',         label: 'Documents',             icon: { kind: 'lucide', Icon: FileText      } },
-   { to: '/payments',          label: 'Payments & Billing',    icon: { kind: 'lucide', Icon: CreditCard    } },
+   //{ to: '/payments',          label: 'Payments & Billing',    icon: { kind: 'lucide', Icon: CreditCard    } },
   { to: '/consultations',     label: 'Book Consultation',     icon: { kind: 'lucide', Icon: CalendarDays  } },
   { to: '/profile',           label: 'Settings',              icon: { kind: 'lucide', Icon: Settings      } },
   { to: '/notifications',     label: 'Notifications',         icon: { kind: 'lucide', Icon: Bell         } },

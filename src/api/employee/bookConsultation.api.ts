@@ -12,6 +12,9 @@ import type {
   CreateConsultationBookingResponse,
   AppointmentType,
   ConsultationSlot,
+  MyBookingRecord,
+  BookingStatus,
+  ConsultationFormat,
 } from "../../types/employee/bookConsultation.types";
 
 const APPOINTMENT_TYPES: AppointmentType[] = [
@@ -68,11 +71,17 @@ export const getBookConsultationData = async (
   try {
     const query = attorneyId ? `?attorney_id=${attorneyId}` : "";
     const res = await axios.get<BookConsultationData>(`/consultations/book-page${query}`);
-    // Fill in defaults if backend returns partial payload
+    // Only synthesise slots when the backend attorney is missing entirely
+    // (i.e. we're in a fully-mocked state). If a real attorney exists but
+    // has no slots, show the honest empty state instead of synthesising
+    // fake IDs — otherwise POST /bookings 422s with "invalid UUID".
+    const hasRealAttorney = !!res.data?.attorney;
     return {
       attorney:          res.data?.attorney ?? null,
       appointment_types: res.data?.appointment_types?.length ? res.data.appointment_types : APPOINTMENT_TYPES,
-      slots:             res.data?.slots?.length ? res.data.slots : synthesiseSlots(browserTz()),
+      slots:             res.data?.slots?.length
+        ? res.data.slots
+        : (hasRealAttorney ? [] : synthesiseSlots(browserTz())),
     };
   } catch {
     // Backend not ready — fall back to a fully synthetic response
@@ -114,5 +123,70 @@ export const createConsultationBooking = async (
       message:              "Booking confirmed (mock — backend not yet wired).",
       is_mock:              true,
     };
+  }
+};
+
+/* ── My Bookings ─────────────────────────────────────────────────── */
+const MY_BOOKINGS_KEY = "vyuflo:employee:local-bookings:v1";
+
+/** Persist a booking locally so it appears in "My Bookings" even before
+ *  backend `GET /consultations/bookings` returns per-user bookings. */
+export function appendLocalBooking(rec: MyBookingRecord): void {
+  try {
+    const raw = localStorage.getItem(MY_BOOKINGS_KEY);
+    const list: MyBookingRecord[] = raw ? JSON.parse(raw) : [];
+    const next = [rec, ...list.filter((b) => b.id !== rec.id)];
+    localStorage.setItem(MY_BOOKINGS_KEY, JSON.stringify(next));
+  } catch { /* ignore quota / private mode */ }
+}
+
+function readLocalBookings(): MyBookingRecord[] {
+  try {
+    const raw = localStorage.getItem(MY_BOOKINGS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+
+/** GET /consultations/bookings — falls back to localStorage if backend
+ *  doesn't yet scope by current user or returns empty. */
+export const listMyBookings = async (): Promise<MyBookingRecord[]> => {
+  const localList = readLocalBookings();
+  try {
+    const res = await axios.get("/consultations/bookings", { params: { limit: 100 } });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const items: any[] = Array.isArray(res.data) ? res.data
+      : res.data?.items ?? res.data?.bookings ?? [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const parsed: MyBookingRecord[] = items.map((b: any) => {
+      const attorney = b.attorney ?? {};
+      const attorneyUser = attorney.user ?? {};
+      const type = b.appointment_type ?? {};
+      const slot = b.slot ?? {};
+      const startIso = b.scheduled_start_iso
+        ?? (slot.slot_date && slot.slot_time ? `${slot.slot_date}T${slot.slot_time}` : new Date().toISOString());
+      return {
+        id:                  b.id,
+        confirmation_no:     b.confirmation_no ?? `VYU-${String(b.id ?? "").slice(0, 6).toUpperCase()}`,
+        attorney_user_id:    attorneyUser.id ?? attorney.user_id ?? null,
+        attorney_name:       [attorneyUser.first_name, attorneyUser.last_name].filter(Boolean).join(" ") || "Attorney",
+        attorney_email:      attorneyUser.email ?? null,
+        attorney_photo_url:  attorney.profile_photo_url ?? null,
+        attorney_firm:       attorney.law_firm_name ?? null,
+        appointment_type:    type.title ?? "Consultation",
+        duration_minutes:    type.duration_minutes ?? b.duration_minutes ?? 30,
+        consultation_format: (b.consultation_format as ConsultationFormat) ?? "virtual",
+        status:              (b.status as BookingStatus) ?? "confirmed",
+        scheduled_start_iso: startIso,
+        timezone:            slot.timezone ?? b.client_timezone ?? "UTC",
+        zoho_join_url:       b.zoho_join_url ?? b.meeting_link ?? null,
+      };
+    });
+    // Merge local bookings de-duped by id (local first so mocks show)
+    const seen = new Set(parsed.map((b) => b.id));
+    return [...parsed, ...localList.filter((b) => !seen.has(b.id))];
+  } catch {
+    return localList;
   }
 };

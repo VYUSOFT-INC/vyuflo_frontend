@@ -21,6 +21,50 @@ import {
   getNotificationPreferences,
   updateNotificationPreferences,
 } from "../../api/employee/notifications.api";
+import { readIntakeRequests, toEmployeeNotification } from "../../lib/intakeRequests";
+import {
+  readSharedRemindersFor,
+  toEmployeeNotification as sharedReminderToNotif,
+} from "../../lib/sharedReminders";
+import { useCurrentUser } from "../useAuth";
+import { getUiSession } from "../../utils/uiSession";
+import { notifRemindersApi } from "../../api/lawyer/notifReminders.api";
+import type { NotificationUpdate } from "../../types/lawyer/notifReminders.types";
+
+/** Convert a lawyer-side NotificationUpdate row into the generic
+ *  Notification shape the bell + list use. */
+function updateToNotification(u: NotificationUpdate): Notification {
+  return {
+    id:                u.id,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    user_id:           '' as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    notification_type: u.notification_type as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    category:          u.category as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    priority:          u.priority as any,
+    title:             u.title,
+    body:              u.body,
+    application_id:    null,
+    case_reference:    u.case_reference ?? null,
+    actor_id:          null,
+    actor_label:       u.client_name ?? null,
+    cta_primary_label: null,
+    cta_primary_url:   null,
+    is_read:           u.is_read,
+    read_at:           null,
+    is_dismissed:      u.is_dismissed,
+    dismissed_at:      null,
+    sent_via_email:    false,
+    sent_via_push:     false,
+    sent_via_sms:      false,
+    expires_at:        null,
+    created_at:        u.created_at,
+    updated_at:        u.created_at,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any;
+}
 
 const PAGE_SIZE = 20;
 
@@ -44,6 +88,7 @@ export function useNotifications(params?: {
   const [error,         setError]         = useState<string | null>(null);
 
   const paramsKey = JSON.stringify(params);
+  const { data: me } = useCurrentUser();
 
   const load = useCallback(async (reset = true) => {
     setLoading(true);
@@ -55,12 +100,72 @@ export function useNotifications(params?: {
         limit:  PAGE_SIZE,
         offset: currentOffset,
       });
+
+      // Merge local intake-request notifications (dev bridge) — hides
+      // automatically once backend also surfaces the same session via
+      // its own Notification row. De-dup by title.
+      let localIntakeNotifs: Notification[] = [];
+      let localEventNotifs:  Notification[] = [];
+      if (reset) {
+        try {
+          const reqs = readIntakeRequests().filter((r) => !r.completed);
+          const backendTitles = new Set(data.items.map((n) => n.title));
+          localIntakeNotifs = reqs
+            .map((r) => toEmployeeNotification(r) as Notification)
+            .filter((n) => !backendTitles.has(n.title));
+        } catch { /* ignore */ }
+
+        // Merge shared calendar-event reminders — lawyer-created events
+        // linked to this employee's cases. Removes once backend inserts
+        // a real Notification row on POST /calendar/events (spec sent).
+        try {
+          const fullName = me
+            ? [me.first_name, me.last_name].filter(Boolean).join(' ')
+            : '';
+          const shared = readSharedRemindersFor({
+            email:  me?.email,
+            name:   fullName,
+            userId: me?.id,
+          });
+          const backendTitles = new Set(data.items.map((n) => n.title));
+          localEventNotifs = shared
+            .map((r) => sharedReminderToNotif(r) as Notification)
+            .filter((n) => !backendTitles.has(n.title));
+        } catch { /* ignore */ }
+      }
+
+      // Lawyer & HR use a different reader endpoint (/notifications-reminders/*)
+      // for calendar reminders / deadlines / updates. Merge those into the
+      // bell + list so the icon shows the same items as the full page.
+      let lawyerUpdates: Notification[] = [];
+      let lawyerUnread  = 0;
+      if (reset) {
+        const roles = getUiSession()?.roles ?? [];
+        const wantsLawyerFeed = roles.includes('attorney') || roles.includes('hr');
+        if (wantsLawyerFeed) {
+          try {
+            const res = await notifRemindersApi.listUpdates({ limit: PAGE_SIZE });
+            const backendIds = new Set(data.items.map((n) => n.id));
+            const backendTitles = new Set(data.items.map((n) => n.title));
+            lawyerUpdates = (res.items ?? [])
+              .filter((u) => !backendIds.has(u.id) && !backendTitles.has(u.title))
+              .map(updateToNotification);
+            lawyerUnread = res.total_unread ?? 0;
+          } catch { /* silent */ }
+        }
+      }
+
+      const localExtras = [...lawyerUpdates, ...localEventNotifs, ...localIntakeNotifs];
       setNotifications(prev =>
-        reset ? data.items : [...prev, ...data.items]
+        reset ? [...localExtras, ...data.items] : [...prev, ...data.items]
       );
-      setTotal(data.total);
-      setUnreadCount(data.unread_count);
-      setUrgentCount(data.urgent_count);
+      setTotal(data.total + (reset ? localExtras.length : 0));
+      setUnreadCount(
+        data.unread_count +
+        (reset ? (lawyerUnread || lawyerUpdates.filter((n) => !n.is_read).length) : 0) +
+        (reset ? localEventNotifs.length + localIntakeNotifs.length : 0),
+      );
+      setUrgentCount(data.urgent_count + (reset ? localExtras.length : 0));
       setHasMore(data.has_more);
       if (reset) setOffset(PAGE_SIZE);
       else setOffset(currentOffset + PAGE_SIZE);
@@ -75,7 +180,7 @@ export function useNotifications(params?: {
   const refetch  = useCallback(() => load(true),  [load]);
   const loadMore = useCallback(() => load(false), [load]);
 
-  useEffect(() => { void load(true); }, [paramsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void load(true); }, [paramsKey, me?.email]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Mark single read — optimistic update
   const markRead = useCallback(async (id: string) => {

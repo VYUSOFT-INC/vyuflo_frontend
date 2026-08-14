@@ -4,17 +4,18 @@ export type DocFileType = "pdf" | "docx" | "img" | "other";
 export type DocStatus   = "verified" | "pending_review" | "uploaded" | "rejected" | "required" | "missing";
 
 export interface HubDocument {
-  id:              string;
-  name:            string;
-  file_type:       DocFileType;
-  status:          DocStatus;
-  document_type:   string;
-  category:        string;
+  id:                string;
+  name:              string;
+  file_type:         DocFileType;
+  status:            DocStatus;
+  document_type:     string;
+  category:          string;
   application_name?: string;
-  application_id?: string;
-  file_size_bytes: number;
-  uploaded_at:     string;
-  verified_at?:    string;
+  application_id?:   string;
+  file_size_bytes:   number;
+  uploaded_at:       string;
+  verified_at?:      string;
+  in_use?:           boolean;   // ← ADD — true if reused elsewhere or confirmed on a completed task
 }
 
 export interface RequirementItem {
@@ -25,19 +26,18 @@ export interface RequirementItem {
 }
 
 export interface HubRequirements {
-  application_id: string;        // ← ADD — which app these tasks belong to
+  application_id: string;
   visa_code:      string;
   done:           number;
   total:          number;
   items:          RequirementItem[];
 }
 
-// ← ADD — one tab per application the user has
 export interface ApplicationTab {
-  id:        string;             // application UUID
-  label:     string;             // shown in tab e.g. "H-1B"
-  visa_code: string;             // e.g. "H-1B"
-  status:    string;             // "draft" | "in_progress" | "submitted" etc.
+  id:        string;
+  label:     string;
+  visa_code: string;
+  status:    string;
 }
 
 export interface ActivityItem {
@@ -58,5 +58,5 @@ export interface DocumentHubData {
   activity:        ActivityItem[];
   storage:         StorageInfo;
   total:           number;
-  applicationTabs: ApplicationTab[];   // ← ADD
+  applicationTabs: ApplicationTab[];
 }

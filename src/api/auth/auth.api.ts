@@ -67,7 +67,7 @@
 // export const signupApi       = authApi;
 
 
-import axios from './axios';
+import axios from '../axios';
 import type {
   User,
   TokenPayload,
@@ -77,7 +77,7 @@ import type {
   SignupResponse,
   LoginResponse,
   ResetRequestResponse,
-} from '../types/auth.types';
+} from '../../types/auth/auth.types';
 
 // Re-export so files that used to import User from here still work
 export type { User, TokenPayload };
@@ -103,7 +103,7 @@ export const authApi = {
   logout: async (): Promise<void> => {
     await axios.post('/auth/logout');
     // clearAuth wipes both Zustand state and localStorage tokens
-    const { useAuthStore } = await import('../store/authStore');
+    const { useAuthStore } = await import('../../store/authStore');
     useAuthStore.getState().clearAuth();
   },
 

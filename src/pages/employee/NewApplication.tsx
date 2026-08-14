@@ -462,7 +462,7 @@ import { useState,useEffect} from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { createApplication } from "../../api/employee/applications.api";
 
-import { useCurrentUser } from "../../hooks/useAuth";
+import { useCurrentUser } from "../../hooks/auth/useAuth";
 import { useVisaTypes } from "../../hooks/employee/useApplications";
 import { Lock, Save, ArrowRight, Loader2 } from "lucide-react";
 import type { AxiosError } from "axios";

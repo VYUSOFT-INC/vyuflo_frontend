@@ -50,6 +50,27 @@ export interface CreateConsultationBookingResponse {
   is_mock?:             boolean;                       // true when backend not yet ready
 }
 
+/* ── My Bookings ─────────────────────────────────────────────────── */
+export type BookingStatus = "confirmed" | "completed" | "cancelled" | "pending";
+
+export interface MyBookingRecord {
+  id:                   string;
+  confirmation_no:      string;
+  attorney_user_id:     string | null;   // user_id of the attorney (for messaging etc.)
+  attorney_name:        string;
+  attorney_email:       string | null;
+  attorney_photo_url:   string | null;
+  attorney_firm:        string | null;
+  appointment_type:     string;                        // "30-Min Consultation"
+  duration_minutes:     number;
+  consultation_format:  ConsultationFormat;
+  status:               BookingStatus;
+  scheduled_start_iso:  string;
+  timezone:             string;
+  zoho_join_url:        string | null;
+  is_mock?:             boolean;
+}
+
 /* ── Helpers ─────────────────────────────────────────────────────── */
 export function formatUsd(amount: number): string {
   return new Intl.NumberFormat("en-US", {

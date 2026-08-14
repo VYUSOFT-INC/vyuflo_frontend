@@ -14,6 +14,7 @@ import {
   useBookConsultation,
   useCreateConsultationBooking,
 } from "../../hooks/employee/useBookConsultation";
+import { appendLocalBooking } from "../../api/employee/bookConsultation.api";
 import {
   parseJsonText,
 } from "../../types/employee/bookConsultation.types";
@@ -84,6 +85,25 @@ export default function BookConsultation() {
         slot_id:             selectedSlot.id,
         scheduled_start_iso: startIso,
         client_timezone:     timezone,
+      });
+      // Persist locally so "My Bookings" shows it even before backend
+      // scopes /consultations/bookings by current user.
+      appendLocalBooking({
+        id:                  res.id,
+        confirmation_no:     res.confirmation_no,
+        attorney_user_id:    attorney.user?.id ?? attorney.user_id ?? null,
+        attorney_name:       attorneyName,
+        attorney_email:      attorney.user?.email ?? null,
+        attorney_photo_url:  attorney.profile_photo_url ?? null,
+        attorney_firm:       attorney.law_firm_name ?? null,
+        appointment_type:    type.title,
+        duration_minutes:    res.duration_minutes ?? type.duration_minutes,
+        consultation_format: format,
+        status:              "confirmed",
+        scheduled_start_iso: res.scheduled_start_iso ?? startIso,
+        timezone,
+        zoho_join_url:       res.zoho_join_url,
+        is_mock:             Boolean(res.is_mock),
       });
       setResult(res);
       setStep("confirmation");
@@ -207,7 +227,7 @@ export default function BookConsultation() {
           joinUrl={result.zoho_join_url}
           isMock={Boolean(result.is_mock)}
           onBack={() => setStep("details")}
-          onDone={() => navigate("/")}
+          onDone={() => navigate("/consultations/my-bookings")}
         />
       )}
     </div>
@@ -531,12 +551,12 @@ function ConfirmationStep(props: {
 
       <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-center">
         <button onClick={onBack}
-          className="rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+          className="rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 cursor-pointer">
           ← Back to slot
         </button>
         <button onClick={onDone}
-          className="rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-2.5 text-sm font-bold text-white">
-          Back to dashboard
+          className="rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-2.5 text-sm font-bold text-white cursor-pointer">
+          📅 My Bookings →
         </button>
       </div>
 

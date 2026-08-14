@@ -45,9 +45,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { AxiosError } from 'axios';
-import type { User } from '../types/auth.types';
-import { getMeApi } from '../api/auth.api';
-import { useAuthStore } from '../store/authStore';
+import type { User } from '../../types/auth/auth.types';
+import { getMeApi } from '../../api/auth/auth.api';
+import { useAuthStore } from '../../store/authStore';
 
 function extractMessage(e: unknown): string {
   const err = e as AxiosError<{ detail: string }>;

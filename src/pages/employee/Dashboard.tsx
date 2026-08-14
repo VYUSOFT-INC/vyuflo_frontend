@@ -9,7 +9,7 @@ import {
   ClipboardList, CalendarClock, ExternalLink, HelpCircle,
 } from 'lucide-react';
 import { PageHeader, PageContent } from '../../components/layout/Pageheader';
-import { useCurrentUser } from '../../hooks/useAuth';
+import { useCurrentUser } from '../../hooks/auth/useAuth';
 import { useDashboard } from '../../hooks/employee/useDashboard';
 import { DashboardTour } from '../../components/tour/DashboardTour';
 import { ComingSoonModal } from '../../components/common/ComingSoonModal';
@@ -18,6 +18,8 @@ import type {
   DocumentSummaryItem, DocStatus, Deadline, DeadlineUrgency,
   ActivityItem, ActivityType, CaseTeamMember,
 } from '../../types/employee/dashboard.types';
+import { readIntakeRequestsForEmployee } from '../../lib/intakeRequests';
+import { readSharedRemindersFor } from '../../lib/sharedReminders';
 
 const PRIMARY = 'var(--theme-primary)';
 const PRIMARY_GRADIENT = 'linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)';
@@ -417,8 +419,147 @@ export default function Dashboard() {
 
   const firstName = user?.first_name ?? 'there';
 
+  // Lawyer→employee intake requests. Priority order:
+  //   1. Backend action_items (real flow — when backend adds it)
+  //   2. localStorage bridge (dev testing — when lawyer clicks Send)
+  //   3. Hardcoded mock (demo mode) — so we can click through the
+  //      intake wizard even before ANY lawyer has sent a request
+  //
+  // De-dup: if backend surfaces the same session id, drop the local/mock.
+  const intakeRequestActions = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    type ActionShape = any;
+
+    // Session ids the backend has already surfaced — skip those below.
+    const backendSessionIds = new Set<string>();
+    for (const item of data?.action_items ?? []) {
+      const match = /\/intake\/([^/?#]+)/.exec(item.route ?? '');
+      if (match) backendSessionIds.add(match[1]);
+    }
+
+    const items: ActionShape[] = [];
+
+    // ── 2. localStorage bridge ─────────────────────────────────────
+    try {
+      const reqs = readIntakeRequestsForEmployee(user?.email ?? null);
+      reqs.filter((r) => !backendSessionIds.has(r.id)).forEach((r) => {
+        items.push({
+          id:          `intake-req-${r.id}`,
+          title:       r.is_correction
+            ? `📝 Corrections needed on your ${r.visa_code ?? ''} intake`
+            : `📩 Complete your ${r.visa_code ?? ''} intake`,
+          description: r.note || 'Your attorney needs details for your case.',
+          category:    'form',
+          priority:    'urgent',
+          due_date:    r.requested_at,
+          route:       `/my-intake/${r.id}`,
+          completed:   false,
+        });
+      });
+    } catch { /* ignore */ }
+
+    // ── 3. Demo mocks — auto-hide the moment backend surfaces real
+    //      intake action items. When backend team deploys the changes
+    //      in the spec doc, backend action_items will include the
+    //      intake row → this block silently no-ops → real data takes
+    //      over automatically.
+    const backendHasAnyIntake = backendSessionIds.size > 0;
+    const bridgeHasAnyIntake  = items.length > 0;
+
+    // Read "completed" markers for both demos so they hide once the
+    // user has clicked through and submitted them.
+    const completedDemoIds = new Set<string>();
+    try {
+      const raw = localStorage.getItem('vyuflo:intake:pending-requests:v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (Array.isArray(parsed) ? parsed : []).forEach((r: any) => {
+          if (r?.completed) completedDemoIds.add(r.id);
+        });
+      }
+    } catch { /* ignore */ }
+
+    if (!backendHasAnyIntake && !bridgeHasAnyIntake) {
+      // Demo #1 — Empty intake request (initial ask)
+      const DEMO1 = 'mock-session-demo';
+      if (!completedDemoIds.has(DEMO1)) {
+        items.push({
+          id:          `intake-req-${DEMO1}`,
+          title:       '📩 Complete your H-1B intake',
+          description: 'Your attorney has requested you fill out the initial intake form for your case. Please provide accurate details — you can refine later.',
+          category:    'form',
+          priority:    'urgent',
+          due_date:    new Date().toISOString(),
+          route:       `/my-intake/${DEMO1}`,
+          completed:   false,
+        });
+      }
+
+      // Demo #2 — Corrections needed (previously submitted, sent back)
+      const DEMO2 = 'mock-session-demo-corrections';
+      if (!completedDemoIds.has(DEMO2)) {
+        items.push({
+          id:          `intake-req-${DEMO2}`,
+          title:       '📝 Corrections needed on your L-1B intake',
+          description: 'Please update your passport expiration date and add your latest employment letter. Also, verify the start date for your current role — the year shown seems off.',
+          category:    'form',
+          priority:    'urgent',
+          due_date:    new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+          route:       `/my-intake/${DEMO2}`,
+          completed:   false,
+        });
+      }
+    }
+
+    return items;
+  }, [user?.email, data]);
+
+  // ── Calendar-event reminders bridge ──────────────────────────────────
+  // When lawyer creates a calendar event linked to this employee's case,
+  // sharedReminders.ts stores it. Surface upcoming ones as Action Items.
+  // Removes once backend adds real Notification/Reminder rows on
+  // POST /calendar/events (see BACKEND spec doc).
+  const calendarReminderActions = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    type ActionShape = any;
+    const items: ActionShape[] = [];
+    try {
+      const fullName = user
+        ? [user.first_name, user.last_name].filter(Boolean).join(' ')
+        : '';
+      const shared = readSharedRemindersFor({
+        email:  user?.email,
+        name:   fullName,
+        userId: user?.id,
+      });
+      // Only show upcoming (event_date today or later)
+      const today = new Date().toISOString().slice(0, 10);
+      shared
+        .filter((r) => r.event_date >= today)
+        .forEach((r) => {
+          items.push({
+            id:          `cal-event-${r.id}`,
+            title:       `📅 ${r.event_type}: ${r.title}`,
+            description: `Scheduled by ${r.attorney_name} on ${r.event_date} at ${(r.start_time || '').slice(0, 5)}. Reminder ${r.reminder_minutes} min before.`,
+            category:    'calendar',
+            priority:    r.event_type?.toLowerCase().includes('court') ? 'urgent' : 'high',
+            due_date:    `${r.event_date}T${r.start_time || '09:00:00'}`,
+            route:       `/notifications`,
+            completed:   false,
+          });
+        });
+    } catch { /* ignore */ }
+    return items;
+  }, [user?.email, user?.id, user?.first_name, user?.last_name]);
+
   const pendingActions = useMemo(
-    () => (data?.action_items ?? []).filter(a => !a.completed), [data],
+    () => [
+      ...calendarReminderActions,
+      ...intakeRequestActions,
+      ...((data?.action_items ?? []).filter(a => !a.completed)),
+    ],
+    [data, intakeRequestActions, calendarReminderActions],
   );
   const completedActions = useMemo(
     () => (data?.action_items ?? []).filter(a => a.completed), [data],
@@ -711,7 +852,7 @@ export default function Dashboard() {
                       { label: 'Upload Docs',      icon: <Upload size={15} />,        route: '/documents/upload',  comingSoon: false },
                       { label: 'Messages',          icon: <MessageSquare size={15} />, route: '/messages',          comingSoon: false },
                       { label: 'My Applications',   icon: <Briefcase size={15} />,     route: '/applications/list', comingSoon: false },
-                      { label: 'Book Consultation', icon: <CalendarClock size={15} />, route: null,                 comingSoon: true  },
+                      { label: 'Book Consultation', icon: <CalendarClock size={15} />, route: '/consultations',     comingSoon: false },
                     ].map(qa => (
                       <button key={qa.label}
                         onClick={() => qa.comingSoon ? setShowConsultation(true) : qa.route && navigate(qa.route)}

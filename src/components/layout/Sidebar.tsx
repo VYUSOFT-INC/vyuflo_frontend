@@ -116,11 +116,15 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
   const renderSectionHeader = (text: string) => (
     <div
       className={[
-        'mt-4 mb-1 px-3 transition-all duration-300 overflow-hidden',
-        collapsed ? 'lg:opacity-0 lg:h-0' : 'opacity-100',
+        'px-3 transition-all duration-300',
+        collapsed
+          ? 'lg:opacity-0 lg:h-0 lg:my-0 lg:overflow-hidden opacity-100 mt-2 mb-2'
+          : 'opacity-100 mt-2 mb-2',
       ].join(' ')}
     >
-      <p className="text-[11px] font-semibold text-[#94a3b8] tracking-[0.6px] uppercase">{text}</p>
+      <p className="text-[11px] font-semibold text-[#94a3b8] tracking-[0.6px] uppercase leading-tight">
+        {text}
+      </p>
     </div>
   );
 

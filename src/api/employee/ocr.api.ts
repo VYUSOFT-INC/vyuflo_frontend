@@ -1,7 +1,7 @@
 // src/api/employee/ocr.api.ts
 
 import axios from "../axios";
-import type { SavedOCRField, SaveOCRFieldsPayload } from "../../types/employee/ocr.types";
+import type { SavedOCRField, SaveOCRFieldsPayload, ExpectedFieldsResponse } from "../../types/employee/ocr.types";
 
 const ocrApi = {
 
@@ -12,6 +12,18 @@ const ocrApi = {
   getFields: async (documentId: string): Promise<SavedOCRField[]> => {
     const res = await axios.get(`/documents/${documentId}/ocr-fields`);
     return Array.isArray(res.data) ? res.data : [];
+  },
+
+  // ── GET /documents/:id/expected-fields ─────────────────────────────────
+  // NEW — fast, OCR-free lookup of the admin-configured field skeleton for
+  // this document's type. Called immediately on DocumentViewer open, before
+  // the slow extract() call below, so the UI can show locked placeholder
+  // fields right away instead of a blank spinner. Returns an empty fields
+  // array for fuzzy/VLM types (Offer Letter, etc.) with no fixed config —
+  // the frontend should fall back to a plain spinner in that case.
+  getExpectedFields: async (documentId: string): Promise<ExpectedFieldsResponse> => {
+    const res = await axios.get(`/documents/${documentId}/expected-fields`);
+    return res.data;
   },
 
   // ── POST /documents/:id/ocr-extract ────────────────────────────────────
@@ -27,13 +39,15 @@ const ocrApi = {
   ): Promise<{
     document_type:  string;
     type_mismatch:  boolean;
+    quality_issue?:  string | null;     // ← ADD
+    sharpness_score?: number | null;    // ← ADD
     expected_type?: string | null;
     fields: {
       field_name:       string;
       extracted_value:  string;
       confidence_score: number;
       needs_review:     boolean;
-      is_mandatory?: boolean;
+      is_mandatory?:    boolean;
     }[];
   }> => {
     const form = new FormData();

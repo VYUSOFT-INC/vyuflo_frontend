@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { forgotPasswordApi } from "../../api/auth.api";
+import { forgotPasswordApi } from "../../api/auth/auth.api";
 
 
 // ── Figma Assets ──────────────────────────────────────────────────────────────

@@ -89,12 +89,65 @@ export const dashboardApi = {
       { month: 'Dec 2025', critical:  1, warning:  4, upcoming: 17 },
     ],
 
-    visa_distribution: [],
-  cases_by_stage: [],
-  monthly_trend: [],
-  department_compliance: [],
-  processing_time: [],
-   document_completion: [],
+    // ── FIXED — these six were previously hardcoded as empty arrays ([]),
+    // which is why widgets rendered their frame/title/drag-handle correctly
+    // but showed no chart content: ChartVisaDistribution, ChartMonthlyTrend,
+    // etc. all received d=[] and had nothing to draw. Populated to match
+    // the shapes in dashboard.types.ts so every widget in WIDGET_REGISTRY
+    // renders real data once added via the widget panel.
+
+    visa_distribution: [
+      { visa_code: 'H-1B',  count: 412, percentage: 41.9 },
+      { visa_code: 'L-1',   count: 198, percentage: 20.1 },
+      { visa_code: 'O-1',   count: 121, percentage: 12.3 },
+      { visa_code: 'TN',    count: 156, percentage: 15.9 },
+      { visa_code: 'E-3',   count:  67, percentage:  6.8 },
+      { visa_code: 'Other', count:  29, percentage:  3.0 },
+    ],
+
+    cases_by_stage: [
+      { stage: 'Document Collection', count: 143 },
+      { stage: 'Attorney Review',     count:  98 },
+      { stage: 'LCA Filing',          count:  61 },
+      { stage: 'USCIS Submission',    count:  87 },
+      { stage: 'RFE Response',        count:  22 },
+      { stage: 'Approved',            count: 312 },
+    ],
+
+    monthly_trend: [
+      { month: 'Jan 2025', filed: 34, approved: 28, rejected: 3 },
+      { month: 'Feb 2025', filed: 41, approved: 33, rejected: 4 },
+      { month: 'Mar 2025', filed: 38, approved: 35, rejected: 2 },
+      { month: 'Apr 2025', filed: 52, approved: 44, rejected: 5 },
+      { month: 'May 2025', filed: 47, approved: 39, rejected: 6 },
+      { month: 'Jun 2025', filed: 55, approved: 48, rejected: 3 },
+    ],
+
+    department_compliance: [
+      { department: 'Engineering', compliance_rate: 94, total_employees: 412 },
+      { department: 'Product',     compliance_rate: 88, total_employees: 156 },
+      { department: 'Finance',     compliance_rate: 91, total_employees:  87 },
+      { department: 'Marketing',   compliance_rate: 76, total_employees: 103 },
+      { department: 'Design',      compliance_rate: 83, total_employees:  64 },
+      { department: 'Operations',  compliance_rate: 69, total_employees:  98 },
+    ],
+
+    processing_time: [
+      { visa_code: 'H-1B', avg_days: 142, benchmark_days: 165 },
+      { visa_code: 'L-1',  avg_days:  98, benchmark_days: 110 },
+      { visa_code: 'O-1',  avg_days: 118, benchmark_days: 130 },
+      { visa_code: 'TN',   avg_days:  45, benchmark_days:  50 },
+      { visa_code: 'E-3',  avg_days:  67, benchmark_days:  75 },
+    ],
+
+    document_completion: [
+      { category: 'Passport & ID',  completed: 1189, total: 1248, percentage: 95 },
+      { category: 'Employment',     completed: 1042, total: 1248, percentage: 83 },
+      { category: 'Education',      completed:  876, total: 1248, percentage: 70 },
+      { category: 'Financial',      completed:  734, total: 1248, percentage: 59 },
+      { category: 'Medical',        completed:  612, total: 1248, percentage: 49 },
+      { category: 'Other',          completed:  398, total: 1248, percentage: 32 },
+    ],
   }),
 };
 

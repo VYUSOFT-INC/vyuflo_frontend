@@ -35,8 +35,6 @@
 //     needs_review:     boolean;
 //   }[];
 // }
-
-
 // src/types/ocr.types.ts
 
 export interface OCRField {
@@ -46,7 +44,8 @@ export interface OCRField {
   confidence_score: number;       // 0–100
   needs_review:     boolean;
   is_confirmed:     boolean;
-  is_mandatory:     boolean;      // ← ADDED — driven by admin's DocumentFieldConfiguration
+  is_mandatory:     boolean;      // driven by admin's DocumentFieldConfiguration
+  is_locked:        boolean;      // ← ADDED — true while real OCR is still running (skeleton state)
   is_editing:       boolean;      // UI only
   edit_value:       string;       // value in the edit input
 }
@@ -60,7 +59,7 @@ export interface SavedOCRField {
   confidence_score: number | null;
   needs_review:     boolean;
   is_confirmed:     boolean;
-  is_mandatory:     boolean;      // ← ADDED — matches OCRFieldResponse.is_mandatory from the backend
+  is_mandatory:     boolean;      // matches OCRFieldResponse.is_mandatory from the backend
   confirmed_at?:    string | null;
 }
 
@@ -73,5 +72,16 @@ export interface SaveOCRFieldsPayload {
     extracted_value:  string;
     confidence_score: number;
     needs_review:     boolean;
+  }[];
+}
+
+// Shape returned by GET /documents/:id/expected-fields — the fast,
+// OCR-free skeleton lookup used to show locked placeholder fields
+// while real extraction is still running.
+export interface ExpectedFieldsResponse {
+  ocr_slug: string | null;
+  fields: {
+    field_name:   string;
+    is_mandatory: boolean;
   }[];
 }
