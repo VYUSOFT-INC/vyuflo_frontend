@@ -1243,15 +1243,21 @@ function WorkingHoursCard({
       ) : (
         <ul className="mt-3 space-y-1.5">
           {DAY_KEYS.map((d) => {
-            const row = active.find((r) => r.day_of_week === d);
-            const isOff = !row;
+            const rows = active
+              .filter((r) => r.day_of_week === d)
+              .sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? ''));
+            const isOff = rows.length === 0;
             return (
-              <li key={d} className="flex items-center justify-between text-xs">
-                <span className={`font-medium ${isOff ? 'text-gray-400' : 'text-gray-700'}`}>
+              <li key={d} className="flex items-start justify-between gap-2 text-xs">
+                <span className={`font-medium shrink-0 ${isOff ? 'text-gray-400' : 'text-gray-700'}`}>
                   {DAY_SHORT[d]}
                 </span>
-                <span className={isOff ? 'text-gray-300' : 'text-gray-800'}>
-                  {isOff ? '— off —' : `${fmt12h(row.start_time)} – ${fmt12h(row.end_time)}`}
+                <span className={`text-right ${isOff ? 'text-gray-300' : 'text-gray-800'}`}>
+                  {isOff
+                    ? '— off —'
+                    : rows.map((r, i) => (
+                        <span key={i} className="block">{fmt12h(r.start_time)} – {fmt12h(r.end_time)}</span>
+                      ))}
                 </span>
               </li>
             );
@@ -1267,6 +1273,15 @@ function WorkingHoursCard({
 
 /** Weekly grid modal — per-day toggle + time inputs + slot duration +
  *  timezone. Emits a bulk save via `onSave`. */
+/** Multiple non-overlapping time windows per day. Attorney can add as
+ *  many splits as they need (e.g. 9-12, 14-17, 20-22). */
+type Window = { start: string; end: string };
+type LocalDay = {
+  day_of_week: DayOfWeek;
+  is_active:   boolean;
+  windows:     Window[];
+};
+
 function SetAvailabilityModal({
   currentRows, onClose, onSave,
 }: {
@@ -1274,27 +1289,37 @@ function SetAvailabilityModal({
   onClose: () => void;
   onSave: (rows: AttorneyAvailabilityRow[]) => Promise<void>;
 }) {
-  type LocalDay = {
-    day_of_week: DayOfWeek;
-    is_active:   boolean;
-    start_time:  string;   // "HH:MM"
-    end_time:    string;
-  };
-
-  // Seed local state from currentRows; defaults to Mon-Fri 9-5 for new users.
+  // Group existing rows by day_of_week — multiple rows per day become
+  // multiple windows. Defaults to Mon-Fri 9-5 (single window each) for
+  // fresh attorneys.
   const buildInitial = (): { days: LocalDay[]; slot: number; tz: string } => {
-    const byDay = new Map<DayOfWeek, AttorneyAvailabilityRow>();
-    currentRows.forEach((r) => { if (r.is_active) byDay.set(r.day_of_week, r); });
+    const byDay = new Map<DayOfWeek, AttorneyAvailabilityRow[]>();
+    currentRows.forEach((r) => {
+      if (!r.is_active) return;
+      if (!byDay.has(r.day_of_week)) byDay.set(r.day_of_week, []);
+      byDay.get(r.day_of_week)!.push(r);
+    });
     const anyRow = currentRows.find((r) => r.is_active) ?? currentRows[0];
 
     const days: LocalDay[] = DAY_KEYS.map((d) => {
-      const r = byDay.get(d);
+      const rows = byDay.get(d) ?? [];
       const defaultActive = d <= 4; // Mon–Fri active by default
+      if (rows.length > 0) {
+        return {
+          day_of_week: d,
+          is_active:   true,
+          windows:     rows
+            .map((r) => ({
+              start: (r.start_time ?? '09:00').slice(0, 5),
+              end:   (r.end_time   ?? '17:00').slice(0, 5),
+            }))
+            .sort((a, b) => a.start.localeCompare(b.start)),
+        };
+      }
       return {
         day_of_week: d,
-        is_active:   !!r || (currentRows.length === 0 && defaultActive),
-        start_time:  (r?.start_time ?? '09:00').slice(0, 5),
-        end_time:    (r?.end_time   ?? '17:00').slice(0, 5),
+        is_active:   currentRows.length === 0 && defaultActive,
+        windows:     [{ start: '09:00', end: '17:00' }],
       };
     });
 
@@ -1306,37 +1331,83 @@ function SetAvailabilityModal({
   };
 
   const initial = buildInitial();
-  const [days,   setDays]   = useState<LocalDay[]>(initial.days);
+  const [days,    setDays]    = useState<LocalDay[]>(initial.days);
   const [slotDur, setSlotDur] = useState<number>(initial.slot);
-  const [tz,     setTz]     = useState<string>(initial.tz);
-  const [saving, setSaving] = useState(false);
-  const [error,  setError]  = useState<string | null>(null);
+  const [tz,      setTz]      = useState<string>(initial.tz);
+  const [saving,  setSaving]  = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
 
   const activeCount = days.filter((d) => d.is_active).length;
 
-  // Preview: total bookable slots per week
+  // Preview: total bookable slots per week (sum of all windows across all days)
   const previewSlotsPerWeek = days.reduce((acc, d) => {
     if (!d.is_active) return acc;
-    const [sh, sm] = d.start_time.split(':').map(Number);
-    const [eh, em] = d.end_time.split(':').map(Number);
-    const mins = (eh * 60 + em) - (sh * 60 + sm);
-    if (mins <= 0 || slotDur <= 0) return acc;
-    return acc + Math.floor(mins / slotDur);
+    return acc + d.windows.reduce((wAcc, w) => {
+      const [sh, sm] = w.start.split(':').map(Number);
+      const [eh, em] = w.end.split(':').map(Number);
+      const mins = (eh * 60 + em) - (sh * 60 + sm);
+      if (mins <= 0 || slotDur <= 0) return wAcc;
+      return wAcc + Math.floor(mins / slotDur);
+    }, 0);
   }, 0);
 
-  const updateDay = (d: DayOfWeek, patch: Partial<LocalDay>) => {
+  const patchDay = (d: DayOfWeek, patch: Partial<LocalDay>) => {
     setDays((prev) => prev.map((row) => row.day_of_week === d ? { ...row, ...patch } : row));
+  };
+
+  const patchWindow = (d: DayOfWeek, idx: number, patch: Partial<Window>) => {
+    setDays((prev) => prev.map((row) => {
+      if (row.day_of_week !== d) return row;
+      const next = [...row.windows];
+      next[idx] = { ...next[idx], ...patch };
+      return { ...row, windows: next };
+    }));
+  };
+
+  const addWindow = (d: DayOfWeek) => {
+    setDays((prev) => prev.map((row) => {
+      if (row.day_of_week !== d) return row;
+      // Suggest a new window that starts where the last one ended (or 14:00 if that's earlier than last)
+      const last = row.windows[row.windows.length - 1];
+      const suggestedStart = last?.end && last.end < '22:00' ? last.end : '14:00';
+      const suggestedEnd   = suggestedStart < '20:00' ? '17:00' : '22:00';
+      return { ...row, windows: [...row.windows, { start: suggestedStart, end: suggestedEnd }] };
+    }));
+  };
+
+  const removeWindow = (d: DayOfWeek, idx: number) => {
+    setDays((prev) => prev.map((row) => {
+      if (row.day_of_week !== d) return row;
+      if (row.windows.length <= 1) {
+        // Removing the last window turns the day off entirely
+        return { ...row, is_active: false };
+      }
+      return { ...row, windows: row.windows.filter((_, i) => i !== idx) };
+    }));
   };
 
   const handleSave = async () => {
     setError(null);
 
-    // Validation
+    // Validation: every window end > start, no overlaps within a day
     for (const d of days) {
       if (!d.is_active) continue;
-      if (d.end_time <= d.start_time) {
-        setError(`${DAY_LABELS[d.day_of_week]}: end time must be after start time.`);
+      if (d.windows.length === 0) {
+        setError(`${DAY_LABELS[d.day_of_week]}: at least one window is required, or turn the day off.`);
         return;
+      }
+      // Sort by start for overlap detection
+      const sorted = [...d.windows].sort((a, b) => a.start.localeCompare(b.start));
+      for (let i = 0; i < sorted.length; i++) {
+        const w = sorted[i];
+        if (w.end <= w.start) {
+          setError(`${DAY_LABELS[d.day_of_week]}: window ${i + 1} — end time must be after start time.`);
+          return;
+        }
+        if (i > 0 && w.start < sorted[i - 1].end) {
+          setError(`${DAY_LABELS[d.day_of_week]}: windows can't overlap (${sorted[i - 1].start}–${sorted[i - 1].end} and ${w.start}–${w.end}).`);
+          return;
+        }
       }
     }
     if (activeCount === 0) {
@@ -1346,16 +1417,21 @@ function SetAvailabilityModal({
 
     setSaving(true);
     try {
-      const rows: AttorneyAvailabilityRow[] = days
-        .filter((d) => d.is_active)
-        .map((d) => ({
-          day_of_week:           d.day_of_week,
-          start_time:            d.start_time,
-          end_time:              d.end_time,
-          slot_duration_minutes: slotDur,
-          timezone:              tz,
-          is_active:             true,
-        }));
+      // Flatten: one AttorneyAvailability row per window per day.
+      const rows: AttorneyAvailabilityRow[] = [];
+      for (const d of days) {
+        if (!d.is_active) continue;
+        for (const w of d.windows) {
+          rows.push({
+            day_of_week:           d.day_of_week,
+            start_time:            w.start,
+            end_time:              w.end,
+            slot_duration_minutes: slotDur,
+            timezone:              tz,
+            is_active:             true,
+          });
+        }
+      }
       await onSave(rows);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed.');
@@ -1367,10 +1443,10 @@ function SetAvailabilityModal({
          onClick={onClose}>
       <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl max-h-[90vh] overflow-y-auto"
            onClick={(e) => e.stopPropagation()}>
-        <div className="sticky top-0 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
+        <div className="sticky top-0 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4 z-10">
           <div>
             <h3 className="text-base font-bold text-gray-900">Set Weekly Availability</h3>
-            <p className="text-xs text-gray-500">Clients can only book consultations during these hours.</p>
+            <p className="text-xs text-gray-500">Clients can only book consultations during these hours. Split a day into multiple windows if you have a lunch or court gap.</p>
           </div>
           <button type="button" onClick={onClose}
             className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
@@ -1407,29 +1483,59 @@ function SetAvailabilityModal({
           </div>
 
           {/* Per-day rows */}
-          <div className="space-y-2 rounded-lg border border-gray-100 bg-gray-50/50 p-3">
+          <div className="space-y-3 rounded-lg border border-gray-100 bg-gray-50/50 p-3">
             {days.map((d) => (
-              <div key={d.day_of_week} className="flex items-center gap-2">
-                <label className="flex w-[110px] shrink-0 cursor-pointer items-center gap-2">
-                  <input type="checkbox" checked={d.is_active}
-                    onChange={(e) => updateDay(d.day_of_week, { is_active: e.target.checked })}
-                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                  <span className={`text-sm font-medium ${d.is_active ? 'text-gray-900' : 'text-gray-400'}`}>
-                    {DAY_LABELS[d.day_of_week]}
-                  </span>
-                </label>
-                {d.is_active ? (
-                  <div className="flex flex-1 items-center gap-2">
-                    <input type="time" value={d.start_time}
-                      onChange={(e) => updateDay(d.day_of_week, { start_time: e.target.value })}
-                      className="w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500" />
-                    <span className="text-xs text-gray-400">→</span>
-                    <input type="time" value={d.end_time}
-                      onChange={(e) => updateDay(d.day_of_week, { end_time: e.target.value })}
-                      className="w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+              <div key={d.day_of_week} className="flex flex-col gap-2 rounded-lg border border-transparent p-2 hover:bg-white">
+                {/* Day header row */}
+                <div className="flex items-center justify-between gap-2">
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input type="checkbox" checked={d.is_active}
+                      onChange={(e) => patchDay(d.day_of_week, {
+                        is_active: e.target.checked,
+                        // If turning back on with no windows, seed one
+                        windows: e.target.checked && d.windows.length === 0
+                          ? [{ start: '09:00', end: '17:00' }]
+                          : d.windows,
+                      })}
+                      className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                    <span className={`text-sm font-medium ${d.is_active ? 'text-gray-900' : 'text-gray-400'}`}>
+                      {DAY_LABELS[d.day_of_week]}
+                    </span>
+                    {d.is_active && d.windows.length > 1 && (
+                      <span className="rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700">
+                        {d.windows.length} windows
+                      </span>
+                    )}
+                  </label>
+                  {!d.is_active && <span className="text-xs italic text-gray-400">— off —</span>}
+                </div>
+
+                {/* Windows list (only when active) */}
+                {d.is_active && (
+                  <div className="flex flex-col gap-1.5 pl-6">
+                    {d.windows.map((w, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <input type="time" value={w.start}
+                          onChange={(e) => patchWindow(d.day_of_week, idx, { start: e.target.value })}
+                          className="w-24 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                        <span className="text-xs text-gray-400">→</span>
+                        <input type="time" value={w.end}
+                          onChange={(e) => patchWindow(d.day_of_week, idx, { end: e.target.value })}
+                          className="w-24 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                        <button type="button"
+                          onClick={() => removeWindow(d.day_of_week, idx)}
+                          title={d.windows.length > 1 ? 'Remove this window' : 'Remove (turns the day off)'}
+                          className="rounded-md p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 transition">
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                    <button type="button"
+                      onClick={() => addWindow(d.day_of_week)}
+                      className="mt-0.5 self-start text-xs font-semibold text-indigo-600 hover:text-indigo-800">
+                      + Add window
+                    </button>
                   </div>
-                ) : (
-                  <span className="flex-1 text-right text-xs italic text-gray-400">— off —</span>
                 )}
               </div>
             ))}
