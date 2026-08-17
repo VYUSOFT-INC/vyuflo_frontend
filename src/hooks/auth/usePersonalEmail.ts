@@ -39,16 +39,16 @@ export function useVerifyPersonalEmail() {
   const [error,   setError]   = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  const verify = async (token: string): Promise<boolean> => {
+  const verify = async (otpCode: string): Promise<boolean> => {
     setLoading(true);
     setError(null);
     try {
-      await personalEmailApi.verifyPersonalEmail({ token });
+      await personalEmailApi.verifyPersonalEmail({ otp_code: otpCode });
       setSuccess(true);
       return true;
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } }; message?: string };
-      setError(err.response?.data?.detail ?? err.message ?? "Invalid or expired verification link.");
+      setError(err.response?.data?.detail ?? err.message ?? "Invalid or expired code.");
       return false;
     } finally {
       setLoading(false);

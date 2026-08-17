@@ -5,12 +5,12 @@ import { useNavigate } from 'react-router-dom';
 import {
   // UserPlus,
   Mail, KeyRound, Bell, Search, Send, Copy,
- RotateCw, Trash2, X, ChevronLeft, ChevronRight, ChevronDown, Inbox,
+  Check, RotateCw, Trash2, X, ChevronLeft, ChevronRight, ChevronDown, Inbox,
   Eye, AlertTriangle, Info, CheckCircle2, XCircle,
 } from 'lucide-react';
 
 import { PageHeader, PageContent } from '../../components/layout/Pageheader';
-import { useMyInvitations, useSendEmailInvite, useGenerateCode } from '../../hooks/hr/useInvitations';
+import { useMyInvitations, useSendEmailInvite, useGenerateCode, useEmployerDomain } from '../../hooks/hr/useInvitations';
 import type { InvitationResponse, InviteMethod, InviteStatus } from '../../types/hr/invitation.types';
 
 const PRIMARY_GRADIENT = 'linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)';
@@ -151,7 +151,7 @@ function inferredUses(inv: InvitationResponse): string {
   const used = inv.used_count ?? 0;
   const max = inv.max_uses;
   return max != null ? `${used} / ${max}` : `${used} / ∞`;
-}
+}  
 
 function getEmptyTitle(tab: 'all' | InviteStatus, search: string) {
   if (search.trim()) return 'No invitations match your search';
@@ -229,29 +229,6 @@ const sectionLabel = 'text-[11px] font-semibold uppercase tracking-[0.04em] text
 const LEDGER_GRID_STYLE: CSSProperties = {
   gridTemplateColumns: '1.8fr 0.9fr 1fr 1fr 1fr 1.1fr 120px',
 };
-
-// function InfoRow({
-//   left,
-//   right,
-//   rightTone,
-// }: {
-//   left: string;
-//   right: string;
-//   rightTone: 'good' | 'muted';
-// }) {
-//   return (
-//     <div className="flex items-center justify-between bg-[#f8fafc] rounded-[10px] px-[12px] py-[9px]">
-//       <span className="text-[12px] text-[#475569] tracking-[-0.5px]">{left}</span>
-//       <span
-//         className="text-[12px] font-medium tracking-[-0.5px] inline-flex items-center gap-[5px]"
-//         style={{ color: rightTone === 'good' ? '#16a34a' : '#94a3b8' }}
-//       >
-//         {rightTone === 'good' && <span className="size-[6px] rounded-full bg-[#22c55e]" />}
-//         {right}
-//       </span>
-//     </div>
-//   );
-// }
 
 function IconAction({
   active,
@@ -611,13 +588,32 @@ export default function HRInviteEmployees() {
   const { invitations, total, loading, error, refetch, revoke, resend } = useMyInvitations();
   const emailInvite = useSendEmailInvite();
   const codeGen = useGenerateCode();
+  const { domain: employerDomain } = useEmployerDomain();
 
   const emailInputRef = useRef<HTMLInputElement>(null);
+  const domainMenuRef = useRef<HTMLDivElement>(null);
   const [emails, setEmails] = useState<string[]>([]);
   const [emailInput, setEmailInput] = useState('');
   const [role, setRole] = useState(ROLE_OPTIONS[0]);
   const [emailErr, setEmailErr] = useState<string | null>(null);
   const [passportNumber, setPassportNumber] = useState('');
+
+  // Domain-suffix picker — lets HR pick the company domain once, then only
+  // type the prefix (e.g. "charansai" → charansai@vyusoft.com), instead of
+  // typing the full address every time.
+  const [useDomainSuffix, setUseDomainSuffix] = useState(false);
+  const [domainMenuOpen, setDomainMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!domainMenuOpen) return;
+    const onClickOutside = (ev: MouseEvent) => {
+      if (domainMenuRef.current && !domainMenuRef.current.contains(ev.target as Node)) {
+        setDomainMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [domainMenuOpen]);
 
   const [tab, setTab] = useState<'all' | InviteStatus>('all');
   const [search, setSearch] = useState('');
@@ -702,7 +698,11 @@ export default function HRInviteEmployees() {
   const onEmailKey = (ev: React.KeyboardEvent<HTMLInputElement>) => {
     if (ev.key === 'Enter' || ev.key === ',') {
       ev.preventDefault();
-      addEmail(emailInput);
+      // FIXED: when domain-suffix mode is active, Enter/comma must also
+      // append the domain — previously only onBlur did this, so pressing
+      // Enter added the bare prefix as an "email" and always failed the
+      // EMAIL_RE validation.
+      addEmail(useDomainSuffix && employerDomain ? `${emailInput}@${employerDomain}` : emailInput);
     } else if (ev.key === 'Backspace' && !emailInput && emails.length) {
       setEmails(prev => prev.slice(0, -1));
     }
@@ -715,7 +715,13 @@ export default function HRInviteEmployees() {
   const canSend = pendingCount === 1 && passportNumber.trim().length >= 6;
 
   const sendInvites = async () => {
-    const list = emailInput ? [...emails, emailInput.trim()] : emails;
+    // FIXED: same domain-composition issue as onEmailKey/onBlur — if the
+    // person clicks "Send Invite" directly without pressing Enter first,
+    // this fallback previously used the bare prefix as-is.
+    const pendingRaw = emailInput
+      ? (useDomainSuffix && employerDomain ? `${emailInput}@${employerDomain}` : emailInput.trim())
+      : null;
+    const list = pendingRaw ? [...emails, pendingRaw] : emails;
     const clean = list.filter(e => EMAIL_RE.test(e));
 
     if (!clean.length) {
@@ -871,7 +877,7 @@ export default function HRInviteEmployees() {
 
                 <div className="flex flex-col gap-[8px]">
                   <span className={sectionLabel}>Recipient Email</span>
-                  <div className="min-h-[44px] border border-[#e2e8f0] rounded-[10px] px-[10px] py-[8px] flex flex-wrap gap-[6px] focus-within:ring-2 focus-within:ring-[#c7d2fe] focus-within:border-[#a5b4fc] transition">
+                  <div className="relative min-h-[44px] border border-[#e2e8f0] rounded-[10px] pl-[10px] pr-[38px] py-[8px] flex flex-wrap items-center gap-[6px] focus-within:ring-2 focus-within:ring-[#c7d2fe] focus-within:border-[#a5b4fc] transition">
                     {emails.map(e => (
                       <span
                         key={e}
@@ -888,23 +894,95 @@ export default function HRInviteEmployees() {
                       </span>
                     ))}
 
-                    <input
-                      ref={emailInputRef}
-                      value={emailInput}
-                      onChange={ev => {
-                        setEmailInput(ev.target.value);
-                        setEmailErr(null);
-                      }}
-                      onKeyDown={onEmailKey}
-                      onBlur={() => emailInput && addEmail(emailInput)}
-                      placeholder={emails.length ? '' : 'Enter employee email…'}
-                      disabled={emails.length >= 1}
-                      className="flex-1 min-w-[120px] h-[26px] bg-transparent text-[13px] text-[#0f172a] tracking-[-0.5px] placeholder:text-[#94a3b8] focus:outline-none disabled:cursor-not-allowed"
-                    />
+                    {useDomainSuffix && employerDomain ? (
+                      <div className="flex items-center gap-[4px] flex-1 min-w-[160px]">
+                        <input
+                          ref={emailInputRef}
+                          value={emailInput}
+                          onChange={ev => {
+                            // Domain is fixed by the picker — strip any "@" the
+                            // person types so they only ever enter the prefix.
+                            setEmailInput(ev.target.value.replace(/@.*$/, ''));
+                            setEmailErr(null);
+                          }}
+                          onKeyDown={onEmailKey}
+                          onBlur={() => emailInput && addEmail(`${emailInput}@${employerDomain}`)}
+                          placeholder="e.g. charansai"
+                          disabled={emails.length >= 1}
+                          className="min-w-[70px] h-[26px] bg-transparent text-[13px] text-[#0f172a] tracking-[-0.5px] placeholder:text-[#94a3b8] focus:outline-none disabled:cursor-not-allowed"
+                        />
+                        <span className="text-[13px] text-[#64748b] tracking-[-0.5px] whitespace-nowrap">
+                          @{employerDomain}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => { setUseDomainSuffix(false); setEmailInput(''); setEmailErr(null); }}
+                          aria-label="Type full email instead"
+                          className="text-[#94a3b8] hover:text-[#475569] ml-[2px]"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ) : (
+                      <input
+                        ref={emailInputRef}
+                        value={emailInput}
+                        onChange={ev => {
+                          setEmailInput(ev.target.value);
+                          setEmailErr(null);
+                        }}
+                        onKeyDown={onEmailKey}
+                        onBlur={() => emailInput && addEmail(emailInput)}
+                        placeholder={emails.length ? '' : 'Enter employee email…'}
+                        disabled={emails.length >= 1}
+                        className="flex-1 min-w-[120px] h-[26px] bg-transparent text-[13px] text-[#0f172a] tracking-[-0.5px] placeholder:text-[#94a3b8] focus:outline-none disabled:cursor-not-allowed"
+                      />
+                    )}
+
+                    {/* Domain-suffix picker — only shows if HR has a domain set */}
+                    {employerDomain && (
+                      <div className="absolute right-[7px] top-1/2 -translate-y-1/2" ref={domainMenuRef}>
+                        <button
+                          type="button"
+                          onClick={() => setDomainMenuOpen(o => !o)}
+                          aria-label="Choose company domain"
+                          className="size-[22px] rounded-full flex items-center justify-center text-white shadow-sm hover:opacity-90 active:scale-[0.95] transition"
+                          style={{ backgroundImage: PRIMARY_GRADIENT }}
+                        >
+                          <ChevronDown size={12} strokeWidth={2.5} />
+                        </button>
+
+                        {domainMenuOpen && (
+                          <div className="absolute right-0 top-[28px] w-[210px] bg-white border border-[#e2e8f0] rounded-[10px] shadow-lg py-[6px] z-10">
+                            <p className="px-[12px] pt-[2px] pb-[6px] text-[10px] font-semibold uppercase tracking-[0.06em] text-[#94a3b8]">
+                              Company Domain
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setUseDomainSuffix(true);
+                                setEmailInput('');
+                                setEmailErr(null);
+                                setDomainMenuOpen(false);
+                                requestAnimationFrame(() => emailInputRef.current?.focus());
+                              }}
+                              className="w-full flex items-center justify-between px-[12px] py-[8px] text-[13px] text-[#334155] hover:bg-[#f8fafc] tracking-[-0.5px] transition"
+                            >
+                              @{employerDomain}
+                              {useDomainSuffix && <Check size={13} className="text-indigo-600" />}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <p className="text-[11px] tracking-[-0.5px]" style={{ color: emailErr ? '#dc2626' : '#94a3b8' }}>
-                    {emailErr ?? 'One recipient per invite — passport verification is per person.'}
+                    {emailErr ?? (
+                      useDomainSuffix
+                        ? `Type just the prefix — it'll be sent as prefix@${employerDomain}.`
+                        : 'One recipient per invite — passport verification is per person.'
+                    )}
                   </p>
                 </div>
 

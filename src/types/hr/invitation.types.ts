@@ -4,10 +4,7 @@
 
 export interface InviteByEmailRequest {
   email:            string;
-  // Optional — when set, the employee must correctly re-enter this exact
-  // passport number before their acceptance is allowed to go through.
-  // Only a hash is ever stored server-side.
-  passport_number?: string;
+  passport_number:  string;
   personal_message?: string;
   expires_days?:    number;  // default 7
 }
@@ -20,8 +17,39 @@ export interface InviteByCodeRequest {
 export interface AcceptInviteRequest {
   invite_token?:    string;
   invite_code?:     string;
-  // Required only when ValidateTokenResponse.requires_passport_verification
-  // was true. Never pre-filled — the employee must type it themselves.
+  passport_number?: string;
+}
+
+// NEW — public, no existing account. Creates the account, links it to the
+// employer, and logs the person in, all in one call.
+export interface AcceptInviteNewUserRequest {
+  invite_token?:    string;
+  invite_code?:     string;
+  first_name:       string;
+  last_name:        string;
+  email:            string;
+  other_email?:     string;
+  password:         string;
+  passport_number?: string;
+  terms_accepted:   boolean;
+}
+
+// NEW — public, step 1 of merge flow. Sends a one-time code to the
+// matched account's email.
+export interface RequestMergeOtpRequest {
+  invite_token?: string;
+  invite_code?:  string;
+  login_email:   string;
+}
+
+// NEW — public, step 2 of merge flow. Confirms the code and links the
+// invite to the matched existing account.
+export interface AcceptInviteExistingUserRequest {
+  invite_token?:    string;
+  invite_code?:     string;
+  login_email:      string;
+  otp_code:         string;
+  other_email?:     string;
   passport_number?: string;
 }
 
@@ -58,20 +86,45 @@ export interface ValidateTokenResponse {
   hr_name?:      string;
   invite_method?: InviteMethod;
   message:       string;
-  // True → the accept screen must show a blank passport number field and
-  // block acceptance until it's correctly filled in.
+  // The email the invite was sent to — used to prefill the signup/merge forms.
+  invited_email?: string;
+  // True → the accept screen must show a blank passport number field.
   requires_passport_verification?: boolean;
+  // True → show the "log in with existing account" merge flow.
+  // False → show the "create a new account" flow.
+  account_exists?: boolean;
 }
 
 export interface AcceptInviteResponse {
   message:               string;
   company_name:          string;
   employer_id:           string;
-  // True when the account used to accept this invite has no login path
-  // independent of the org's invited email — the frontend should prompt
-  // for a personal/backup email right after acceptance so the person
-  // doesn't lose access if the employer later removes them.
   needs_personal_email:  boolean;
+}
+
+export interface EmployerDomainResponse {
+  domain: string | null;
+}
+
+// NEW — returned by both /hr/accept/new-user and /hr/accept/existing-user.
+// Mirrors the shape of a normal login response, since both endpoints log
+// the person straight in.
+export interface AcceptInviteAuthResponse {
+  access_token:  string;
+  refresh_token: string;
+  roles:         string[];
+  company_name:  string;
+  employer_id:   string;
+  linked_email?: string;
+  // True → primary email matches the employer's domain and no second
+  // verified email is on file — show the "add a personal email" prompt
+  // even if the optional field was skipped during signup/merge.
+  needs_personal_email?: boolean;
+  message:       string;
+}
+
+export interface RequestMergeOtpResponse {
+  message: string;
 }
 
 export interface EmployeeResponse {
