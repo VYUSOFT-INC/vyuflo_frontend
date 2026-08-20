@@ -263,10 +263,32 @@ function ActionRow({ item, onNavigate }: { item: ActionItem; onNavigate: (route:
 // DOCUMENT ROW
 // ─────────────────────────────────────────────────────────────────────────────
 
-function DocRow({ doc }: { doc: DocumentSummaryItem }) {
+// function DocRow({ doc }: { doc: DocumentSummaryItem }) {
+//   const tok = docStatusToken(doc.status);
+//   return (
+//     <div className="flex items-center gap-[12px] px-[16px] py-[12px] border-b border-[#f1f5f9] last:border-b-0 hover:bg-[#fafbfc] transition">
+//       <div className="size-[30px] rounded-[8px] bg-[#f8fafc] border border-[#f1f5f9] flex items-center justify-center shrink-0 text-[#64748b]">
+//         <FileText size={14} />
+//       </div>
+//       <div className="min-w-0 flex-1">
+//         <p className="text-[13px] font-medium text-[#0f172a] tracking-[-0.5px] truncate">{doc.name}</p>
+//         <p className="text-[11px] text-[#94a3b8] tracking-[-0.5px]">
+//           {doc.category}{doc.uploaded_at ? ` · ${fmtDateShort(doc.uploaded_at)}` : ''}
+//         </p>
+//       </div>
+//       <Badge {...tok} />
+//     </div>
+//   );
+// }
+
+
+function DocRow({ doc, onClick }: { doc: DocumentSummaryItem; onClick: (doc: DocumentSummaryItem) => void }) {
   const tok = docStatusToken(doc.status);
   return (
-    <div className="flex items-center gap-[12px] px-[16px] py-[12px] border-b border-[#f1f5f9] last:border-b-0 hover:bg-[#fafbfc] transition">
+    <div
+      onClick={() => onClick(doc)}
+      className="flex items-center gap-[12px] px-[16px] py-[12px] border-b border-[#f1f5f9] last:border-b-0 hover:bg-[#fafbfc] transition cursor-pointer"
+    >
       <div className="size-[30px] rounded-[8px] bg-[#f8fafc] border border-[#f1f5f9] flex items-center justify-center shrink-0 text-[#64748b]">
         <FileText size={14} />
       </div>
@@ -769,16 +791,41 @@ export default function Dashboard() {
                       </button>
                     ))}
                   </div>
-                  <div className="mt-[8px]">
+                  {/* <div className="mt-[8px]">
                     {filteredDocs.length === 0 ? (
                       <EmptyBlock icon={<FileText size={20} />} title="No documents"
                         desc={docFilter === 'all' ? 'No documents yet.' : 'No documents match this filter.'} />
                     ) : filteredDocs.map(doc => <DocRow key={doc.id} doc={doc} />)}
-                  </div>
+                  </div> */}
+                  <div className="mt-[8px]">
+                    {filteredDocs.length === 0 ? (
+                      <EmptyBlock icon={<FileText size={20} />} title="No documents"
+                        desc={docFilter === 'all' ? 'No documents yet.' : 'No documents match this filter.'} />
+                    ) : filteredDocs.map(doc => (
+                      <DocRow
+                        key={doc.id}
+                        doc={doc}
+                        onClick={(d) => {
+                          if (d.status === 'not_uploaded') {
+                            cs?.application_id
+                              ? navigate(`/applications/${cs.application_id}?tab=tasks`)
+                              : navigate('/documents');
+                          } else {
+                            navigate(`/documents/${d.id}`);
+                          }
+                        }}
+                      />
+                    ))}
+                  </div>     
                   <div className="px-[16px] py-[14px] border-t border-[#f1f5f9]">
-                    <button onClick={() => navigate('/documents/upload')}
+                    <button
+                      onClick={() =>
+                        cs?.application_id
+                          ? navigate(`/applications/${cs.application_id}?tab=tasks`)
+                          : navigate('/documents')
+                      }
                       className="w-full h-[38px] rounded-[10px] border-2 border-dashed border-indigo-200 text-indigo-600 text-[13px]
-                                 font-medium hover:bg-indigo-50 transition inline-flex items-center justify-center gap-[6px]">
+                                font-medium hover:bg-indigo-50 transition inline-flex items-center justify-center gap-[6px]">
                       <Upload size={14} /> Upload Documents
                     </button>
                   </div>
@@ -812,7 +859,7 @@ export default function Dashboard() {
                   <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[#64748b]">Quick Actions</span>
                   <div className="grid grid-cols-2 gap-[10px]">
                     {[
-                      { label: 'Upload Docs',      icon: <Upload size={15} />,        route: '/documents/upload',  comingSoon: false },
+                      { label: 'Upload Docs',      icon: <Upload size={15} />,route: cs?.application_id ? `/applications/${cs.application_id}?tab=tasks` : '/documents',comingSoon: false },
                       { label: 'Messages',          icon: <MessageSquare size={15} />, route: '/messages',          comingSoon: false },
                       { label: 'My Applications',   icon: <Briefcase size={15} />,     route: '/applications/list', comingSoon: false },
                       { label: 'Book Consultation', icon: <CalendarClock size={15} />, route: null,                 comingSoon: true  },

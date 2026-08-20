@@ -1,4 +1,3 @@
-
 // // src/pages/employee/DocumentViewer.tsx
 // import { useState, useEffect }         from "react";
 // import { useSearchParams, useNavigate } from "react-router-dom";
@@ -670,6 +669,42 @@ import type { OCRField }                from "../../types/employee/ocr.types";
 import type { Document }                from "../../types/employee/document.types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// NEW — decides whether a field should render as a native date picker
+// instead of free text. Keep this list in sync with the backend's
+// document_field_configurations "is_expiry_field" rows and any other known
+// date-shaped fields (date_of_birth, valid_from/to, admit_until, etc.).
+const DATE_FIELD_NAMES = new Set([
+  "expiry_date", "date_of_birth", "issue_date",
+  "valid_from", "valid_to", "admit_until", "card_expires",
+]);
+
+function isDateField(fieldName: string): boolean {
+  return DATE_FIELD_NAMES.has(fieldName);
+}
+
+// NEW — <input type="date"> requires its value in exactly "YYYY-MM-DD".
+// OCR-extracted text won't always already be in that shape (e.g. a
+// day-month-year string someone typed, or a slightly different extractor
+// format), so this does a best-effort conversion for DISPLAY only. If it
+// can't confidently parse the raw value, it returns "" so the date picker
+// just shows empty and the person picks it fresh — better than guessing
+// wrong and silently showing the wrong date.
+function toDateInputValue(raw: string): string {
+  if (!raw) return "";
+  const trimmed = raw.trim();
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed; // already ISO
+
+  const dmy = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (dmy) {
+    const [, d, m, y] = dmy;
+    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+
+  return "";
+}
+
 function Spinner({ color = "text-indigo-600" }: { color?: string }) {
   return (
     <svg className={`w-8 h-8 animate-spin ${color}`} fill="none" viewBox="0 0 24 24">
@@ -877,6 +912,7 @@ interface DataPanelProps {
   fileBlob: Blob | null;
   fileName: string;
   showCancelUpload: boolean;
+  submitting: boolean;
   onUpdateEditValue: (id: string, value: string) => void;
   onDismissMismatch: () => void;
   onReupload: () => void;
@@ -888,7 +924,7 @@ interface DataPanelProps {
 
 function DataPanel({
   doc, fields, avgConfidence, ocrLoading, ocrError, typeMismatch, qualityIssue,
-  detectedType, missingMandatoryFields, anyLocked, source, showCancelUpload,
+  detectedType, missingMandatoryFields, anyLocked, source, showCancelUpload, submitting,
   onUpdateEditValue, onDismissMismatch, onReupload, onRetryOcr, onSubmit, onCancelUpload, onClosePanel,
 }: DataPanelProps) {
   return (
@@ -1009,14 +1045,34 @@ function DataPanel({
                       {field.is_mandatory && <span className="text-[#ef4444] ml-[3px]">*</span>}
                     </label>
                     <div className="relative">
-                      <input
-                        value={field.edit_value ?? field.extracted_value}
-                        onChange={e => onUpdateEditValue(field.id, e.target.value)}
-                        disabled={field.is_locked}
-                        placeholder={field.is_locked ? "" : "Type the value from the document…"}
-                        className="w-full h-[44px] px-[14px] rounded-[8px] text-[#111827] text-[15px] font-semibold border-2 focus:outline-none focus:border-indigo-600 disabled:cursor-not-allowed placeholder:text-[13px] placeholder:font-normal placeholder:text-[#94a3b8]"
-                        style={{ borderColor, backgroundColor: bgColor }}
-                      />
+                      {isDateField(field.field_name) ? (
+                        // FIXED: date fields were plain text inputs, so a
+                        // person could type "19-08-2026" (day-month-year)
+                        // and the backend's expiry parsing would either
+                        // misread it or, in the strict-ISO version, silently
+                        // drop it entirely with no error. <input type="date">
+                        // always returns unambiguous YYYY-MM-DD regardless of
+                        // how the browser displays it to the person (locale
+                        // formatting is a display-only concern) — no format
+                        // for the backend to ever guess wrong again.
+                        <input
+                          type="date"
+                          value={toDateInputValue(field.edit_value ?? field.extracted_value)}
+                          onChange={e => onUpdateEditValue(field.id, e.target.value)}
+                          disabled={field.is_locked}
+                          className="w-full h-[44px] px-[14px] rounded-[8px] text-[#111827] text-[15px] font-semibold border-2 focus:outline-none focus:border-indigo-600 disabled:cursor-not-allowed"
+                          style={{ borderColor, backgroundColor: bgColor }}
+                        />
+                      ) : (
+                        <input
+                          value={field.edit_value ?? field.extracted_value}
+                          onChange={e => onUpdateEditValue(field.id, e.target.value)}
+                          disabled={field.is_locked}
+                          placeholder={field.is_locked ? "" : "Type the value from the document…"}
+                          className="w-full h-[44px] px-[14px] rounded-[8px] text-[#111827] text-[15px] font-semibold border-2 focus:outline-none focus:border-indigo-600 disabled:cursor-not-allowed placeholder:text-[13px] placeholder:font-normal placeholder:text-[#94a3b8]"
+                          style={{ borderColor, backgroundColor: bgColor }}
+                        />
+                      )}
                       {field.is_locked && (
                         <div className="absolute right-[12px] top-1/2 -translate-y-1/2">
                           <MiniSpinner />
@@ -1060,17 +1116,21 @@ function DataPanel({
                   in the parent — driven by doc.ocr_status now, not a URL flag) */}
               {showCancelUpload && (
                 <button onClick={onCancelUpload}
-                  className="shrink-0 h-[38px] px-[16px] rounded-[8px] border border-[#fecaca] text-[#dc2626] text-[13px] font-medium hover:bg-[#fef2f2] transition">
+                  disabled={submitting}
+                  className="shrink-0 h-[38px] px-[16px] rounded-[8px] border border-[#fecaca] text-[#dc2626] text-[13px] font-medium hover:bg-[#fef2f2] transition disabled:opacity-50 disabled:cursor-not-allowed">
                   Cancel Upload
                 </button>
               )}
 
               <button onClick={onSubmit}
-                disabled={missingMandatoryFields.length > 0 || anyLocked}
+                disabled={missingMandatoryFields.length > 0 || anyLocked || submitting}
                 className="shrink-0 h-[38px] px-[24px] rounded-[8px] text-white text-[13px] font-semibold transition
-                           disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 active:scale-[0.98]"
+                           disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 active:scale-[0.98] flex items-center gap-[6px]"
                 style={{ background: "linear-gradient(135deg, var(--theme-primary), var(--theme-gradient-end))" }}>
-                {anyLocked ? "Extracting…" : source === "db" ? "Update" : "Submit"}
+                {submitting && <MiniSpinner color="text-white" />}
+                {submitting
+                  ? (source === "db" ? "Updating…" : "Submitting…")
+                  : anyLocked ? "Extracting…" : source === "db" ? "Update" : "Submit"}
               </button>
             </div>
           )}
@@ -1110,6 +1170,11 @@ export default function DocumentViewer() {
   const [isDirty, setIsDirty] = useState(false);
   const [leaveModalMode, setLeaveModalMode] = useState<"fresh" | "edit" | null>(null);
   const [leaveSaving, setLeaveSaving] = useState(false);
+  // NEW — tracks the Submit/Update button's own in-flight state. Separate
+  // from leaveSaving (which covers the "Save & Leave" path inside the leave
+  // confirmation modal) since these are two different buttons that can each
+  // be mid-request independently.
+  const [submitting, setSubmitting] = useState(false);
 
   const totalPages = doc?.total_pages ?? 1;
   const isPdf      = doc?.file_type === "pdf" || fileName.endsWith(".pdf");
@@ -1188,8 +1253,15 @@ export default function DocumentViewer() {
   }
 
   async function handleSubmit() {
-    await submitFields();
-    navigate(returnUrl);
+    setSubmitting(true);
+    try {
+      await submitFields();
+      navigate(returnUrl);
+    } finally {
+      // Only resets on failure — a successful submit navigates away
+      // immediately, so there's nothing left to reset back on this page.
+      setSubmitting(false);
+    }
   }
 
   function handleRetryOcr() {
@@ -1368,6 +1440,7 @@ export default function DocumentViewer() {
             detectedType={detectedType} missingMandatoryFields={missingMandatoryFields}
             anyLocked={anyLocked} source={source} fileBlob={fileBlob} fileName={fileName}
             showCancelUpload={treatAsFresh}
+            submitting={submitting}
             onUpdateEditValue={handleFieldEdit} onDismissMismatch={dismissMismatch}
             onReupload={handleReupload} onRetryOcr={handleRetryOcr} onSubmit={handleSubmit}
             onCancelUpload={handleCancelUploadClick}
@@ -1391,6 +1464,7 @@ export default function DocumentViewer() {
               detectedType={detectedType} missingMandatoryFields={missingMandatoryFields}
               anyLocked={anyLocked} source={source} fileBlob={fileBlob} fileName={fileName}
               showCancelUpload={treatAsFresh}
+              submitting={submitting}
               onUpdateEditValue={handleFieldEdit} onDismissMismatch={dismissMismatch}
               onReupload={handleReupload} onRetryOcr={handleRetryOcr} onSubmit={handleSubmit}
               onCancelUpload={handleCancelUploadClick}

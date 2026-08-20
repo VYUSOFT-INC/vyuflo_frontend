@@ -24,8 +24,16 @@ import {
   buildReminderFromEvent,
 } from '../../../utils/localReminders';
 import {
+  upsertSharedReminder,
+  removeSharedReminder,
+} from '../../../lib/sharedReminders';
+import {
   EVENT_TYPE_CONFIG,
   URGENCY_CONFIG,
+  DAY_LABELS,
+  DAY_SHORT,
+  DEFAULT_TIMEZONE,
+  DEFAULT_SLOT_DURATION,
 } from '../../../types/lawyer/calendar.types';
 import type {
   CalendarEvent,
@@ -37,6 +45,8 @@ import type {
   EventStatus,
   LinkedCaseSearchItem,
   CreateEventPayload,
+  AttorneyAvailabilityRow,
+  DayOfWeek,
 } from '../../../types/lawyer/calendar.types';
 import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
 
@@ -72,7 +82,10 @@ export default function CalendarPage() {
 
   const [selectedEvent, setSelectedEvent] = useState<EventDetail | null>(null);
   const [drawerLoading, setDrawerLoading] = useState(false);
-  const [showAddModal, setShowAddModal]   = useState(false);
+  const [showAddModal, setShowAddModal]           = useState(false);
+  const [showAvailModal, setShowAvailModal]       = useState(false);
+  const [availability, setAvailability]           = useState<AttorneyAvailabilityRow[]>([]);
+  const [availabilityLoading, setAvailabilityLoading] = useState(true);
 
   const { rangeStart, rangeEnd } = useMemo(() => getRange(focusDate, view), [focusDate, view]);
 
@@ -105,6 +118,35 @@ export default function CalendarPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Load attorney's availability once on mount
+  const loadAvailability = useCallback(async () => {
+    setAvailabilityLoading(true);
+    try {
+      const rows = await calendarApi.listMyAvailability();
+      setAvailability(rows);
+    } catch { setAvailability([]); }
+    finally { setAvailabilityLoading(false); }
+  }, []);
+  useEffect(() => { loadAvailability(); }, [loadAvailability]);
+
+  const handleSaveAvailability = async (rows: AttorneyAvailabilityRow[]) => {
+    // Backend expects only active rows (inactive = day disabled)
+    await calendarApi.saveMyAvailability({
+      rows: rows.map((r) => ({
+        day_of_week:           r.day_of_week,
+        start_time:            r.start_time,
+        end_time:              r.end_time,
+        slot_duration_minutes: r.slot_duration_minutes,
+        timezone:              r.timezone,
+        is_active:             r.is_active,
+      })),
+    });
+    // Materialise slots for the next 60 days so book-page has them
+    try { await calendarApi.regenerateMySlots(60); } catch { /* silent */ }
+    await loadAvailability();
+    setShowAvailModal(false);
+  };
+
   const goPrev   = () => setFocusDate(shiftDate(focusDate, view, -1));
   const goNext   = () => setFocusDate(shiftDate(focusDate, view, +1));
   const goToday  = () => setFocusDate(new Date());
@@ -125,7 +167,11 @@ export default function CalendarPage() {
     }
   };
 
-  const handleSaveEvent = async (payload: CreateEventPayload, eventId?: string) => {
+  const handleSaveEvent = async (
+    payload: CreateEventPayload,
+    eventId?: string,
+    linkedCaseInfo?: { application_id: string; application_number?: string; client_name: string } | null,
+  ) => {
     try {
       let savedId = eventId;
       if (eventId) {
@@ -152,8 +198,35 @@ export default function CalendarPage() {
               reminderMinutes: payload.reminder_minutes ?? 0,
             }),
           );
+
+          // If the event is linked to a case, fan out a shared reminder
+          // to the client (and eventually HR) — dev bridge until backend
+          // does this natively (see BACKEND spec doc).
+          if (payload.application_id && linkedCaseInfo?.client_name) {
+            upsertSharedReminder({
+              id:                savedId,
+              event_type:        payload.event_type,
+              title:             payload.title,
+              event_date:        payload.event_date,
+              start_time:        payload.start_time,
+              reminder_minutes:  payload.reminder_minutes ?? 0,
+              attorney_name:     'Your attorney',
+              attorney_id:       null,
+              application_id:    payload.application_id,
+              case_number:       linkedCaseInfo.application_number ?? null,
+              client_user_id:    null,
+              client_name:       linkedCaseInfo.client_name,
+              client_email:      null,
+              hr_user_id:        null,
+              hr_name:           null,
+              hr_email:          null,
+              created_at:        new Date().toISOString(),
+              cancelled:         false,
+            });
+          }
         } else {
           removeLocalReminder(savedId);
+          removeSharedReminder(savedId);
         }
       }
 
@@ -187,7 +260,7 @@ export default function CalendarPage() {
       <LawyerBackButton />
       <main className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
 
-        {/* ── Top header — title + date nav + Create Event ── */}
+        {/* ── Top header — title + date nav + Create Event + Set Availability ── */}
         <TopHeader
           focusDate={focusDate}
           view={view}
@@ -195,6 +268,7 @@ export default function CalendarPage() {
           onNext={goNext}
           onToday={goToday}
           onCreate={() => { setSelectedEvent(null); setShowAddModal(true); }}
+          onOpenAvailability={() => setShowAvailModal(true)}
         />
 
         {/* ── MOBILE-only view toggle (hidden on desktop) ──────────── */}
@@ -235,8 +309,13 @@ export default function CalendarPage() {
             )}
           </section>
 
-          {/* RIGHT sidebar — Agenda + Deadlines */}
+          {/* RIGHT sidebar — Availability + Agenda + Deadlines */}
           <aside className="w-full shrink-0 space-y-4 lg:w-[300px]">
+            <WorkingHoursCard
+              rows={availability}
+              loading={availabilityLoading}
+              onEdit={() => setShowAvailModal(true)}
+            />
             <AgendaPanel items={agenda} onSelect={openEvent} loading={loading} />
             <DeadlinesPanel items={deadlines} loading={loading} />
           </aside>
@@ -259,6 +338,13 @@ export default function CalendarPage() {
           onSave={handleSaveEvent}
         />
       )}
+      {showAvailModal && (
+        <SetAvailabilityModal
+          currentRows={availability}
+          onClose={() => setShowAvailModal(false)}
+          onSave={handleSaveAvailability}
+        />
+      )}
     </div>
   );
 }
@@ -267,7 +353,7 @@ export default function CalendarPage() {
    TOP HEADER (no view toggle now)
 ═══════════════════════════════════════════════════════════════════════ */
 function TopHeader({
-  focusDate, view, onPrev, onNext, onToday, onCreate,
+  focusDate, view, onPrev, onNext, onToday, onCreate, onOpenAvailability,
 }: {
   focusDate: Date;
   view: CalendarView;
@@ -275,6 +361,7 @@ function TopHeader({
   onNext: () => void;
   onToday: () => void;
   onCreate: () => void;
+  onOpenAvailability: () => void;
 }) {
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -283,12 +370,20 @@ function TopHeader({
         <p className="mt-1 text-sm text-gray-500">{formatHeadline(focusDate, view)}</p>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-1">
           <IconButton onClick={onPrev} label="Previous">‹</IconButton>
           <button onClick={onToday} className="rounded-md px-3 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50">Today</button>
           <IconButton onClick={onNext} label="Next">›</IconButton>
         </div>
+
+        <button
+          onClick={onOpenAvailability}
+          className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
+          title="Set your weekly working hours"
+        >
+          <span className="text-sm leading-none">🕐</span> Set Availability
+        </button>
 
         <button
           onClick={onCreate}
@@ -787,7 +882,11 @@ function AddEventModal({
 }: {
   initialEvent: EventDetail | null;
   onClose: () => void;
-  onSave: (payload: CreateEventPayload, eventId?: string) => Promise<void>;
+  onSave: (
+    payload: CreateEventPayload,
+    eventId?: string,
+    linkedCaseInfo?: { application_id: string; application_number?: string; client_name: string } | null,
+  ) => Promise<void>;
 }) {
   const isEdit = !!initialEvent;
   const [eventType, setEventType] = useState<Exclude<EventType, 'deadline'>>(
@@ -833,7 +932,7 @@ function AddEventModal({
 
     setSaving(true);
     try {
-      await onSave(payload, initialEvent?.id);
+      await onSave(payload, initialEvent?.id, linkedCase);
     } finally {
       setSaving(false);
     }
@@ -876,7 +975,13 @@ function AddEventModal({
               <Field label="End Time"><Input type="time" value={endTime} onChange={setEndTime} /></Field>
             </div>
           )}
-          <Field label="Linked Case (optional)"><LinkedCaseSearch value={linkedCase} onChange={setLinkedCase} /></Field>
+          <Field label="Linked Case (optional)">
+            <LinkedCaseSearch value={linkedCase} onChange={setLinkedCase} />
+            <p className="mt-1.5 flex items-start gap-1.5 text-xs text-gray-500">
+              <span className="mt-0.5">💡</span>
+              <span>Linking a case will automatically notify the client and their HR when this event is saved.</span>
+            </p>
+          </Field>
           <Field label="Location"><Input value={location} onChange={setLocation} placeholder="e.g. Conference Room A" /></Field>
           <Field label="Notes"><Textarea value={notes} onChange={setNotes} placeholder="Add any relevant details, links, or instructions…" rows={3} /></Field>
           <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-3">
@@ -963,7 +1068,16 @@ function LinkedCaseSearch({
         <div className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
           {results.map((r) => (
             <button key={r.application_id} type="button"
-              onClick={() => { onChange(r); setQuery(''); setOpen(false); }}
+              // preventDefault on mouseDown stops the input's onBlur firing
+              // before this click completes — otherwise the dropdown closes
+              // and the click is swallowed.
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onChange(r);
+                setQuery('');
+                setResults([]);
+                setOpen(false);
+              }}
               className="block w-full border-b border-gray-50 px-3 py-2 text-left text-xs hover:bg-indigo-50/40"
             >
               <p className="font-semibold text-gray-900">{r.client_name}</p>
@@ -1069,4 +1183,392 @@ function formatHeadline(focus: Date, view: CalendarView): string {
     return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
   }
   return focus.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════
+   ATTORNEY AVAILABILITY — Working Hours card + Set Availability modal
+═══════════════════════════════════════════════════════════════════════ */
+
+const DAY_KEYS: DayOfWeek[] = [0, 1, 2, 3, 4, 5, 6];
+
+function fmt12h(t: string): string {
+  // Accepts "HH:MM" or "HH:MM:SS", returns "9:00 AM"
+  const [hStr, mStr] = t.split(':');
+  const h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  if (Number.isNaN(h) || Number.isNaN(m)) return t;
+  const period = h >= 12 ? 'PM' : 'AM';
+  const h12    = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${h12}:${String(m).padStart(2, '0')} ${period}`;
+}
+
+/** Card rendered in the calendar right sidebar. Summarises the
+ *  attorney's weekly hours and gives an Edit shortcut. */
+function WorkingHoursCard({
+  rows, loading, onEdit,
+}: {
+  rows: AttorneyAvailabilityRow[];
+  loading: boolean;
+  onEdit: () => void;
+}) {
+  const active = rows.filter((r) => r.is_active);
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center justify-between">
+        <h3 className="flex items-center gap-1.5 text-sm font-bold text-gray-900">
+          <span>🕐</span> Working Hours
+        </h3>
+        <button
+          onClick={onEdit}
+          className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+        >
+          {active.length > 0 ? 'Edit' : 'Set up'}
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="mt-3 h-14 animate-pulse rounded-md bg-gray-100" />
+      ) : active.length === 0 ? (
+        <div className="mt-3 rounded-lg border border-dashed border-gray-200 p-3 text-center">
+          <p className="text-xs text-gray-500">Set your weekly hours to start accepting bookings.</p>
+          <button
+            onClick={onEdit}
+            className="mt-2 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700"
+          >
+            Set working hours
+          </button>
+        </div>
+      ) : (
+        <ul className="mt-3 space-y-1.5">
+          {DAY_KEYS.map((d) => {
+            const rows = active
+              .filter((r) => r.day_of_week === d)
+              .sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? ''));
+            const isOff = rows.length === 0;
+            return (
+              <li key={d} className="flex items-start justify-between gap-2 text-xs">
+                <span className={`font-medium shrink-0 ${isOff ? 'text-gray-400' : 'text-gray-700'}`}>
+                  {DAY_SHORT[d]}
+                </span>
+                <span className={`text-right ${isOff ? 'text-gray-300' : 'text-gray-800'}`}>
+                  {isOff
+                    ? '— off —'
+                    : rows.map((r, i) => (
+                        <span key={i} className="block">{fmt12h(r.start_time)} – {fmt12h(r.end_time)}</span>
+                      ))}
+                </span>
+              </li>
+            );
+          })}
+          <li className="mt-2 border-t border-gray-100 pt-2 text-[11px] text-gray-500">
+            {active[0].slot_duration_minutes}-min slots · {active[0].timezone}
+          </li>
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** Weekly grid modal — per-day toggle + time inputs + slot duration +
+ *  timezone. Emits a bulk save via `onSave`. */
+/** Multiple non-overlapping time windows per day. Attorney can add as
+ *  many splits as they need (e.g. 9-12, 14-17, 20-22). */
+type Window = { start: string; end: string };
+type LocalDay = {
+  day_of_week: DayOfWeek;
+  is_active:   boolean;
+  windows:     Window[];
+};
+
+function SetAvailabilityModal({
+  currentRows, onClose, onSave,
+}: {
+  currentRows: AttorneyAvailabilityRow[];
+  onClose: () => void;
+  onSave: (rows: AttorneyAvailabilityRow[]) => Promise<void>;
+}) {
+  // Group existing rows by day_of_week — multiple rows per day become
+  // multiple windows. Defaults to Mon-Fri 9-5 (single window each) for
+  // fresh attorneys.
+  const buildInitial = (): { days: LocalDay[]; slot: number; tz: string } => {
+    const byDay = new Map<DayOfWeek, AttorneyAvailabilityRow[]>();
+    currentRows.forEach((r) => {
+      if (!r.is_active) return;
+      if (!byDay.has(r.day_of_week)) byDay.set(r.day_of_week, []);
+      byDay.get(r.day_of_week)!.push(r);
+    });
+    const anyRow = currentRows.find((r) => r.is_active) ?? currentRows[0];
+
+    const days: LocalDay[] = DAY_KEYS.map((d) => {
+      const rows = byDay.get(d) ?? [];
+      const defaultActive = d <= 4; // Mon–Fri active by default
+      if (rows.length > 0) {
+        return {
+          day_of_week: d,
+          is_active:   true,
+          windows:     rows
+            .map((r) => ({
+              start: (r.start_time ?? '09:00').slice(0, 5),
+              end:   (r.end_time   ?? '17:00').slice(0, 5),
+            }))
+            .sort((a, b) => a.start.localeCompare(b.start)),
+        };
+      }
+      return {
+        day_of_week: d,
+        is_active:   currentRows.length === 0 && defaultActive,
+        windows:     [{ start: '09:00', end: '17:00' }],
+      };
+    });
+
+    return {
+      days,
+      slot: anyRow?.slot_duration_minutes ?? DEFAULT_SLOT_DURATION,
+      tz:   anyRow?.timezone              ?? DEFAULT_TIMEZONE,
+    };
+  };
+
+  const initial = buildInitial();
+  const [days,    setDays]    = useState<LocalDay[]>(initial.days);
+  const [slotDur, setSlotDur] = useState<number>(initial.slot);
+  const [tz,      setTz]      = useState<string>(initial.tz);
+  const [saving,  setSaving]  = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
+
+  const activeCount = days.filter((d) => d.is_active).length;
+
+  // Preview: total bookable slots per week (sum of all windows across all days)
+  const previewSlotsPerWeek = days.reduce((acc, d) => {
+    if (!d.is_active) return acc;
+    return acc + d.windows.reduce((wAcc, w) => {
+      const [sh, sm] = w.start.split(':').map(Number);
+      const [eh, em] = w.end.split(':').map(Number);
+      const mins = (eh * 60 + em) - (sh * 60 + sm);
+      if (mins <= 0 || slotDur <= 0) return wAcc;
+      return wAcc + Math.floor(mins / slotDur);
+    }, 0);
+  }, 0);
+
+  const patchDay = (d: DayOfWeek, patch: Partial<LocalDay>) => {
+    setDays((prev) => prev.map((row) => row.day_of_week === d ? { ...row, ...patch } : row));
+  };
+
+  const patchWindow = (d: DayOfWeek, idx: number, patch: Partial<Window>) => {
+    setDays((prev) => prev.map((row) => {
+      if (row.day_of_week !== d) return row;
+      const next = [...row.windows];
+      next[idx] = { ...next[idx], ...patch };
+      return { ...row, windows: next };
+    }));
+  };
+
+  const addWindow = (d: DayOfWeek) => {
+    setDays((prev) => prev.map((row) => {
+      if (row.day_of_week !== d) return row;
+      // Suggest a new window that starts where the last one ended (or 14:00 if that's earlier than last)
+      const last = row.windows[row.windows.length - 1];
+      const suggestedStart = last?.end && last.end < '22:00' ? last.end : '14:00';
+      const suggestedEnd   = suggestedStart < '20:00' ? '17:00' : '22:00';
+      return { ...row, windows: [...row.windows, { start: suggestedStart, end: suggestedEnd }] };
+    }));
+  };
+
+  const removeWindow = (d: DayOfWeek, idx: number) => {
+    setDays((prev) => prev.map((row) => {
+      if (row.day_of_week !== d) return row;
+      if (row.windows.length <= 1) {
+        // Removing the last window turns the day off entirely
+        return { ...row, is_active: false };
+      }
+      return { ...row, windows: row.windows.filter((_, i) => i !== idx) };
+    }));
+  };
+
+  const handleSave = async () => {
+    setError(null);
+
+    // Validation: every window end > start, no overlaps within a day
+    for (const d of days) {
+      if (!d.is_active) continue;
+      if (d.windows.length === 0) {
+        setError(`${DAY_LABELS[d.day_of_week]}: at least one window is required, or turn the day off.`);
+        return;
+      }
+      // Sort by start for overlap detection
+      const sorted = [...d.windows].sort((a, b) => a.start.localeCompare(b.start));
+      for (let i = 0; i < sorted.length; i++) {
+        const w = sorted[i];
+        if (w.end <= w.start) {
+          setError(`${DAY_LABELS[d.day_of_week]}: window ${i + 1} — end time must be after start time.`);
+          return;
+        }
+        if (i > 0 && w.start < sorted[i - 1].end) {
+          setError(`${DAY_LABELS[d.day_of_week]}: windows can't overlap (${sorted[i - 1].start}–${sorted[i - 1].end} and ${w.start}–${w.end}).`);
+          return;
+        }
+      }
+    }
+    if (activeCount === 0) {
+      setError('Enable at least one working day, or clients won\'t be able to book you.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // Flatten: one AttorneyAvailability row per window per day.
+      const rows: AttorneyAvailabilityRow[] = [];
+      for (const d of days) {
+        if (!d.is_active) continue;
+        for (const w of d.windows) {
+          rows.push({
+            day_of_week:           d.day_of_week,
+            start_time:            w.start,
+            end_time:              w.end,
+            slot_duration_minutes: slotDur,
+            timezone:              tz,
+            is_active:             true,
+          });
+        }
+      }
+      await onSave(rows);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed.');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+         onClick={onClose}>
+      <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl max-h-[90vh] overflow-y-auto"
+           onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4 z-10">
+          <div>
+            <h3 className="text-base font-bold text-gray-900">Set Weekly Availability</h3>
+            <p className="text-xs text-gray-500">Clients can only book consultations during these hours. Split a day into multiple windows if you have a lunch or court gap.</p>
+          </div>
+          <button type="button" onClick={onClose}
+            className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+            ✕
+          </button>
+        </div>
+
+        <div className="space-y-4 px-5 py-5">
+          {/* Timezone + slot duration */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-gray-700">Timezone</label>
+              <select value={tz} onChange={(e) => setTz(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100">
+                <option value="Asia/Calcutta">Asia/Calcutta (IST)</option>
+                <option value="America/Los_Angeles">America/Los_Angeles (PT)</option>
+                <option value="America/New_York">America/New_York (ET)</option>
+                <option value="America/Chicago">America/Chicago (CT)</option>
+                <option value="America/Denver">America/Denver (MT)</option>
+                <option value="Europe/London">Europe/London (GMT/BST)</option>
+                <option value="UTC">UTC</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-gray-700">Slot duration</label>
+              <select value={slotDur} onChange={(e) => setSlotDur(Number(e.target.value))}
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100">
+                <option value={15}>15 minutes</option>
+                <option value={30}>30 minutes</option>
+                <option value={45}>45 minutes</option>
+                <option value={60}>60 minutes</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Per-day rows */}
+          <div className="space-y-3 rounded-lg border border-gray-100 bg-gray-50/50 p-3">
+            {days.map((d) => (
+              <div key={d.day_of_week} className="flex flex-col gap-2 rounded-lg border border-transparent p-2 hover:bg-white">
+                {/* Day header row */}
+                <div className="flex items-center justify-between gap-2">
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input type="checkbox" checked={d.is_active}
+                      onChange={(e) => patchDay(d.day_of_week, {
+                        is_active: e.target.checked,
+                        // If turning back on with no windows, seed one
+                        windows: e.target.checked && d.windows.length === 0
+                          ? [{ start: '09:00', end: '17:00' }]
+                          : d.windows,
+                      })}
+                      className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                    <span className={`text-sm font-medium ${d.is_active ? 'text-gray-900' : 'text-gray-400'}`}>
+                      {DAY_LABELS[d.day_of_week]}
+                    </span>
+                    {d.is_active && d.windows.length > 1 && (
+                      <span className="rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700">
+                        {d.windows.length} windows
+                      </span>
+                    )}
+                  </label>
+                  {!d.is_active && <span className="text-xs italic text-gray-400">— off —</span>}
+                </div>
+
+                {/* Windows list (only when active) */}
+                {d.is_active && (
+                  <div className="flex flex-col gap-1.5 pl-6">
+                    {d.windows.map((w, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <input type="time" value={w.start}
+                          onChange={(e) => patchWindow(d.day_of_week, idx, { start: e.target.value })}
+                          className="w-24 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                        <span className="text-xs text-gray-400">→</span>
+                        <input type="time" value={w.end}
+                          onChange={(e) => patchWindow(d.day_of_week, idx, { end: e.target.value })}
+                          className="w-24 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                        <button type="button"
+                          onClick={() => removeWindow(d.day_of_week, idx)}
+                          title={d.windows.length > 1 ? 'Remove this window' : 'Remove (turns the day off)'}
+                          className="rounded-md p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 transition">
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                    <button type="button"
+                      onClick={() => addWindow(d.day_of_week)}
+                      className="mt-0.5 self-start text-xs font-semibold text-indigo-600 hover:text-indigo-800">
+                      + Add window
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Preview */}
+          <div className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-3 text-xs">
+            <p className="text-indigo-900">
+              <b>Preview:</b> {activeCount} active day{activeCount !== 1 ? 's' : ''} · {slotDur}-min slots
+            </p>
+            <p className="mt-0.5 text-indigo-700">
+              ≈ <b>{previewSlotsPerWeek}</b> bookable slot{previewSlotsPerWeek !== 1 ? 's' : ''} per week
+            </p>
+          </div>
+
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {error}
+            </div>
+          )}
+        </div>
+
+        <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-gray-100 bg-white px-5 py-4">
+          <button type="button" onClick={onClose} disabled={saving}
+            className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+            Cancel
+          </button>
+          <button type="button" onClick={handleSave} disabled={saving}
+            className="rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-md hover:opacity-90 disabled:opacity-60">
+            {saving ? 'Saving…' : 'Save Availability'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }

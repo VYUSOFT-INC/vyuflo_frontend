@@ -1,4 +1,10 @@
 // src/api/documentHub.api.ts
+//
+// CHANGED: Added reupload() — same shape as documents.api.ts's reupload(),
+// calls the same backend endpoint (POST /documents/{id}/reupload). Needed
+// so Document Hub can re-upload an expired standalone (non-case) document
+// without deleting its history, matching the ApplicationDetail.tsx flow.
+
 import documentsApi from "../employee/documents.api";
 import axios from "../axios";
 
@@ -34,11 +40,9 @@ function normalise(d: Document): HubDocument {
     file_size_bytes: d.file_size_bytes ?? 0,
     uploaded_at: d.uploaded_at ?? new Date().toISOString(),
     verified_at: d.verified_at ?? undefined,
-    // ⚠️ ADJUST: if your Document type doesn't declare `in_use` yet, this
-    // still works at runtime (backend field passes through) but TS will
-    // complain. Add `in_use?: boolean;` to Document in document.types.ts,
-    // or keep the `as any` cast below as a stopgap.
     in_use: (d as unknown as { in_use?: boolean }).in_use ?? false,
+    activates_on: (d as unknown as { activates_on?: string }).activates_on ?? undefined,
+    version: (d as unknown as { version?: number }).version ?? undefined,
   };
 }
 
@@ -88,10 +92,17 @@ const documentHubApi = {
     return normalise(doc);
   },
 
-  // ── Delete — server enforces the "in use" rule; frontend just surfaces
-  //    whatever detail message comes back on a 409 ─────────────────────────
+  // ── Delete — server enforces the "in use" rule ────────────────────────────
   deleteDocument: async (id: string): Promise<void> => {
     await documentsApi.delete(id);
+  },
+
+  // ── NEW — Re-upload an expired standalone document. Same backend endpoint
+  //    as documents.api.ts's reupload(); kept here too so DocumentHub.tsx
+  //    doesn't need to reach across to the other API module for one call.
+  reupload: async (oldDocId: string, file: File): Promise<HubDocument> => {
+    const doc = await documentsApi.reupload(oldDocId, file);
+    return normalise(doc);
   },
 
   getFileBlob: async (id: string) => {

@@ -162,12 +162,15 @@ function getFileLabel(type: string) {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { bg: string; text: string; label: string }> = {
-    verified:       { bg: "bg-[#d1fae5]", text: "text-[#065f46]", label: "Verified" },
-    pending_review: { bg: "bg-[#fef3c7]", text: "text-[#92400e]", label: "Pending Review" },
-    uploaded:       { bg: "bg-[#dbeafe]", text: "text-[#1e40af]", label: "Uploaded" },
-    rejected:       { bg: "bg-[#fee2e2]", text: "text-[#991b1b]", label: "Rejected" },
-    required:       { bg: "bg-[#f3f4f6]", text: "text-[#374151]", label: "Required" },
-    missing:        { bg: "bg-[#fee2e2]", text: "text-[#991b1b]", label: "Missing" },
+    verified:            { bg: "bg-[#d1fae5]", text: "text-[#065f46]", label: "Verified" },
+    pending_review:      { bg: "bg-[#fef3c7]", text: "text-[#92400e]", label: "Pending Review" },
+    uploaded:            { bg: "bg-[#dbeafe]", text: "text-[#1e40af]", label: "Uploaded" },
+    rejected:            { bg: "bg-[#fee2e2]", text: "text-[#991b1b]", label: "Rejected" },
+    required:            { bg: "bg-[#f3f4f6]", text: "text-[#374151]", label: "Required" },
+    missing:             { bg: "bg-[#fee2e2]", text: "text-[#991b1b]", label: "Missing" },
+    expired:             { bg: "bg-[#ffedd5]", text: "text-[#c2410c]", label: "Expired" },
+    pending_hr_release:  { bg: "bg-[#eef2ff]", text: "text-[#4338ca]", label: "Pending Release" },
+    superseded:          { bg: "bg-[#f1f5f9]", text: "text-[#64748b]", label: "Older Version" },
   };
   const s = map[status] ?? map.uploaded;
   return (
@@ -203,18 +206,39 @@ function DocCard({ doc, onDelete }: { doc: HubDocument; onDelete: (doc: HubDocum
 
       <div className="flex items-start justify-between">
         <img src={getFileIcon(doc.file_type)} alt={doc.file_type} className="w-[44px] h-[52px] object-contain" />
-        <span className="text-[#94a3b8] text-[11px] font-semibold tracking-[0.5px] uppercase">{getFileLabel(doc.file_type)}</span>
+        <div className="flex flex-col items-end gap-[4px]">
+          <span className="text-[#94a3b8] text-[11px] font-semibold tracking-[0.5px] uppercase">{getFileLabel(doc.file_type)}</span>
+          {doc.version && (
+            <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-[6px] py-[1px] rounded-[5px]">
+              v{doc.version}
+            </span>
+          )}
+        </div>
       </div>
       <div className="flex flex-col gap-[2px]">
         <p className="text-[#111827] text-[13px] font-semibold leading-[18px] line-clamp-2">{doc.name}</p>
-        {doc.application_name && <p className="text-[#94a3b8] text-[11px] leading-[16px] truncate">{doc.application_name}</p>}
+        <p className="text-[#94a3b8] text-[11px] leading-[16px] truncate">
+          {doc.document_type}
+          {doc.application_name && ` · ${doc.application_name}`}
+        </p>
       </div>
       <div className="flex items-center justify-between mt-auto pt-[4px] border-t border-[#f8fafc]">
         <StatusBadge status={doc.status} />
         <span className="text-[#94a3b8] text-[11px]">{fmtDate(doc.uploaded_at)}</span>
       </div>
-      {doc.in_use && (
+      {doc.in_use && !isExpired && !isSuperseded && (
         <span className="text-[10px] text-[#94a3b8] italic">Used in a case</span>
+      )}
+      {isExpired && (
+        <span className="text-[10px] text-[#c2410c] italic font-medium">Click to re-upload</span>
+      )}
+      {isSuperseded && (
+        <span className="text-[10px] text-[#94a3b8] italic">Older version of {doc.document_type} — see the current one below</span>
+      )}
+      {isPending && (
+        <span className="text-[10px] text-indigo-600 italic font-medium">
+          Becomes active on {fmtDate(doc.activates_on)}
+        </span>
       )}
     </div>
   );
@@ -227,23 +251,35 @@ function DocRow({ doc, onDelete }: { doc: HubDocument; onDelete: (doc: HubDocume
          className="flex items-center gap-[16px] px-[20px] py-[14px] border-b border-[#f8fafc] last:border-0 hover:bg-[#f8fafc] cursor-pointer transition-colors group">
       <img src={getFileIcon(doc.file_type)} alt={doc.file_type} className="w-[32px] h-[38px] object-contain shrink-0" />
       <div className="flex-1 min-w-0">
-        <p className="text-[#111827] text-[13px] font-semibold truncate">{doc.name}</p>
+        <p className="text-[#111827] text-[13px] font-semibold truncate flex items-center gap-[6px]">
+          {doc.name}
+          {doc.version && (
+            <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-[6px] py-[1px] rounded-[5px] shrink-0">
+              v{doc.version}
+            </span>
+          )}
+        </p>
         <p className="text-[#94a3b8] text-[11px] truncate">
           {doc.application_name ?? doc.document_type} • {fmtSize(doc.file_size_bytes)}
-          {doc.in_use && <span className="ml-[6px] italic">• Used in a case</span>}
+          {doc.in_use && !isExpired && !isSuperseded && <span className="ml-[6px] italic">• Used in a case</span>}
+          {isExpired && <span className="ml-[6px] italic text-[#c2410c] font-medium">• Click to re-upload</span>}
+          {isSuperseded && <span className="ml-[6px] italic">• Older version of {doc.document_type} — see the current one below</span>}
+          {isPending && <span className="ml-[6px] italic text-indigo-600 font-medium">• Becomes active on {fmtDate(doc.activates_on)}</span>}
         </p>
       </div>
       <StatusBadge status={doc.status} />
       <span className="text-[#94a3b8] text-[12px] shrink-0 hidden sm:block">{fmtDate(doc.uploaded_at)}</span>
-      <button
-        onClick={e => { e.stopPropagation(); if (!doc.in_use) onDelete(doc); }}
-        disabled={doc.in_use}
-        title={doc.in_use ? "Used in a case — remove it from there first" : "Delete document"}
-        className={`size-[30px] rounded-[8px] flex items-center justify-center shrink-0 transition-colors
-                   ${doc.in_use ? "text-[#cbd5e1] cursor-not-allowed" : "text-[#94a3b8] hover:bg-[#fee2e2] hover:text-[#dc2626]"}`}
-      >
-        <Trash2 size={14} />
-      </button>
+      {showDeleteBtn && (
+        <button
+          onClick={e => { e.stopPropagation(); if (!doc.in_use) onDelete(doc); }}
+          disabled={doc.in_use}
+          title={doc.in_use ? "Used in a case — remove it from there first" : "Delete document"}
+          className={`size-[30px] rounded-[8px] flex items-center justify-center shrink-0 transition-colors
+                     ${doc.in_use ? "text-[#cbd5e1] cursor-not-allowed" : "text-[#94a3b8] hover:bg-[#fee2e2] hover:text-[#dc2626]"}`}
+        >
+          <Trash2 size={14} />
+        </button>
+      )}
     </div>
   );
 }
@@ -301,12 +337,24 @@ export default function DocumentHub() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [docToDelete, setDocToDelete] = useState<HubDocument | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [reuploading, setReuploading] = useState(false);
 
   const pushToast = useCallback((tone: ToastTone, title: string, message?: string) => {
     const tid = `${Date.now()}-${Math.random()}`;
     setToasts(prev => [...prev, { id: tid, tone, title, message }]);
     setTimeout(() => setToasts(prev => prev.filter(x => x.id !== tid)), 3200);
   }, []);
+
+  // Auto-open the preview modal when arriving via the expired-document
+  // notification's CTA (?reupload={document_id}).
+  useEffect(() => {
+    const reuploadId = searchParams.get('reupload');
+    if (reuploadId && documents.length > 0) {
+      const doc = documents.find(d => d.id === reuploadId);
+      if (doc) setPreviewDoc(doc);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, documents.length]);
 
   const storagePct = Math.min(100, Math.round((storage.used_mb / storage.total_mb) * 100));
   const usedLabel  = `${storage.used_mb.toFixed(1)} MB of ${storage.total_mb} MB`;
@@ -348,7 +396,7 @@ export default function DocumentHub() {
   }
 
   function handleDeleteClick(doc: HubDocument) {
-    if (doc.in_use) return; // guarded in UI already, belt-and-braces
+    if (doc.in_use) return;
     setDocToDelete(doc);
   }
 
@@ -371,6 +419,24 @@ export default function DocumentHub() {
     }
   }
 
+  // Replace/re-upload a document — works whether it's expired or not.
+  // Old document kept as history ("superseded"), never deleted.
+  async function handleReupload(doc: HubDocument, file: File) {
+    setReuploading(true);
+    try {
+      pushToast('info', 'Uploading new version…', file.name);
+      await documentHubApi.reupload(doc.id, file);
+      pushToast('success', 'Uploaded!', `${doc.name} has been replaced with the new version.`);
+      setPreviewDoc(null);
+      await refetch?.();
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } };
+      pushToast('error', "Replace failed", err?.response?.data?.detail ?? 'Please try again.');
+    } finally {
+      setReuploading(false);
+    }
+  }
+
   function tabDot(status: string) {
     if (status === "in_progress") return "bg-[#22c55e]";
     if (status === "submitted")   return "bg-[#3b82f6]";
@@ -389,7 +455,6 @@ export default function DocumentHub() {
         onCancel={() => setDocToDelete(null)}
       />
 
-      {/* TOP HEADER */}
       <header className="bg-white border-b border-[#f1f5f9] shrink-0 flex items-center justify-between px-[24px] sm:px-[32px] h-[64px] gap-[16px]">
         <h1 className="text-[#0f172a] text-[20px] font-bold tracking-[-0.5px] shrink-0">Document Hub</h1>
 
@@ -438,7 +503,6 @@ export default function DocumentHub() {
         </div>
       </header>
 
-      {/* MAIN */}
       <main className="flex-1 overflow-y-auto px-[16px] sm:px-[24px] lg:px-[32px] py-[24px] sm:py-[28px]">
         <div className="flex gap-[24px] items-start max-w-[1400px] mx-auto">
 

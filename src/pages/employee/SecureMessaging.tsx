@@ -4,7 +4,7 @@ import { ArrowLeft, Paperclip, Pencil, Search, Send, Smile, X, Download, Check, 
 import messageApi from "../../api/employee/message.api";
 import type { Conversation, Message } from "../../types/employee/message.types";
 import { getUiSession } from "../../utils/uiSession";
-import { getFileUrl } from "../../utils/fileUrl";
+import { getFileUrl, getAvatarUrl } from "../../utils/fileUrl";
 import { useMyProfile } from "../../hooks/employee/useProfile"; // ← ADDED: adjust path if useProfile.ts lives elsewhere
 
 
@@ -110,25 +110,44 @@ const isSameDay = (a?: string, b?: string) =>
 const isImageFile = (name?: string | null) =>
   /\.(jpg|jpeg|png|gif|webp)$/i.test(name ?? "");
 
-// Detect group thread (more than 2 participants or thread_type === "group")
+// Detect group thread. FIXED: Conversation.thread_type is a real, typed
+// field ("direct" | "group") — no cast needed. Dropped the previous
+// `(conv as any).participant_count > 2` check since participant_count
+// isn't on the confirmed Conversation type; thread_type alone is the
+// authoritative signal from the backend.
 const isGroupThread = (conv: Conversation | null): boolean => {
   if (!conv) return false;
-  return (conv as any).thread_type === "group" || (conv as any).participant_count > 2;
+  return conv.thread_type === "group";
 };
 
 // ── Avatar ────────────────────────────────────────────────────────────────────
-function Avatar({ name, url, online, size = 44 }: {
-  name?: string; url?: string | null; online?: boolean; size?: number;
+// FIXED: previously always resolved through getFileUrl(url), which is only
+// correct for the CURRENT user's own avatar (a URL already resolved by the
+// backend via useMyProfile()). Every OTHER participant's avatar_url field
+// comes from a different backend response and is a raw storage key, not a
+// usable URL — same distinction as UserAvatar vs ProfileAvatar elsewhere in
+// the app. Now accepts an optional userId; when present, it takes priority
+// and builds the URL via the by-user-id avatar endpoint (getAvatarUrl).
+function Avatar({ name, url, userId, online, size = 44 }: {
+  name?: string; url?: string | null; userId?: string | null; online?: boolean; size?: number;
 }) {
   const [failed, setFailed] = useState(false);
-  const src  = getFileUrl(url ?? null);
+
+  // Reset failure state when the identity being rendered changes (e.g. this
+  // Avatar instance gets reused for a different row/message) — otherwise a
+  // stale failure from a PREVIOUS person would suppress a real photo.
+  useEffect(() => {
+    setFailed(false);
+  }, [userId, url]);
+
+  const src = failed ? null : (userId ? getAvatarUrl(userId) : getFileUrl(url ?? null));
   const sz   = `${size}px`;
   const COLORS = ["bg-violet-500","bg-orange-500","bg-emerald-600","bg-blue-500","bg-pink-500","bg-amber-500","bg-teal-500","bg-rose-500"];
   const color  = COLORS[(name ?? "").split("").reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length];
 
   return (
     <div className="relative shrink-0" style={{ width: sz, height: sz }}>
-      {src && !failed ? (
+      {src ? (
         <img src={src} alt={name ?? ""} onError={() => setFailed(true)}
           className="rounded-full object-cover w-full h-full" />
       ) : (
@@ -286,6 +305,12 @@ function EmojiPicker({ onPick, onClose }: { onPick: (e: string) => void; onClose
 }
 
 // ── New conversation modal ────────────────────────────────────────────────────
+// FIXED: StaffUser's avatar_url field was being fed straight into getFileUrl(),
+// but it's populated from raw backend responses (employeesApi.list() /
+// messageApi.listStaff()) whose profile_picture_url is a raw storage key, not
+// a resolved URL — same bug as HREmployees.tsx. Both branches already had the
+// real user id available (e.employee_id / s.id); we just weren't using it for
+// the avatar. Added userId to the shape and pass it straight to <Avatar>.
 type StaffUser = { id: string; name: string; role?: string; avatar_url?: string };
 
 function NewConvModal({ onClose, onCreate, isHR }: {
@@ -301,16 +326,22 @@ function NewConvModal({ onClose, onCreate, isHR }: {
       import("../../api/hr/employees.api")
         .then(({ employeesApi }) => employeesApi.list({ is_active: true, limit: 100 }))
         .then(res => setUsers((res.items ?? []).map((e: any) => ({
+          // e.employee_id IS the real user_id (confirmed against EmployeeLink
+          // type in HREmployees.tsx) — this is what the avatar endpoint needs.
           id: e.employee_id, name: e.full_name,
-          role: e.job_title ?? "Employee", avatar_url: e.profile_picture_url,
+          role: e.job_title ?? "Employee",
         }))))
         .catch(() => setUsers([]))
         .finally(() => setLoading(false));
     } else {
       messageApi.listStaff()
         .then(items => setUsers(items.map(s => ({
+          // ASSUMPTION FLAGGED: s.id is assumed to be the staff member's real
+          // user_id (not a separate link-row id) — verify against
+          // messageApi.listStaff()'s actual response shape if avatars for
+          // this (non-HR) path still don't resolve after this fix.
           id: s.id, name: `${s.first_name} ${s.last_name}`,
-          role: s.role, avatar_url: s.profile_picture_url ?? s.avatar_url,
+          role: s.role,
         }))))
         .catch(() => setUsers([]))
         .finally(() => setLoading(false));
@@ -350,7 +381,7 @@ function NewConvModal({ onClose, onCreate, isHR }: {
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition text-left mb-0.5 ${
                     selected === u.id ? "bg-[var(--theme-light)] ring-1 ring-[var(--theme-border,#c7d2fe)]" : "hover:bg-slate-50"
                   }`}>
-                  <Avatar name={u.name} url={u.avatar_url} size={36} />
+                  <Avatar name={u.name} userId={u.id} size={36} />
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-semibold text-slate-800 truncate">{u.name}</p>
                     <p className="text-[11px] text-slate-500 capitalize">{u.role}</p>
@@ -467,6 +498,9 @@ const SecureMessaging: React.FC = () => {
 
           // Browser popup — only when tab is not focused
           const latest = incoming[incoming.length - 1];
+          // NOTE: sender_name isn't on the confirmed Message type — kept as
+          // a best-effort optional read since it only affects the popup
+          // notification's sender label, never a broken image / avatar.
           const senderName =
             (latest as any).sender_name ||
             selectedConv?.participant_name ||
@@ -582,6 +616,8 @@ const SecureMessaging: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-slate-100">
         <div className="flex items-center gap-3">
+          {/* Own avatar — url is already a backend-resolved URL from
+              useMyProfile(), NOT a raw storage key, so no userId prop here. */}
           <Avatar
             name={`${session?.first_name ?? ""} ${session?.last_name ?? ""}`}
             url={profile?.profile_picture_url}
@@ -638,7 +674,10 @@ const SecureMessaging: React.FC = () => {
             className={`w-full flex items-center gap-3 px-4 py-3 text-left transition border-b border-slate-50 ${
               selectedConv?.id === conv.id ? "bg-[var(--theme-light)] text-[var(--theme-dark)]" : "hover:bg-slate-50"
             }`}>
-            <Avatar name={conv.participant_name} url={conv.avatar_url} online={conv.is_online} size={48} />
+            {/* FIXED: userId=conv.participant_id (real field on Conversation)
+                takes priority; url=conv.avatar_url stays as a fallback for
+                group threads where there's no single "other participant". */}
+            <Avatar name={conv.participant_name} userId={conv.participant_id} url={conv.avatar_url} online={conv.is_online} size={48} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between">
                 <p className="text-[15px] font-medium text-slate-900 truncate">{conv.participant_name}</p>
@@ -698,6 +737,7 @@ const SecureMessaging: React.FC = () => {
 
             <Avatar
               name={selectedConv.participant_name}
+              userId={selectedConv.participant_id}
               url={selectedConv.avatar_url}
               online={selectedConv.is_online}
               size={40}
@@ -709,8 +749,8 @@ const SecureMessaging: React.FC = () => {
               <p className="text-[12px] leading-tight mt-0.5">
                 {selectedConv.is_online
                   ? <span className="font-medium" style={{ color: "var(--theme-primary)" }}>online</span>
-                  : (selectedConv as any).last_seen_at
-                    ? <span className="text-slate-400">last seen {fmtLastSeen((selectedConv as any).last_seen_at)}</span>
+                  : selectedConv.last_seen_at
+                    ? <span className="text-slate-400">last seen {fmtLastSeen(selectedConv.last_seen_at)}</span>
                     : <span className="text-slate-400 capitalize">{selectedConv.participant_role ?? "offline"}</span>
                 }
               </p>
@@ -731,11 +771,16 @@ const SecureMessaging: React.FC = () => {
                 const showDate          = idx === 0 || !isSameDay(prev?.created_at, msg.created_at);
                 const isFirstFromSender = !prev || prev.sender_id !== msg.sender_id || !isSameDay(prev.created_at, msg.created_at);
                 const isLastFromSender  = !next || next.sender_id !== msg.sender_id;
+                // FIXED: msg.is_image is a real, confirmed field on Message —
+                // no cast needed anymore.
                 const hasImage          = msg.message_type === "file_attachment" && msg.document_id
-                                          && ((msg as any).is_image || isImageFile(msg.attachment_name));
+                                          && (msg.is_image || isImageFile(msg.attachment_name));
                 const hasFile           = msg.message_type === "file_attachment" && msg.document_id && !hasImage;
 
-                // Sender name: show for group threads, non-mine, first in a run
+                // Sender name: show for group threads, non-mine, first in a run.
+                // sender_name isn't on the confirmed Message type — kept as a
+                // best-effort optional read since it only affects a text label,
+                // never a broken avatar/image.
                 const showSenderName = isGroup && !isMine && isFirstFromSender;
                 const senderName: string = (msg as any).sender_name ?? (msg as any).sender_full_name ?? "";
 
@@ -765,11 +810,16 @@ const SecureMessaging: React.FC = () => {
                         className={`flex items-end gap-2 ${isMine ? "justify-end" : "justify-start"}`}
                         style={{ marginBottom: isLastFromSender ? "6px" : "1px" }}>
 
-                        {/* Receiver avatar — only on last message in a group */}
+                        {/* Receiver avatar — only on last message in a run.
+                            FIXED: previously used the unconfirmed
+                            `sender_avatar` field for group threads. msg.sender_id
+                            is a real, confirmed field and IS the sender's user
+                            id, so it's used directly for both direct and group
+                            threads instead of a guessed avatar-url field. */}
                         {!isMine && (
                           <div className="shrink-0 mb-1">
                             {isLastFromSender
-                              ? <Avatar name={senderName || selectedConv.participant_name} url={isGroup ? (msg as any).sender_avatar : selectedConv.avatar_url} size={28} />
+                              ? <Avatar name={senderName || selectedConv.participant_name} userId={msg.sender_id} size={28} />
                               : <div style={{ width: 28 }} />
                             }
                           </div>

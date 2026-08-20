@@ -11,3 +11,10 @@ export const getFileUrl = (path: string | null | undefined): string | null => {
   console.warn("getFileUrl received a non-URL path — backend should resolve this:", path);
   return null;
 };
+
+// src/utils/fileUrl.ts — add alongside getFileUrl
+export const getAvatarUrl = (userId: string | null | undefined, updatedAt?: string | null): string | null => {
+  if (!userId) return null;
+  const v = updatedAt ? Math.floor(new Date(updatedAt).getTime() / 1000) : 0;
+  return `/api/v1/users/${userId}/avatar?v=${v}`;
+};
