@@ -100,6 +100,7 @@ export interface HRProfileRequest {
   company_size?:         CompanySize;
   industry?:             string;
   website?:              string;
+  domain?:               string;
   ein?:                  string;      // Employer Identification Number
   address_line1?:        string;
   address_line2?:        string;

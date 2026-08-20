@@ -3,6 +3,13 @@
 // Profile & Settings — thin wrappers over the 5 Swagger endpoints.
 // All hit the shared axios instance (JWT auto-attached).
 //
+// UPDATED: profile_settings_router is now mounted at /api/v1/attorney
+// (was /api/v1) to resolve a route collision with user_profile_router,
+// which also defined GET /api/v1/users/me/profile — same method + path,
+// registered first in main.py, silently shadowing this router's version
+// (the one with first_name/last_name/bar_number/role). New BASE reflects
+// the router's actual full path under its new mount.
+//
 // IMPORTANT — avatar upload uses multipart/form-data, NOT JSON.
 // Backend rejects the request if Content-Type is application/json for
 // the avatar PATCH. Let axios infer the boundary by passing a FormData
@@ -16,7 +23,7 @@ import type {
   AvatarResponse,
 } from '../../types/lawyer/lawyerProfile.types';
 
-const BASE = '/users/me';
+const BASE = '/attorney/users/me';
 
 export const lawyerProfileApi = {
   /** GET own aggregated profile (users + user_profiles + attorney_profiles). */
@@ -46,8 +53,6 @@ export const lawyerProfileApi = {
     form.append('file', file);
     const r = await axios.patch<AvatarResponse>(`${BASE}/avatar`, form, {
       headers: {
-        // Let the browser set the boundary; axios honors undefined to skip
-        // its default application/json header injection.
         'Content-Type': 'multipart/form-data',
       },
     });

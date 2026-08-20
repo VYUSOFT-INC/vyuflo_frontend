@@ -1,4 +1,3 @@
-
 // src/pages/employee/NotificationsCenterV2.tsx
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
@@ -6,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Bell, CheckCheck, AlertTriangle, FileText, Clock,
   Newspaper, Shield, CreditCard, Briefcase,
-  Filter, Settings, ChevronDown,
+  Settings, ChevronDown,
   MoreVertical, Calendar, TrendingUp,
   ArrowRight, X, Eye,
 } from "lucide-react";
@@ -443,11 +442,6 @@ export default function NotificationsCenterV2() {
                 <div className="px-[14px] sm:px-[16px] pt-[14px] pb-0 border-b border-[#e5e7eb]">
                   <div className="flex items-center justify-between mb-[10px]">
                     <h2 className="text-[14px] sm:text-[16px] font-bold text-[#111827]">Notifications</h2>
-                    <button className="flex items-center gap-[4px] text-[12px] font-medium text-[#374151]
-                                       border border-[#e5e7eb] rounded-[8px] px-[10px] py-[6px]
-                                       hover:bg-[#f9fafb] transition">
-                      <Filter size={12} /><span className="hidden sm:inline">Filter</span>
-                    </button>
                   </div>
                   <div className="flex items-center gap-[2px] overflow-x-auto pb-[1px]">
                     {TABS.map(tab => (

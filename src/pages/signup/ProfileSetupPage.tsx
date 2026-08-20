@@ -1011,7 +1011,7 @@ function AttorneyInnerFields({
 
 function HRInnerFields({
   companyName, setCompanyName, companySize, setCompanySize, industry, setIndustry,
-  website, setWebsite, ein, setEin, contactName, setContactName,
+  website, setWebsite, domain, setDomain, ein, setEin, contactName, setContactName,
   contactEmail, setContactEmail, contactPhone, setContactPhone,
   address1, setAddress1, address2, setAddress2,
   city, setCity, state, setState, zipCode, setZipCode, companyError,
@@ -1020,6 +1020,7 @@ function HRInnerFields({
   companySize: string; setCompanySize: (v: string) => void;
   industry: string;    setIndustry: (v: string) => void;
   website: string;     setWebsite: (v: string) => void;
+  domain: string;      setDomain: (v: string) => void;
   ein: string;         setEin: (v: string) => void;
   contactName: string;  setContactName: (v: string) => void;
   contactEmail: string; setContactEmail: (v: string) => void;
@@ -1041,8 +1042,10 @@ function HRInnerFields({
             placeholder="Acme Corporation"
             className={`${inputH} ${companyError ? "border-red-400 bg-red-50" : ""}`} />
         </Field>
-        {/* 4 cols on xl */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        {/* 5 cols on xl — Domain sits next to Website since both describe
+            the company's official web presence, and is what the invitation
+            flow checks employee emails against */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
           <Field label="Company Size">
             <SelectField value={companySize} onChange={setCompanySize} options={COMPANY_SIZES} placeholder="Select size" />
           </Field>
@@ -1052,10 +1055,16 @@ function HRInnerFields({
           <Field label="Website">
             <input value={website} onChange={e => setWebsite(e.target.value)} placeholder="https://acme.com" className={inputH} />
           </Field>
+          <Field label="Company Domain">
+            <input value={domain} onChange={e => setDomain(e.target.value)} placeholder="acme.com" className={inputH} />
+          </Field>
           <Field label="EIN">
             <input value={ein} onChange={e => setEin(e.target.value)} placeholder="XX-XXXXXXX" className={inputH} />
           </Field>
         </div>
+        <p className="text-[#6b7280] text-[11px] -mt-2">
+          Used to verify employee invitations sent from your company's official email domain (e.g. someone@{domain || "acme.com"}).
+        </p>
       </div>
 
       <div className="flex flex-col gap-4 w-full">
@@ -1127,6 +1136,7 @@ export default function ProfileSetupPage() {
   const [companySize,     setCompanySize]     = useState("");
   const [industry,        setIndustry]        = useState("");
   const [website,         setWebsite]         = useState("");
+  const [domain,          setDomain]          = useState("");
   const [ein,             setEin]             = useState("");
   const [contactName,     setContactName]     = useState("");
   const [contactEmail,    setContactEmail]    = useState("");
@@ -1182,7 +1192,7 @@ export default function ProfileSetupPage() {
           company_name: companyName.trim(),
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           company_size: companySize as any || undefined, industry: industry || undefined,
-          website: website || undefined, ein: ein || undefined,
+          website: website || undefined,domain: domain || undefined, ein: ein || undefined,
           contact_name: contactName || undefined, contact_email: contactEmail || undefined,
           contact_phone: contactPhone || undefined, address_line1: address1 || undefined,
           address_line2: address2 || undefined, city: city || undefined,
@@ -1302,6 +1312,7 @@ export default function ProfileSetupPage() {
                 companySize={companySize}   setCompanySize={setCompanySize}
                 industry={industry}         setIndustry={setIndustry}
                 website={website}           setWebsite={setWebsite}
+                domain={domain}             setDomain={setDomain}
                 ein={ein}                   setEin={setEin}
                 contactName={contactName}   setContactName={setContactName}
                 contactEmail={contactEmail} setContactEmail={setContactEmail}

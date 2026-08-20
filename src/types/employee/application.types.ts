@@ -43,6 +43,8 @@ export interface Application {
   action_required_note?: string;
   assigned_attorney_id?: string;
   assigned_hr_id?:       string;
+  attorney_name?:        string;   // ← ADD — now populated by the backend fix above
+  hr_name?:              string;   // ← ADD
   notes?:               string;
   created_at:           string;
   updated_at:           string;
@@ -110,6 +112,11 @@ export interface StatusHistoryCreate {
 //   updated_at:      string;
 // }
 
+// FIXED: Added `document_status`. ApplicationDetail.tsx's TaskRow needs this
+// to know when a linked document has expired (backend Document.status can be
+// "expired" — see the document_status_enum migration) and show the Re-upload
+// UI instead of View/Delete. Without this field, TaskRow was reading it via
+// an `as any` cast as a stopgap; that cast can now be removed.
 export interface Task {
   id:                    string;
   application_id:        string;
@@ -124,6 +131,7 @@ export interface Task {
   document_name?:        string;   // "passport_scan_2023.pdf"
   document_size_bytes?:  number;   // raw bytes → formatted to "2.4 MB"
   document_uploaded_at?: string;   // ISO datetime
+  document_status?:      string;   // mirrors backend Document.status — "uploaded" | "pending_review" | "verified" | "rejected" | "missing" | "pending_hr_release" | "expired"
   created_at:            string;
   updated_at:            string;
 }

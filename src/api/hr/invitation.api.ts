@@ -6,12 +6,18 @@ import type {
   InviteByEmailRequest,
   InviteByCodeRequest,
   AcceptInviteRequest,
+  AcceptInviteNewUserRequest,
+  RequestMergeOtpRequest,
+  AcceptInviteExistingUserRequest,
   UpdateEmployeeRequest,
   InvitationResponse,
   InvitationListResponse,
   AcceptInviteResponse,
+  AcceptInviteAuthResponse,
+  RequestMergeOtpResponse,
   EmployeeListResponse,
   ValidateTokenResponse,
+  EmployerDomainResponse,
 } from "../../types/hr/invitation.types";
 
 const BASE = "/hr";
@@ -59,10 +65,41 @@ export const invitationApi = {
     return res.data;
   },
 
+  // NEW — powers the domain-suffix picker in the invite email field.
+  getEmployerDomain: async (): Promise<EmployerDomainResponse> => {
+    const res = await axios.get(`${BASE}/employer-domain`);
+    return res.data;
+  },
+
+  // Authenticated path — person already has a session.
   acceptInvite: async (
     data: AcceptInviteRequest
   ): Promise<AcceptInviteResponse> => {
     const res = await axios.post(`${BASE}/accept`, data);
+    return res.data;
+  },
+
+  // NEW — public, no existing account. Creates + links + logs in, in one call.
+  acceptInviteNewUser: async (
+    data: AcceptInviteNewUserRequest
+  ): Promise<AcceptInviteAuthResponse> => {
+    const res = await axios.post(`${BASE}/accept/new-user`, data);
+    return res.data;
+  },
+
+  // NEW — public, step 1 of merge flow.
+  requestMergeOtp: async (
+    data: RequestMergeOtpRequest
+  ): Promise<RequestMergeOtpResponse> => {
+    const res = await axios.post(`${BASE}/accept/existing-user/request-otp`, data);
+    return res.data;
+  },
+
+  // NEW — public, step 2 of merge flow.
+  acceptInviteExistingUser: async (
+    data: AcceptInviteExistingUserRequest
+  ): Promise<AcceptInviteAuthResponse> => {
+    const res = await axios.post(`${BASE}/accept/existing-user`, data);
     return res.data;
   },
 

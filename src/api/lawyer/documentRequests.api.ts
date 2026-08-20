@@ -24,11 +24,13 @@ import type {
  * error object with a synthetic `.response` so the caller's existing
  * catch{} branches (403 / 422 / etc.) keep working unchanged.
  * ─────────────────────────────────────────────────────────────────── */
+
+const BASE = '/attorney'; 
 export async function requestDocument(
   payload: CreateDocumentRequestPayload,
 ): Promise<CreateDocumentRequestResponse> {
   const res = await axios.post<CreateDocumentRequestResponse>(
-    '/documents/requests',
+    `${BASE}/documents/requests`,
     payload,
     { validateStatus: () => true },
   );

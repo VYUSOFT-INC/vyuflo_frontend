@@ -1,8 +1,9 @@
 // src/api/hr/hrDocument.api.ts
 //
 // HR Document Management API calls.
-// Added: getFile() — blob fetch with cookies for Preview and Download.
-// Same pattern as employee documentsApi.getFile().
+// getFile() — blob fetch with cookies for Preview and Download (same pattern as
+// employee documentsApi.getFile()).
+// confirmCurrent() — NEW, backs the "Confirm Current" action on the needs-review banner.
 
 import axios from '../axios';
 import type {
@@ -37,9 +38,8 @@ export const hrDocumentApi = {
   },
 
   // ─── FILE (blob) ───────────────────────────────────────────────────────────
-  // Used for Preview (open in new tab) and Download (trigger file save).
+  // Used for Preview (inline modal) and Download (trigger file save).
   // Must use axios (not a bare URL) so auth cookies are sent automatically.
-  // Matches the same pattern as employee documentsApi.getFile().
 
   getFile: async (documentId: string): Promise<{ blob: Blob; fileName: string; contentType: string }> => {
     const res = await axios.get(`/hr/documents/${documentId}/view`, {
@@ -47,8 +47,20 @@ export const hrDocumentApi = {
     });
     const disposition = String(res.headers['content-disposition'] ?? '');
     const contentType  = String(res.headers['content-type'] ?? 'application/octet-stream');
-    const nameMatch    = disposition.match(/filename[^;=\n]*=["']?([^"';\n]+)["']?/);
-    const fileName     = nameMatch?.[1]?.trim() ?? 'document';
+
+    // Handles both:
+    //   filename="doc name.pdf"
+    //   filename*=UTF-8''doc%20name.pdf   (RFC 5987 — used for non-ASCII names)
+    const starMatch  = disposition.match(/filename\*=(?:UTF-8'')?([^;\n]+)/i);
+    const plainMatch = disposition.match(/filename=["']?([^"';\n]+)["']?/i);
+    let fileName = 'document';
+    if (starMatch?.[1]) {
+      try { fileName = decodeURIComponent(starMatch[1].trim()); }
+      catch { fileName = starMatch[1].trim(); }
+    } else if (plainMatch?.[1]) {
+      fileName = plainMatch[1].trim();
+    }
+
     return { blob: res.data, fileName, contentType };
   },
 
@@ -87,6 +99,17 @@ export const hrDocumentApi = {
 
   reject: async (documentId: string, payload: HRRejectDocumentRequest): Promise<HRDocumentResponse> => {
     const res = await axios.patch(`/hr/documents/${documentId}/reject`, payload);
+    return res.data;
+  },
+
+  // ─── CONFIRM CURRENT (NEW) ─────────────────────────────────────────────────
+  // Clears needs_review on a document the employee/HR confirms is still the
+  // latest valid version. Backs the "Confirm Current" button on the
+  // needs-review banner. VERIFY THIS PATH against your actual backend route —
+  // it's assumed here to mirror the verify/reject pattern.
+
+  confirmCurrent: async (documentId: string): Promise<HRDocumentResponse> => {
+    const res = await axios.patch(`/hr/documents/${documentId}/confirm-current`);
     return res.data;
   },
 

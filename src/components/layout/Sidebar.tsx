@@ -13,11 +13,12 @@ import {
   Wrench,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
-import { Avatar } from '../ui/Avatar';
+import { ProfileAvatar } from '../ui/ProfileAvatar';
 import { getUiSession, type UiSession } from '../../utils/uiSession';
 import { getFileUrl } from '../../utils/fileUrl';
 import { useMyProfile } from '../../hooks/employee/useProfile';
-import imgLogoIcon from '../../assets/icons/plane-icon.svg';
+import imgLogoIcon from '../../assets/vyuflo_icon.svg';
+import imgLogoName from '../../assets/vyuflo_logotype.svg';
 import { getNavItems } from '../../config/navConfig';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -99,6 +100,9 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
 
   const navItems      = getNavItems(session?.roles);
   const fullName      = session ? `${session.first_name} ${session.last_name}`.trim() || 'User' : 'User';
+  // getFileUrl() is correct here — the backend's GET /users/me/profile already
+  // returns profile_picture_url as a ready-to-use versioned URL
+  // (e.g. "/api/v1/users/me/avatar?v=1755712345"), not a raw storage key.
   const avatarUrl     = getFileUrl(profile?.profile_picture_url ?? null);
   const sectionHeader = consoleLabel(session?.roles);
 
@@ -116,15 +120,11 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
   const renderSectionHeader = (text: string) => (
     <div
       className={[
-        'px-3 transition-all duration-300',
-        collapsed
-          ? 'lg:opacity-0 lg:h-0 lg:my-0 lg:overflow-hidden opacity-100 mt-2 mb-2'
-          : 'opacity-100 mt-2 mb-2',
+        'mt-4 mb-1 px-3 transition-all duration-300 overflow-hidden',
+        collapsed ? 'lg:opacity-0 lg:h-0' : 'opacity-100',
       ].join(' ')}
     >
-      <p className="text-[11px] font-semibold text-[#94a3b8] tracking-[0.6px] uppercase leading-tight">
-        {text}
-      </p>
+      <p className="text-[11px] font-semibold text-[#94a3b8] tracking-[0.6px] uppercase">{text}</p>
     </div>
   );
 
@@ -174,25 +174,21 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
         {/* ── Logo ─────────────────────────────────────────────────────── */}
         <div className={['border-b border-[#f1f5f9] shrink-0 flex items-center justify-between transition-all duration-300', collapsed ? 'lg:px-3 lg:py-6 py-6 px-6' : 'py-6 px-6'].join(' ')}>
           <div className={['flex items-center transition-all duration-300', collapsed ? 'lg:justify-center lg:gap-0' : 'gap-3'].join(' ')}>
-            <div
-              className="rounded-[10px] flex items-center justify-center shrink-0"
-              style={{
-                width: 32,
-                height: 32,
-                background: 'linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-secondary) 100%)',
-                boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1)',
-              }}
-            >
-              <img src={imgLogoIcon} alt="Vyuflo" className="w-[15px] h-[18px] object-contain" />
+            <div className="shrink-0">
+              <img
+                src={imgLogoIcon}
+                alt="Vyuflo"
+                className="w-8 h-8 object-contain"
+              />
             </div>
-            <span
+            <img
+              src={imgLogoName}
+              alt="Vyuflo"
               className={[
-                'text-[20px] font-bold tracking-[-0.7px] leading-[28px] text-[var(--theme-primary)] whitespace-nowrap transition-all duration-300 overflow-hidden',
+                'h-[20px] w-auto whitespace-nowrap transition-all duration-300 overflow-hidden',
                 collapsed ? 'lg:w-0 lg:opacity-0' : 'lg:w-auto lg:opacity-100',
               ].join(' ')}
-            >
-              Vyuflo
-            </span>
+            />
           </div>
           <button onClick={onClose} className="lg:hidden p-1 rounded-lg hover:bg-gray-100 text-gray-500 shrink-0">
             <X size={18} />
@@ -208,18 +204,17 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
             ].join(' ')}
           >
             <div className="relative shrink-0">
-              {avatarUrl ? (
-                <img
-                  src={avatarUrl}
-                  alt={fullName}
-                  className="w-10 h-10 rounded-full object-cover ring-2 ring-white shadow-sm"
-                  onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).style.display = 'none';
-                  }}
-                />
-              ) : (
-                <Avatar name={fullName} size="lg" />
-              )}
+              {/* FIXED: was an inline <img>/<Avatar> ternary with an onError
+                  handler that just hid the broken image (leaving an empty
+                  gap). ProfileAvatar tracks the failure and falls back to
+                  the initials badge properly, same as UserAvatar elsewhere. */}
+              <ProfileAvatar
+                src={avatarUrl}
+                name={fullName}
+                sizeClass="w-10 h-10"
+                avatarSize="lg"
+                ringClass="ring-2 ring-white shadow-sm"
+              />
               <span className="absolute bottom-0.5 right-0.5 w-2.5 h-2.5 bg-green-400 border-2 border-white rounded-full" />
             </div>
 

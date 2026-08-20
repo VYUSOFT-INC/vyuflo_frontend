@@ -79,6 +79,7 @@ const hrNav: NavItem[] = [
   { to: '/employer/dashboard',     label: 'Dashboard',      icon: { kind: 'lucide', Icon: LayoutDashboard } },
   { to: '/employer/employees',     label: 'Employees',      icon: { kind: 'lucide', Icon: Users           } },
   { to: '/employer/cases',         label: 'Cases',          icon: { kind: 'lucide', Icon: Briefcase       } },
+  { to: '/employer/documents',     label: 'Documents',      icon: { kind: 'lucide', Icon: FolderOpen      } },
   { to: '/employer/approvals',     label: 'Approvals',      icon: { kind: 'lucide', Icon: CheckSquare     } },
   { to: '/employer/deadlines',     label: 'Deadlines',      icon: { kind: 'lucide', Icon: Clock           } },
   { to: '/employer/messages',      label: 'Messages',       icon: { kind: 'lucide', Icon: MessageSquare   } },

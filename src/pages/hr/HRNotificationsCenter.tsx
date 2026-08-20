@@ -4,14 +4,16 @@
 // Only the category set, stat cards, and sidebar widgets differ.
 
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Bell, CheckCheck, FileCheck, Briefcase, Users, ShieldAlert,
-  Filter, Settings, ChevronDown, Check,
+  Settings, ChevronDown, Check,
   ClipboardList, TrendingUp, MoreVertical,
 } from "lucide-react";
 import { useNotifications, useNotificationStats, useNotificationPreferences } from "../../hooks/employee/useNotifications";
 import type { Notification, NotificationCategory, TabFilter } from "../../types/employee/notification.types";
 import { PageHeader, PageContent } from "../../components/layout/Pageheader";
+import { getNotifRoute } from "../../utils/notifNavigation";
 
 // ── Category config — HR-relevant categories only ────────────────────────────
 const CAT_CONFIG: Record<string, { bg: string; color: string; icon: React.ReactNode }> = {
@@ -77,11 +79,19 @@ function NotifRow({ notif, onMarkRead, onDismiss }: {
   onMarkRead: (id: string) => void;
   onDismiss:  (id: string) => void;
 }) {
+  const navigate = useNavigate();
   const cat = CAT_CONFIG[notif.category] ?? { bg:"#f9fafb", color:"#6b7280", icon:<Bell size={18} /> };
+  const route = getNotifRoute(notif);
+
+  const handleRowClick = () => {
+    if (!notif.is_read) onMarkRead(notif.id);
+    if (route) navigate(route);
+  };
+
   return (
-    <div className={`border-b border-[#f3f4f6] last:border-0 ${!notif.is_read ? "bg-[#fafbff]" : "bg-white"}`}>
+    <div className={`border-b border-[#f3f4f6] last:border-0 ${!notif.is_read ? "bg-[#fafbff]" : "bg-white"} ${route ? "hover:bg-[#f8fafc] cursor-pointer" : ""}`}>
       <div className="px-[16px] sm:px-[24px] py-[16px] sm:py-[20px]">
-        <div className="flex items-start gap-[12px] sm:gap-[14px]">
+        <div className="flex items-start gap-[12px] sm:gap-[14px]" onClick={route ? handleRowClick : undefined}>
           <div className="w-[40px] h-[40px] sm:w-[44px] sm:h-[44px] rounded-[10px] flex items-center justify-center flex-shrink-0 mt-[2px]"
             style={{ backgroundColor: cat.bg, color: cat.color }}>
             {cat.icon}
@@ -115,7 +125,7 @@ function NotifRow({ notif, onMarkRead, onDismiss }: {
             </div>
           </div>
 
-          <button onClick={() => onDismiss(notif.id)}
+          <button onClick={(e) => { e.stopPropagation(); onDismiss(notif.id); }}
             className="text-[#d1d5db] hover:text-[#6b7280] transition flex-shrink-0 mt-[2px] p-[4px]">
             <MoreVertical size={14} />
           </button>
@@ -124,14 +134,19 @@ function NotifRow({ notif, onMarkRead, onDismiss }: {
         {(notif.cta_primary_label || notif.cta_secondary_label) && (
           <div className="flex items-center flex-wrap gap-[8px] mt-[12px] ml-[52px] sm:ml-[58px]">
             {notif.cta_primary_label && (
-              <a href={notif.cta_primary_url ?? "#"} onClick={() => onMarkRead(notif.id)}
-                className="text-[12px] sm:text-[13px] font-medium px-[14px] py-[6px] rounded-[8px] text-white hover:opacity-90 transition no-underline"
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!notif.is_read) onMarkRead(notif.id);
+                  if (route) navigate(route);
+                }}
+                className="text-[12px] sm:text-[13px] font-medium px-[14px] py-[6px] rounded-[8px] text-white hover:opacity-90 transition"
                 style={{ background: "linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)" }}>
                 {notif.cta_primary_label}
-              </a>
+              </button>
             )}
             {notif.cta_secondary_label && (
-              <button onClick={() => onMarkRead(notif.id)}
+              <button onClick={(e) => { e.stopPropagation(); onMarkRead(notif.id); }}
                 className="text-[12px] sm:text-[13px] font-medium px-[14px] py-[6px] rounded-[8px] border border-[#e5e7eb] text-[#374151] hover:bg-[#f9fafb] transition">
                 {notif.cta_secondary_label}
               </button>
@@ -145,6 +160,7 @@ function NotifRow({ notif, onMarkRead, onDismiss }: {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function HRNotificationsCenter() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabFilter>("all");
 
   const {
@@ -214,14 +230,6 @@ export default function HRNotificationsCenter() {
                           style={{ background: "var(--theme-primary)" }}>{unreadCount}</span>
                       )}
                     </h2>
-                    <div className="flex items-center gap-[6px]">
-                      <button className="flex items-center gap-[4px] text-[12px] font-medium text-[#374151] border border-[#e5e7eb] rounded-[8px] px-[10px] py-[6px] hover:bg-[#f9fafb] transition">
-                        <Filter size={12} /><span className="hidden sm:inline">Filter</span>
-                      </button>
-                      <button className="flex items-center gap-[4px] text-[12px] font-medium text-[#374151] border border-[#e5e7eb] rounded-[8px] px-[10px] py-[6px] hover:bg-[#f9fafb] transition">
-                        <Settings size={12} /><span className="hidden sm:inline">Settings</span>
-                      </button>
-                    </div>
                   </div>
                   <div className="flex items-center gap-[2px] overflow-x-auto pb-[1px]">
                     {TABS.map(tab => (
@@ -303,21 +311,31 @@ export default function HRNotificationsCenter() {
                   <p className="text-[13px] text-[#9ca3af]">No pending approvals</p>
                 ) : (
                   <div className="flex flex-col gap-[8px]">
-                    {pendingApprovals.slice(0, 3).map(n => (
-                      <div key={n.id} className="bg-[#f8fafc] border border-[#f1f5f9] rounded-[10px] p-[12px] hover:bg-[#f0f5ff] transition cursor-pointer">
-                        <p className="text-[12px] font-semibold text-[#111827] leading-[16px]">{n.title}</p>
-                        {n.actor_label && <p className="text-[11px] text-[#64748b] mt-[2px]">{n.actor_label}</p>}
-                        <div className="flex items-center justify-between mt-[8px]">
-                          <span className="text-[10px] font-bold px-[6px] py-[2px] rounded-full bg-[#fef2f2] text-[#dc2626]">
-                            {n.priority.toUpperCase()}
-                          </span>
-                          <button onClick={() => markRead(n.id)}
-                            className="text-[11px] font-medium transition" style={{ color: "var(--theme-primary)" }}>
-                            Review →
-                          </button>
+                    {pendingApprovals.slice(0, 3).map(n => {
+                      const route = getNotifRoute(n);
+                      return (
+                        <div key={n.id}
+                          onClick={() => { if (route) { markRead(n.id); navigate(route); } }}
+                          className={`bg-[#f8fafc] border border-[#f1f5f9] rounded-[10px] p-[12px] hover:bg-[#f0f5ff] transition ${route ? "cursor-pointer" : ""}`}>
+                          <p className="text-[12px] font-semibold text-[#111827] leading-[16px]">{n.title}</p>
+                          {n.actor_label && <p className="text-[11px] text-[#64748b] mt-[2px]">{n.actor_label}</p>}
+                          <div className="flex items-center justify-between mt-[8px]">
+                            <span className="text-[10px] font-bold px-[6px] py-[2px] rounded-full bg-[#fef2f2] text-[#dc2626]">
+                              {n.priority.toUpperCase()}
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                markRead(n.id);
+                                if (route) navigate(route);
+                              }}
+                              className="text-[11px] font-medium transition" style={{ color: "var(--theme-primary)" }}>
+                              Review →
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
                 {pendingApprovals.length > 3 && (
