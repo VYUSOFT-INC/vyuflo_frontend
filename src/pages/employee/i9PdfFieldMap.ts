@@ -37,6 +37,29 @@ export const I9_PDF_FIELDS = {
   cb_2:                 'CB_2',   // A noncitizen national
   cb_3:                 'CB_3',   // Lawful permanent resident
   cb_4:                 'CB_4',   // An alien authorized to work
+
+  // ── Section 2 — Employer Review and Verification ───────────────────
+  s2_list_a_title:              'Document Title 1',
+  s2_list_a_issuing_authority:  'Issuing Authority 1',
+  s2_list_a_document_number:    'Document Number 0',
+  s2_list_a_expiration:         'Document Number 0 (if any)',   // exp date is the (if any) sibling in PDF
+
+  s2_list_b_title:              'List B Document 1 Title',
+  s2_list_b_issuing_authority:  'List B Issuing Authority 1',
+  s2_list_b_document_number:    'List B Document Number 1',
+  s2_list_b_expiration:         'List B Expiration Date 1',
+
+  s2_list_c_title:              'List C Document Title 1',
+  s2_list_c_issuing_authority:  'List C Issuing Authority 1',
+  s2_list_c_document_number:    'List C Document Number 1',
+  s2_list_c_expiration:         'List C Expiration Date 1',
+
+  s2_additional_information:    'Additional Information',
+  s2_first_day_of_employment:   'Document Title 2',                          // TODO — verify real PDF name
+  s2_employer_signature:        'Signature of Employer or AR',
+  s2_employer_signature_name:   'Last Name First Name and Title of Employer or Authorized Representative',
+  s2_employer_business_name:    'Employers Business or Org Name',
+  s2_employer_business_address: 'Employers Business or Org Address',
 } as const;
 
 /** Convert ISO YYYY-MM-DD → MM/DD/YYYY, which is the format the PDF's
@@ -106,6 +129,28 @@ export function buildPdfFieldValues(f: I9FormData): PdfFieldValues {
     { name: F.cb_3, checked: f.citizenship_status === '3' },
     { name: F.cb_4, checked: f.citizenship_status === '4' },
   ];
+
+  // ── Section 2 (employer) — HR-side editor pushes these onto the same PDF
+  texts.push(
+    { name: F.s2_list_a_title,              value: f.s2_list_a_title },
+    { name: F.s2_list_a_issuing_authority,  value: f.s2_list_a_issuing_authority },
+    { name: F.s2_list_a_document_number,    value: f.s2_list_a_document_number },
+    { name: F.s2_list_a_expiration,         value: toPdfDate(f.s2_list_a_expiration) },
+    { name: F.s2_list_b_title,              value: f.s2_list_b_title },
+    { name: F.s2_list_b_issuing_authority,  value: f.s2_list_b_issuing_authority },
+    { name: F.s2_list_b_document_number,    value: f.s2_list_b_document_number },
+    { name: F.s2_list_b_expiration,         value: toPdfDate(f.s2_list_b_expiration) },
+    { name: F.s2_list_c_title,              value: f.s2_list_c_title },
+    { name: F.s2_list_c_issuing_authority,  value: f.s2_list_c_issuing_authority },
+    { name: F.s2_list_c_document_number,    value: f.s2_list_c_document_number },
+    { name: F.s2_list_c_expiration,         value: toPdfDate(f.s2_list_c_expiration) },
+    { name: F.s2_additional_information,    value: f.s2_additional_information },
+    { name: F.s2_first_day_of_employment,   value: toPdfDate(f.s2_first_day_of_employment) },
+    { name: F.s2_employer_signature,        value: f.s2_employer_signature_name },
+    { name: F.s2_employer_signature_name,   value: f.s2_employer_signature_name },
+    { name: F.s2_employer_business_name,    value: f.s2_employer_business_name },
+    { name: F.s2_employer_business_address, value: f.s2_employer_business_address },
+  );
 
   const dropdowns: PdfFieldValues['dropdowns'] = [
     { name: F.state, value: f.state },

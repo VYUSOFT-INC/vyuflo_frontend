@@ -137,10 +137,11 @@ export default function MyFormsPage() {
           {cards.map((c, i) => (
             <FormCardView key={`${c.id}-${c.application_id}-${i}`} card={c}
               onOpen={() => navigate(
-                // I-9 uses the split PDF editor; I-983 uses the form-first editor
+                // Both I-9 and I-983 use the split PDF editor (real form
+                // on the left, editable fields on the right).
                 c.id === 'i9'
                   ? `/employee/forms/i9/${c.application_id}/pdf`
-                  : `/employee/forms/${c.id}/${c.application_id}`,
+                  : `/employee/forms/i983/${c.application_id}/pdf`,
               )} />
           ))}
         </div>

@@ -1,37 +1,45 @@
-// src/pages/employee/I9SplitEditorPage.tsx
+// src/pages/employee/I983SplitEditorPage.tsx
 //
-// Split-pane I-9 editor. Left = the real USCIS Form I-9 (all 4 pages,
-// rendered in the browser's native PDF viewer via iframe). Right =
-// editable Section 1 fields. Every keystroke on the right updates the
-// underlying AcroForm via pdf-lib and refreshes the iframe blob URL, so
-// the PDF preview stays in sync in real time.
+// Split-pane I-983 editor — same UX as the I-9 split editor. Left pane
+// shows the real ICE Form I-983 (all 5 pages, rendered in the browser's
+// native PDF viewer via iframe). Right pane exposes only the student-
+// fillable sections:
+//   • Section 1 — Student Information
+//   • Section 2 — Student Certification (typed signature)
 //
-// Only Section 1 (employee-facing) is exposed as editable per USCIS
-// anti-discrimination rules. Section 2 remains blank in the PDF — the
-// attorney fills it later.
+// Employer + DSO sections stay blank in the preview and are filled later
+// by HR/attorney/DSO through their own flows.
+//
+// Behavioural notes (kept in sync with I9SplitEditorPage):
+//   • Typing does NOT auto-regen the PDF — Chrome's built-in PDF viewer
+//     resets scroll on every blob-URL swap and there's no reliable way to
+//     preserve position. User types freely and clicks 🔄 Sync PDF when
+//     they want to see the values applied. Save / Submit / Download
+//     auto-sync so the persisted PDF is always up-to-date.
+//   • Double-buffered iframes (two stacked, opacity swap on load) hide
+//     the black flash that Chrome shows during a fresh iframe load.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { PDFDocument } from 'pdf-lib';
 import type {
-  I9FormData, I9FormRecord, CitizenshipStatus, AuthorizedAlienKey,
-} from '../../types/employee/i9.types';
+  I983FormData, I983FormRecord,
+} from '../../types/employee/i983.types';
 import {
-  EMPTY_I9, CITIZENSHIP_LABEL, US_STATES,
-  isReadyToSubmit,
-} from '../../types/employee/i9.types';
-import { loadOrCreateI9, saveI9Draft, submitI9 } from '../../api/employee/i9Form.api';
-import { buildPdfFieldValues } from './i9PdfFieldMap';
+  EMPTY_I983, DEGREE_LEVELS, isI983ReadyToSubmit,
+} from '../../types/employee/i983.types';
+import { loadOrCreateI983, saveI983Draft, submitI983 } from '../../api/employee/i983Form.api';
+import { buildPdfFieldValues } from './i983PdfFieldMap';
 
-/** Path (public folder) to the master I-9 PDF. */
-const I9_PDF_PATH = '/i9.pdf';
+/** Path (public folder) to the master I-983 PDF. */
+const I983_PDF_PATH = '/i983.pdf';
 
-export default function I9SplitEditorPage() {
+export default function I983SplitEditorPage() {
   const { applicationId = '' } = useParams<{ applicationId: string }>();
   const navigate = useNavigate();
 
-  const [record,     setRecord]     = useState<I9FormRecord | null>(null);
-  const [form,       setForm]       = useState<I9FormData>(EMPTY_I9);
+  const [record,     setRecord]     = useState<I983FormRecord | null>(null);
+  const [form,       setForm]       = useState<I983FormData>(EMPTY_I983);
   const [loading,    setLoading]    = useState(true);
   const [saving,     setSaving]     = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -42,17 +50,13 @@ export default function I9SplitEditorPage() {
   const templateRef            = useRef<ArrayBuffer | null>(null);
   const [pdfError, setPdfError] = useState<string | null>(null);
 
-  // Double-buffered blob URLs — two iframes stacked. New PDF loads into
-  // the hidden one; when its onLoad fires we flip z-index so the visible
-  // PDF never blanks out on regeneration.
+  // Double-buffered blob URLs
   const [urlA,      setUrlA]      = useState<string | null>(null);
   const [urlB,      setUrlB]      = useState<string | null>(null);
-  const [activeIdx, setActiveIdx] = useState<0 | 1>(0);   // 0 = A visible, 1 = B visible
+  const [activeIdx, setActiveIdx] = useState<0 | 1>(0);
   const pendingIdxRef = useRef<0 | 1 | null>(null);
   const iframeARef    = useRef<HTMLIFrameElement>(null);
   const iframeBRef    = useRef<HTMLIFrameElement>(null);
-  // Remember scroll position + PDF viewer hash so the newly-visible
-  // iframe opens at the same place the user was reading.
   const scrollYRef    = useRef<number>(0);
   const hashRef       = useRef<string>('');
   const pdfUrl = activeIdx === 0 ? urlA : urlB;
@@ -62,20 +66,16 @@ export default function I9SplitEditorPage() {
     let cancelled = false;
     (async () => {
       try {
-        // 1. Load our persisted record (or a fresh blank).
-        //    Older localStorage drafts may be missing recently-added fields
-        //    (e.g. auth_key), which would blow up isBaseSectionComplete() the
-        //    moment it dereferences `f.last_name`. Merge with EMPTY_I9 so
-        //    every key exists.
-        const rec = await loadOrCreateI9(applicationId || 'no-app');
+        const rec = await loadOrCreateI983(applicationId || 'no-app');
         if (cancelled) return;
-        const safeData = { ...EMPTY_I9, ...(rec.data ?? {}) };
+        // Merge with EMPTY_I983 so newly-added fields on older drafts
+        // never crash the validation helpers.
+        const safeData = { ...EMPTY_I983, ...(rec.data ?? {}) };
         setRecord({ ...rec, data: safeData });
         setForm(safeData);
 
-        // 2. Fetch the PDF template ONCE
-        const res = await fetch(I9_PDF_PATH);
-        if (!res.ok) throw new Error(`Could not fetch I-9 template (${res.status})`);
+        const res = await fetch(I983_PDF_PATH);
+        if (!res.ok) throw new Error(`Could not fetch I-983 template (${res.status})`);
         const buf = await res.arrayBuffer();
         if (cancelled) return;
         templateRef.current = buf;
@@ -89,21 +89,26 @@ export default function I9SplitEditorPage() {
     return () => { cancelled = true; };
   }, [applicationId]);
 
-  // ── Regenerate the filled PDF on demand ─────────────────────────────
+  // ── Regenerate the filled PDF ───────────────────────────────────────
   const activeIdxRef = useRef<0 | 1>(0);
   useEffect(() => { activeIdxRef.current = activeIdx; }, [activeIdx]);
 
-  const regenerate = useCallback(async (values: I9FormData) => {
+  const regenerate = useCallback(async (values: I983FormData) => {
     if (!templateRef.current) return;
     try {
-      // pdf-lib mutates the loaded doc — reload a fresh copy each time
-      const bytes = templateRef.current.slice(0);
+      const bytes  = templateRef.current.slice(0);
       const pdfDoc = await PDFDocument.load(bytes);
       const pdfForm = pdfDoc.getForm();
       const { texts, checkboxes, dropdowns } = buildPdfFieldValues(values);
 
       for (const t of texts) {
-        try { pdfForm.getTextField(t.name).setText(t.value || ''); } catch { /* field absent */ }
+        try {
+          const tf = pdfForm.getTextField(t.name);
+          tf.setText(t.value || '');
+          // Force a fixed font size — the I-983 template has several big
+          // text-area fields (Section 5) that render at 30-40pt on auto-size.
+          try { tf.setFontSize(9); } catch { /* not all fields accept it */ }
+        } catch { /* field absent */ }
       }
       for (const c of checkboxes) {
         try { const cb = pdfForm.getCheckBox(c.name); c.checked ? cb.check() : cb.uncheck(); } catch { /* absent */ }
@@ -118,9 +123,6 @@ export default function I9SplitEditorPage() {
       const blob = new Blob([out as unknown as BlobPart], { type: 'application/pdf' });
       const url  = URL.createObjectURL(blob);
 
-      // Snapshot the visible iframe's scroll + PDF viewer hash so we can
-      // restore them on the newly-loaded buffer — this stops the "PDF
-      // jumps back to Section 1" behaviour on every keystroke.
       const currentRef = activeIdxRef.current === 0 ? iframeARef : iframeBRef;
       try {
         const cw = currentRef.current?.contentWindow;
@@ -141,7 +143,7 @@ export default function I9SplitEditorPage() {
       }
     } catch (e) {
       // eslint-disable-next-line no-console
-      console.error('[i9 split editor] fill failed', e);
+      console.error('[i983 split editor] fill failed', e);
     }
   }, []);
 
@@ -152,13 +154,8 @@ export default function I9SplitEditorPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading]);
 
-  // No live regen on typing. Chrome's PDF viewer resets scroll on every
-  // blob-URL swap and ignores scrollTo, so live updates kick the user
-  // back to page 1 each keystroke. User types freely and clicks 🔄 Sync
-  // PDF (or Save/Download) to refresh the preview on demand.
+  // No live regen on typing — manual Sync button + Save/Submit/Download trigger.
 
-  // Flip the visible iframe once the hidden one finishes loading, then
-  // restore the previously-captured scroll position on the new buffer.
   const handleIframeLoad = useCallback((idx: 0 | 1) => {
     if (pendingIdxRef.current !== idx) return;
     setActiveIdx(idx);
@@ -174,7 +171,6 @@ export default function I9SplitEditorPage() {
     });
   }, []);
 
-  // Cleanup both blobs on unmount
   useEffect(() => () => {
     if (urlA) URL.revokeObjectURL(urlA);
     if (urlB) URL.revokeObjectURL(urlB);
@@ -183,20 +179,20 @@ export default function I9SplitEditorPage() {
 
   // ── Backend save (debounced) ────────────────────────────────────────
   const saveTimer = useRef<number | null>(null);
-  const scheduleSave = useCallback((next: I9FormData) => {
+  const scheduleSave = useCallback((next: I983FormData) => {
     if (!record || record.status === 'submitted') return;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(async () => {
       setSaving(true);
       try {
-        const u = await saveI9Draft(record, next);
+        const u = await saveI983Draft(record, next);
         setRecord(u); setSavedAt(new Date().toLocaleTimeString());
       } catch { /* local draft still safe */ }
       finally { setSaving(false); }
     }, 1200);
   }, [record]);
 
-  const patch = (p: Partial<I9FormData>) => setForm((f) => {
+  const patch = (p: Partial<I983FormData>) => setForm((f) => {
     const next = { ...f, ...p };
     scheduleSave(next);
     return next;
@@ -214,7 +210,7 @@ export default function I9SplitEditorPage() {
     if (!record) return;
     setSaving(true); setError(null);
     try {
-      const u = await saveI9Draft(record, form);
+      const u = await saveI983Draft(record, form);
       setRecord(u); setSavedAt(new Date().toLocaleTimeString());
       await regenerate(form);
     } catch (e) { setError(e instanceof Error ? e.message : 'Save failed.'); }
@@ -223,14 +219,16 @@ export default function I9SplitEditorPage() {
 
   const handleSubmit = async () => {
     if (!record) return;
-    if (!isReadyToSubmit(form)) { setError('Please complete every required field, choose citizenship, and type your signature.'); return; }
+    if (!isI983ReadyToSubmit(form)) {
+      setError('Please complete every required field in Section 1 and type your signature.'); return;
+    }
     setSubmitting(true); setError(null);
     try {
-      const finalForm: I9FormData = {
+      const finalForm: I983FormData = {
         ...form,
-        signature_date: form.signature_date || new Date().toISOString().slice(0, 10),
+        student_signature_date: form.student_signature_date || new Date().toISOString().slice(0, 10),
       };
-      const u = await submitI9(record, finalForm);
+      const u = await submitI983(record, finalForm);
       setRecord(u); setForm(finalForm);
       await regenerate(finalForm);
     } catch (e) { setError(e instanceof Error ? e.message : 'Submit failed.'); }
@@ -243,14 +241,14 @@ export default function I9SplitEditorPage() {
     if (!pdfUrl) return;
     const a = document.createElement('a');
     a.href = pdfUrl;
-    a.download = `Form-I-9-${form.last_name || 'draft'}.pdf`;
+    a.download = `Form-I-983-${form.student_surname || 'draft'}.pdf`;
     a.click();
   };
 
   const isLocked = record?.status === 'submitted';
   const previewLoaded = !!pdfUrl;
 
-  if (loading) return <div className="p-10 text-center text-sm text-gray-500">Loading Form I-9…</div>;
+  if (loading) return <div className="p-10 text-center text-sm text-gray-500">Loading Form I-983…</div>;
 
   // ────────────────────────────────────────────────────────────────────
   return (
@@ -261,8 +259,8 @@ export default function I9SplitEditorPage() {
           <button onClick={() => navigate('/my-forms')}
             className="text-sm font-semibold text-indigo-600 hover:text-indigo-800">← My Forms</button>
           <div>
-            <p className="text-sm font-bold text-gray-900">Form I-9 — Section 1</p>
-            <p className="text-[11px] text-gray-500">Employment Eligibility Verification</p>
+            <p className="text-sm font-bold text-gray-900">Form I-983 — Student Sections</p>
+            <p className="text-[11px] text-gray-500">STEM OPT Training Plan · Sections 1 &amp; 2</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -281,9 +279,9 @@ export default function I9SplitEditorPage() {
             {saving ? 'Saving…' : '💾 Save'}
           </button>
           {!isLocked && (
-            <button onClick={handleSubmit} disabled={submitting || !isReadyToSubmit(form)}
+            <button onClick={handleSubmit} disabled={submitting || !isI983ReadyToSubmit(form)}
               className="rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50">
-              {submitting ? 'Submitting…' : '✓ Submit I-9'}
+              {submitting ? 'Submitting…' : '✓ Submit I-983'}
             </button>
           )}
         </div>
@@ -291,15 +289,14 @@ export default function I9SplitEditorPage() {
 
       {/* Split body */}
       <div className="flex flex-1 min-h-0 flex-col md:flex-row">
-        {/* LEFT — PDF preview (double-buffered: hidden iframe loads next
-             version, then z-index flips so visible iframe never blanks) */}
+        {/* LEFT — PDF preview */}
         <div className="relative flex-1 min-w-0 bg-slate-200 md:border-r md:border-gray-300">
           {pdfError ? (
             <div className="flex h-full items-center justify-center p-6 text-center">
               <div>
-                <p className="text-sm font-semibold text-red-700">⚠ Could not load the I-9 template</p>
+                <p className="text-sm font-semibold text-red-700">⚠ Could not load the I-983 template</p>
                 <p className="mt-1 text-xs text-gray-600">{pdfError}</p>
-                <p className="mt-2 text-[11px] text-gray-500">Verify <code>/public/i9.pdf</code> exists.</p>
+                <p className="mt-2 text-[11px] text-gray-500">Verify <code>/public/i983.pdf</code> exists.</p>
               </div>
             </div>
           ) : !urlA && !urlB ? (
@@ -310,7 +307,7 @@ export default function I9SplitEditorPage() {
             <>
               <iframe
                 ref={iframeARef}
-                title="Form I-9 preview A"
+                title="Form I-983 preview A"
                 src={urlA ? `${urlA}${hashRef.current || '#toolbar=1&navpanes=0&view=FitH'}` : 'about:blank'}
                 onLoad={() => handleIframeLoad(0)}
                 className="absolute inset-0 h-full w-full"
@@ -318,7 +315,7 @@ export default function I9SplitEditorPage() {
               />
               <iframe
                 ref={iframeBRef}
-                title="Form I-9 preview B"
+                title="Form I-983 preview B"
                 src={urlB ? `${urlB}${hashRef.current || '#toolbar=1&navpanes=0&view=FitH'}` : 'about:blank'}
                 onLoad={() => handleIframeLoad(1)}
                 className="absolute inset-0 h-full w-full"
@@ -336,117 +333,119 @@ export default function I9SplitEditorPage() {
             </div>
           )}
 
-          <Group title="Personal Information">
+          {/* Section 1 */}
+          <Group title="Section 1 · Student Information">
             <Row2>
-              <F label="Last Name" required><T v={form.last_name} on={(v) => patch({ last_name: v })} d={isLocked} /></F>
-              <F label="First Name" required><T v={form.first_name} on={(v) => patch({ first_name: v })} d={isLocked} /></F>
+              <F label="Surname / Primary Name" required>
+                <T v={form.student_surname} on={(v) => patch({ student_surname: v })} d={isLocked} />
+              </F>
+              <F label="Given Name" required>
+                <T v={form.student_given_name} on={(v) => patch({ student_given_name: v })} d={isLocked} />
+              </F>
             </Row2>
+            <F label="Student Email" required>
+              <T v={form.student_email} on={(v) => patch({ student_email: v })} d={isLocked} placeholder="you@school.edu" />
+            </F>
+            <F label="Student SEVIS ID" required>
+              <T v={form.student_sevis_id} on={(v) => patch({ student_sevis_id: v })} d={isLocked} placeholder="N0001234567" />
+            </F>
+            <F label="Employment Authorization Number (EAD)" required>
+              <T v={form.employment_authorization_number} on={(v) => patch({ employment_authorization_number: v })} d={isLocked} />
+            </F>
+          </Group>
+
+          <Group title="School / DSO">
+            <F label="School Recommending STEM OPT" required>
+              <T v={form.school_recommending} on={(v) => patch({ school_recommending: v })} d={isLocked} />
+            </F>
+            <F label="School Where STEM Degree Was Earned" required>
+              <T v={form.school_stem_degree} on={(v) => patch({ school_stem_degree: v })} d={isLocked} />
+            </F>
+            <F label="SEVIS School Code (incl. 3-digit suffix)" required>
+              <T v={form.sevis_school_code} on={(v) => patch({ sevis_school_code: v })} d={isLocked} placeholder="ABC214F00123" />
+            </F>
+            <F label="DSO Name" required>
+              <T v={form.dso_name} on={(v) => patch({ dso_name: v })} d={isLocked} />
+            </F>
             <Row2>
-              <F label="Middle Initial"><T v={form.middle_initial} on={(v) => patch({ middle_initial: v.slice(0, 1) })} d={isLocked} placeholder="M" /></F>
-              <F label="Other Last Names"><T v={form.other_last_names} on={(v) => patch({ other_last_names: v })} d={isLocked} /></F>
+              <F label="DSO Email" required>
+                <T v={form.dso_email} on={(v) => patch({ dso_email: v })} d={isLocked} placeholder="dso@school.edu" />
+              </F>
+              <F label="DSO Phone">
+                <T v={form.dso_phone} on={(v) => patch({ dso_phone: v })} d={isLocked} placeholder="+1 555 000 1234" />
+              </F>
             </Row2>
           </Group>
 
-          <Group title="Address">
-            <F label="Street Address" required><T v={form.address} on={(v) => patch({ address: v })} d={isLocked} /></F>
+          <Group title="Degree Details">
+            <F label="Qualifying Major" required>
+              <T v={form.qualifying_major} on={(v) => patch({ qualifying_major: v })} d={isLocked} placeholder="Computer Science" />
+            </F>
             <Row2>
-              <F label="Apt. Number"><T v={form.apt_number} on={(v) => patch({ apt_number: v })} d={isLocked} /></F>
-              <F label="City" required><T v={form.city} on={(v) => patch({ city: v })} d={isLocked} /></F>
-            </Row2>
-            <Row2>
-              <F label="State" required>
-                <select value={form.state} onChange={(e) => patch({ state: e.target.value })} disabled={isLocked} className={selectCls(isLocked)}>
+              <F label="CIP Code">
+                <T v={form.cip_code} on={(v) => patch({ cip_code: v })} d={isLocked} placeholder="11.0701" />
+              </F>
+              <F label="Degree Level" required>
+                <select value={form.degree_level_type}
+                  onChange={(e) => patch({ degree_level_type: e.target.value })}
+                  disabled={isLocked} className={selectCls(isLocked)}>
                   <option value="">— Select —</option>
-                  {US_STATES.map((s) => <option key={s.code} value={s.code}>{s.code}</option>)}
+                  {DEGREE_LEVELS.map((d) => <option key={d} value={d}>{d}</option>)}
                 </select>
               </F>
-              <F label="ZIP Code" required><T v={form.zip_code} on={(v) => patch({ zip_code: v.replace(/[^0-9-]/g, '') })} d={isLocked} placeholder="12345" /></F>
+            </Row2>
+            <F label="Date Awarded">
+              <input type="date" value={form.degree_date_awarded}
+                onChange={(e) => patch({ degree_date_awarded: e.target.value })}
+                disabled={isLocked} className={inputCls(isLocked)} />
+            </F>
+            <F label="Is this STEM OPT based on a prior degree?">
+              <div className="flex gap-4 pt-1">
+                {(['yes', 'no'] as const).map((v) => (
+                  <label key={v} className="flex items-center gap-1.5 text-xs text-gray-700">
+                    <input type="radio" name="prior" value={v}
+                      checked={form.based_on_prior_degree === v}
+                      onChange={() => patch({ based_on_prior_degree: v })}
+                      disabled={isLocked}
+                      className="h-3.5 w-3.5 text-indigo-600 focus:ring-indigo-500" />
+                    <span className="capitalize">{v}</span>
+                  </label>
+                ))}
+              </div>
+            </F>
+          </Group>
+
+          <Group title="STEM OPT Requested Period">
+            <Row2>
+              <F label="From" required>
+                <input type="date" value={form.stem_opt_from}
+                  onChange={(e) => patch({ stem_opt_from: e.target.value })}
+                  disabled={isLocked} className={inputCls(isLocked)} />
+              </F>
+              <F label="To" required>
+                <input type="date" value={form.stem_opt_to}
+                  onChange={(e) => patch({ stem_opt_to: e.target.value })}
+                  disabled={isLocked} className={inputCls(isLocked)} />
+              </F>
             </Row2>
           </Group>
 
-          <Group title="Contact & ID">
-            <F label="Date of Birth" required>
-              <input type="date" value={form.date_of_birth} onChange={(e) => patch({ date_of_birth: e.target.value })} disabled={isLocked} className={inputCls(isLocked)} />
-            </F>
-            <F label="U.S. Social Security Number"><T v={form.ssn} on={(v) => patch({ ssn: v })} d={isLocked} placeholder="123-45-6789" /></F>
-            <F label="Email" required><T v={form.email} on={(v) => patch({ email: v })} d={isLocked} placeholder="you@company.com" /></F>
-            <F label="Phone"><T v={form.phone} on={(v) => patch({ phone: v })} d={isLocked} placeholder="+1 555 000 1234" /></F>
-          </Group>
-
-          <Group title="Citizenship / Immigration Status">
-            {(['1', '2', '3', '4'] as CitizenshipStatus[]).map((k) => (
-              <label key={k}
-                className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2 transition ${
-                  form.citizenship_status === k
-                    ? 'border-indigo-500 bg-indigo-50/50 ring-2 ring-indigo-200'
-                    : 'border-gray-200 bg-white hover:border-indigo-300'
-                } ${isLocked ? 'cursor-default opacity-70' : ''}`}
-              >
-                <input type="radio" name="c" value={k} checked={form.citizenship_status === k}
-                  onChange={() => patch({ citizenship_status: k })} disabled={isLocked}
-                  className="mt-0.5 h-4 w-4 text-indigo-600 focus:ring-indigo-500" />
-                <div className="flex-1">
-                  <p className="text-xs font-medium text-gray-900">{k}. {CITIZENSHIP_LABEL[k]}</p>
-
-                  {k === '3' && form.citizenship_status === '3' && (
-                    <div className="mt-2">
-                      <F label="USCIS A-Number" required><T v={form.lpr_uscis_a_number} on={(v) => patch({ lpr_uscis_a_number: v })} d={isLocked} placeholder="A123456789" /></F>
-                    </div>
-                  )}
-
-                  {k === '4' && form.citizenship_status === '4' && (
-                    <div className="mt-2 space-y-2">
-                      <F label="Authorized until" required>
-                        <input type="date" value={form.work_authorized_until} onChange={(e) => patch({ work_authorized_until: e.target.value })} disabled={isLocked} className={inputCls(isLocked)} />
-                      </F>
-                      <p className="text-[10px] font-semibold text-gray-700">Provide ONE identifier <span className="text-red-500">*</span></p>
-                      {(['uscis_a_number', 'i94_admission_number', 'foreign_passport'] as AuthorizedAlienKey[]).map((ak) => {
-                        const labels = {
-                          uscis_a_number:        'USCIS A-Number',
-                          i94_admission_number:  'Form I-94 Admission Number',
-                          foreign_passport:      'Foreign Passport + Country',
-                        } as const;
-                        return (
-                          <div key={ak} className={`rounded-md border p-2 ${form.auth_key === ak ? 'border-indigo-400 bg-white' : 'border-gray-200 bg-gray-50'}`}>
-                            <label className="flex cursor-pointer items-center gap-2">
-                              <input type="radio" name="ak" value={ak} checked={form.auth_key === ak}
-                                onChange={() => patch({ auth_key: ak })} disabled={isLocked}
-                                className="h-3.5 w-3.5 text-indigo-600 focus:ring-indigo-500" />
-                              <span className="text-[11px] font-medium text-gray-800">{labels[ak]}</span>
-                            </label>
-                            {form.auth_key === ak && (
-                              <div className="mt-2 pl-5">
-                                {ak === 'uscis_a_number' && <T v={form.auth_uscis_a_number} on={(v) => patch({ auth_uscis_a_number: v })} d={isLocked} placeholder="A123456789" />}
-                                {ak === 'i94_admission_number' && <T v={form.auth_i94_number} on={(v) => patch({ auth_i94_number: v })} d={isLocked} placeholder="11-digit I-94" />}
-                                {ak === 'foreign_passport' && (
-                                  <div className="grid grid-cols-2 gap-2">
-                                    <T v={form.auth_passport_number} on={(v) => patch({ auth_passport_number: v })} d={isLocked} placeholder="Passport #" />
-                                    <T v={form.auth_passport_country} on={(v) => patch({ auth_passport_country: v })} d={isLocked} placeholder="Country" />
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </label>
-            ))}
-          </Group>
-
-          <Group title="Signature">
-            <F label="Type your full legal name" required>
-              <T v={form.signature_typed_name} on={(v) => patch({ signature_typed_name: v })} d={isLocked} placeholder="e.g. Gowtham Laveti" />
-            </F>
-            <F label="Today's Date">
-              <input readOnly value={new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                className={inputCls(true)} />
-            </F>
+          {/* Section 2 */}
+          <Group title="Section 2 · Student Certification">
             <p className="rounded-lg border border-amber-200 bg-amber-50/60 p-2 text-[10px] text-amber-800">
-              ⚠ Federal law provides penalties for false statements. By typing your name, you attest under penalty of perjury.
+              ⚠ By typing your name you certify, under penalty of perjury, that the information provided in Section 1 is true and correct.
             </p>
+            <F label="Printed name of student" required>
+              <T v={form.student_signature_typed_name}
+                on={(v) => patch({ student_signature_typed_name: v })}
+                d={isLocked} placeholder="e.g. Gowtham Laveti" />
+            </F>
+            <F label="Signature date">
+              <input type="date"
+                value={form.student_signature_date}
+                onChange={(e) => patch({ student_signature_date: e.target.value })}
+                disabled={isLocked} className={inputCls(isLocked)} />
+            </F>
           </Group>
 
           {error && (
@@ -493,4 +492,3 @@ function StatusBadge({ status, savedAt, saving }: { status: 'draft' | 'submitted
   if (status === 'submitted') return <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">✓ Submitted</span>;
   return <span className="text-[11px] text-gray-500">{saving ? '💾 Saving…' : savedAt ? `Saved ${savedAt}` : 'Draft'}</span>;
 }
-
