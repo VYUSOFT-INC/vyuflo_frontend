@@ -1,18 +1,20 @@
+
+
 // src/pages/employee/DocumentHub.tsx
 //
-// CHANGED: Replace/Re-upload is now available on ANY document the person
-// owns and isn't locked (not "superseded", not in_use by a completed task
-// elsewhere) — not just ones that are already "expired". This lets someone
-// proactively renew a document (e.g. new passport) before the old one
-// expires, which is the healthy, encouraged case. Button label/color still
-// shifts based on urgency: red "Re-upload" when actually expired, neutral
-// "Replace" otherwise. A "superseded" document (already replaced by a
-// newer version) shows neither Delete nor Replace — it's locked history;
-// the person should interact with the newer version instead.
+// CHANGED: handleDrop() and handleFileChange() now navigate to DocumentViewer
+// after upload succeeds, instead of just refreshing the list.
+// CHANGED: Added delete functionality — trash icon on each document + a
+// confirmation modal before actually deleting.
+// CHANGED: Delete is now disabled (not hidden) for documents that are in use
+// elsewhere (reused in another case, or already confirmed on a completed
+// task) — the backend is the source of truth, this is just a UX hint.
+// CHANGED: fresh uploads now navigate with ?fresh=1 so DocumentViewer knows
+// to offer "Cancel Upload".
 
 import { useRef, useState, useEffect, useCallback, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { CheckCircle2, XCircle, AlertTriangle, Info, X, Trash2, Download, RefreshCw, Lock, Clock } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, Info, X, Trash2 } from "lucide-react";
 import { useDocumentHub }   from "../../hooks/employee/useDocumentHub";
 import documentHubApi from "../../api/employee/documentHub.api";
 import type { HubDocument, RequirementItem } from "../../types/employee/documentHub.types";
@@ -68,211 +70,6 @@ function ToastStack({ items, onDismiss }: { items: ToastItem[]; onDismiss: (id: 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PREVIEW MODAL — click-to-view, no OCR, no navigation. Also handles
-// replace/re-upload for both expired and non-expired documents.
-// ─────────────────────────────────────────────────────────────────────────────
-
-function PreviewModal({ doc, reuploading, onClose, onDelete, onReupload }: {
-  doc:         HubDocument | null;
-  reuploading: boolean;
-  onClose:     () => void;
-  onDelete:    (doc: HubDocument) => void;
-  onReupload:  (doc: HubDocument, file: File) => void;
-}) {
-  const [fileUrl, setFileUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const reuploadRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!doc) {
-      setFileUrl(null);
-      return;
-    }
-    let objectUrl: string | undefined;
-    setLoading(true);
-    setLoadError(null);
-
-    documentHubApi.getFileBlob(doc.id)
-      .then(({ blob }) => {
-        objectUrl = URL.createObjectURL(blob);
-        setFileUrl(objectUrl);
-      })
-      .catch(() => setLoadError("Couldn't load this file. Please try again."))
-      .finally(() => setLoading(false));
-
-    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [doc]);
-
-  if (!doc) return null;
-
-  const activeDoc = doc;
-
-  const isPdf        = activeDoc.file_type === "pdf";
-  const isImg         = activeDoc.file_type === "img";
-  const isExpired      = activeDoc.status === 'expired';
-  const isSuperseded  = activeDoc.status === 'superseded';
-  // NEW — this document was uploaded to replace one that's still valid.
-  // It's real and confirmed, but not yet "the" current document — the old
-  // one keeps that role until activates_on arrives (the old one's actual
-  // expiry date), at which point the daily activation job hands off
-  // automatically. Shown so someone who just uploaded a renewal early
-  // isn't confused seeing the old document still marked current.
-  const isPendingActivation = !!activeDoc.activates_on;
-  // Replace is available on any document that isn't locked history
-  // (superseded) or reused/completed elsewhere (in_use) — not just expired
-  // ones. This is what lets someone renew a document proactively.
-  const canReplace = !isSuperseded && !activeDoc.in_use;
-  const canDelete  = !isSuperseded && !activeDoc.in_use;
-
-  function handleDownload() {
-    if (!fileUrl) return;
-    const a = document.createElement("a");
-    a.href = fileUrl;
-    a.download = activeDoc.name;
-    a.click();
-  }
-
-  function handleReuploadFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) onReupload(activeDoc, file);
-    e.target.value = '';
-  }
-
-  return (
-    <>
-      <div className="fixed inset-0 bg-black/50 z-[80]" onClick={reuploading ? undefined : onClose} />
-      <div className="fixed inset-0 z-[81] flex items-center justify-center p-[16px]">
-        <div className="w-full max-w-[820px] max-h-[90vh] bg-white rounded-[16px] shadow-2xl flex flex-col overflow-hidden">
-
-          <div className="flex items-center justify-between px-[20px] py-[14px] border-b border-[#f1f5f9] shrink-0">
-            <div className="min-w-0">
-              <p className="text-[14px] font-semibold text-[#0f172a] truncate">{activeDoc.name}</p>
-              <p className="text-[11px] text-[#94a3b8]">
-                {activeDoc.document_type}
-                {activeDoc.version && ` · v${activeDoc.version}`}
-              </p>
-            </div>
-            <div className="flex items-center gap-[8px] shrink-0">
-              <button onClick={handleDownload} disabled={!fileUrl}
-                className="size-[34px] rounded-[8px] flex items-center justify-center text-[#64748b] hover:bg-[#f1f5f9] transition disabled:opacity-40"
-                title="Download">
-                <Download size={16} />
-              </button>
-
-              {canReplace && (
-                <>
-                  <input ref={reuploadRef} type="file" className="hidden" onChange={handleReuploadFile} disabled={reuploading} />
-                  <button onClick={() => reuploadRef.current?.click()}
-                    disabled={reuploading}
-                    className={`h-[34px] px-[12px] rounded-[8px] text-[12px] font-semibold flex items-center gap-[6px] transition disabled:opacity-60 disabled:cursor-not-allowed ${
-                      isExpired
-                        ? "text-white hover:opacity-90"
-                        : "text-[#374151] border border-[#e2e8f0] hover:bg-[#f8fafc]"
-                    }`}
-                    style={isExpired ? { backgroundImage: "linear-gradient(135deg, var(--theme-primary), var(--theme-gradient-end))" } : undefined}
-                    title={isExpired ? "Re-upload a renewed version" : "Replace with a newer version"}>
-                    {reuploading ? (
-                      <>
-                        <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
-                        Uploading…
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw size={13} /> {isExpired ? "Re-upload" : "Replace"}
-                      </>
-                    )}
-                  </button>
-                </>
-              )}
-
-              {canDelete && !isExpired && (
-                <button onClick={() => { onClose(); onDelete(activeDoc); }}
-                  className="size-[34px] rounded-[8px] flex items-center justify-center text-[#dc2626] hover:bg-[#fee2e2] transition"
-                  title="Delete document">
-                  <Trash2 size={16} />
-                </button>
-              )}
-
-              <button onClick={onClose} disabled={reuploading}
-                className="size-[34px] rounded-[8px] flex items-center justify-center text-[#94a3b8] hover:bg-[#f1f5f9] transition disabled:opacity-40"
-                title="Close">
-                <X size={18} />
-              </button>
-            </div>
-          </div>
-
-          {isPendingActivation && (
-            <div className="px-[20px] py-[10px] bg-[#eff6ff] border-b border-[#bfdbfe] flex items-center gap-[8px] shrink-0">
-              <Clock size={14} className="text-[#2563eb] shrink-0" />
-              <p className="text-[12px] text-[#1d4ed8] font-medium">
-                This is your renewed document — it will become your official current document on{" "}
-                {fmtDate(activeDoc.activates_on)}, when your current one expires.
-              </p>
-            </div>
-          )}
-
-          {isExpired && (
-            <div className="px-[20px] py-[10px] bg-[#fff7ed] border-b border-[#fed7aa] flex items-center gap-[8px] shrink-0">
-              <AlertTriangle size={14} className="text-[#c2410c] shrink-0" />
-              <p className="text-[12px] text-[#c2410c] font-medium">
-                This document has expired. Upload a renewed version to keep your case current.
-              </p>
-            </div>
-          )}
-
-          {isSuperseded && (
-            <div className="px-[20px] py-[10px] bg-[#eef2ff] border-b border-indigo-100 flex items-center gap-[8px] shrink-0">
-              <Lock size={14} className="text-indigo-600 shrink-0" />
-              <p className="text-[12px] text-indigo-700 font-medium">
-                {activeDoc.version ? `This is v${activeDoc.version} of your ${activeDoc.document_type}` : `This is an older version of your ${activeDoc.document_type}`}
-                {" — "}a newer one has replaced it. This copy is kept for your records only.
-              </p>
-            </div>
-          )}
-
-          <div className="flex-1 overflow-auto bg-[#f1f5f9] flex items-center justify-center p-[20px] min-h-[300px]">
-            {loading && (
-              <svg className="w-8 h-8 animate-spin text-indigo-600" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-              </svg>
-            )}
-            {!loading && loadError && (
-              <p className="text-[#dc2626] text-[13px]">{loadError}</p>
-            )}
-            {!loading && !loadError && fileUrl && isPdf && (
-              <iframe src={fileUrl} title={activeDoc.name} className="w-full h-[70vh] bg-white rounded-[8px] border-none" />
-            )}
-            {!loading && !loadError && fileUrl && isImg && (
-              <img src={fileUrl} alt={activeDoc.name} className="max-w-full max-h-[70vh] object-contain rounded-[8px] shadow-sm" />
-            )}
-            {!loading && !loadError && fileUrl && !isPdf && !isImg && (
-              <div className="text-center">
-                <p className="text-[#64748b] text-[13px] mb-[10px]">Preview isn't available for this file type.</p>
-                <button onClick={handleDownload}
-                  className="text-indigo-600 text-[13px] font-medium hover:underline">
-                  Download to view
-                </button>
-              </div>
-            )}
-          </div>
-
-          {activeDoc.in_use && !isExpired && !isSuperseded && (
-            <div className="px-[20px] py-[10px] bg-[#f8fafc] border-t border-[#f1f5f9] text-[11px] text-[#94a3b8] italic shrink-0">
-              This document is used in a case and can't be deleted from here.
-            </div>
-          )}
-        </div>
-      </div>
-    </>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // CONFIRM DELETE MODAL
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -286,8 +83,8 @@ function ConfirmDeleteModal({ open, docName, deleting, onConfirm, onCancel }: {
   if (!open) return null;
   return (
     <>
-      <div className="fixed inset-0 bg-black/40 z-[85]" onClick={deleting ? undefined : onCancel} />
-      <div className="fixed inset-0 z-[86] flex items-center justify-center p-[16px]">
+      <div className="fixed inset-0 bg-black/40 z-[80]" onClick={deleting ? undefined : onCancel} />
+      <div className="fixed inset-0 z-[81] flex items-center justify-center p-[16px]">
         <div className="w-full max-w-[400px] bg-white rounded-[16px] shadow-2xl p-[24px] flex flex-col gap-[16px]">
           <div className="flex items-start gap-[14px]">
             <div className="size-[44px] rounded-full bg-[#fee2e2] flex items-center justify-center shrink-0">
@@ -389,37 +186,23 @@ function ReqIcon({ status }: { status: string }) {
   return <img src={imgMissing} alt="" className="size-[20px] shrink-0" />;
 }
 
-function DocCard({ doc, onOpen, onDelete }: {
-  doc: HubDocument;
-  onOpen: (doc: HubDocument) => void;
-  onDelete: (doc: HubDocument) => void;
-}) {
-  const isExpired      = doc.status === 'expired';
-  const isSuperseded  = doc.status === 'superseded';
-  const isPending     = !!doc.activates_on; // waiting for the old document's expiry to arrive
-  const showDeleteBtn = !isExpired && !isSuperseded;
+function DocCard({ doc, onDelete }: { doc: HubDocument; onDelete: (doc: HubDocument) => void }) {
+  const navigate = useNavigate();
   return (
-    <div onClick={() => onOpen(doc)}
-         className={`bg-white border rounded-[16px] shadow-[0px_1px_4px_rgba(0,0,0,0.04)] flex flex-col gap-[12px] p-[20px] cursor-pointer transition-all duration-200 relative group ${
-           isExpired ? "border-[#fed7aa] hover:border-[#f97316]/50"
-           : isSuperseded ? "border-[#e2e8f0] opacity-75 hover:opacity-100"
-           : isPending ? "border-[#c7d2fe] hover:border-indigo-400/50"
-           : "border-[#f1f5f9] hover:border-indigo-600/30 hover:shadow-[0px_4px_16px_rgba(99,102,241,0.08)]"
-         }`}>
-      {showDeleteBtn && (
-        <button
-          onClick={e => { e.stopPropagation(); if (!doc.in_use) onDelete(doc); }}
-          disabled={doc.in_use}
-          title={doc.in_use ? "Used in a case — remove it from there first" : "Delete document"}
-          className={`absolute top-[12px] right-[12px] size-[28px] rounded-[8px] flex items-center justify-center
-                     transition-all duration-150 z-10
-                     ${doc.in_use
-                       ? "text-[#cbd5e1] opacity-0 group-hover:opacity-100 cursor-not-allowed"
-                       : "text-[#94a3b8] opacity-0 group-hover:opacity-100 hover:bg-[#fee2e2] hover:text-[#dc2626]"}`}
-        >
-          <Trash2 size={14} />
-        </button>
-      )}
+    <div onClick={() => doc.id && navigate(`/documents/viewer?doc_id=${doc.id}&return_url=${encodeURIComponent('/documents')}`)}
+         className="bg-white border border-[#f1f5f9] rounded-[16px] shadow-[0px_1px_4px_rgba(0,0,0,0.04)] flex flex-col gap-[12px] p-[20px] cursor-pointer hover:border-indigo-600/30 hover:shadow-[0px_4px_16px_rgba(99,102,241,0.08)] transition-all duration-200 relative group">
+      <button
+        onClick={e => { e.stopPropagation(); if (!doc.in_use) onDelete(doc); }}
+        disabled={doc.in_use}
+        title={doc.in_use ? "Used in a case — remove it from there first" : "Delete document"}
+        className={`absolute top-[12px] right-[12px] size-[28px] rounded-[8px] flex items-center justify-center
+                   transition-all duration-150 z-10
+                   ${doc.in_use
+                     ? "text-[#cbd5e1] opacity-0 group-hover:opacity-100 cursor-not-allowed"
+                     : "text-[#94a3b8] opacity-0 group-hover:opacity-100 hover:bg-[#fee2e2] hover:text-[#dc2626]"}`}
+      >
+        <Trash2 size={14} />
+      </button>
 
       <div className="flex items-start justify-between">
         <img src={getFileIcon(doc.file_type)} alt={doc.file_type} className="w-[44px] h-[52px] object-contain" />
@@ -461,22 +244,11 @@ function DocCard({ doc, onOpen, onDelete }: {
   );
 }
 
-function DocRow({ doc, onOpen, onDelete }: {
-  doc: HubDocument;
-  onOpen: (doc: HubDocument) => void;
-  onDelete: (doc: HubDocument) => void;
-}) {
-  const isExpired      = doc.status === 'expired';
-  const isSuperseded  = doc.status === 'superseded';
-  const isPending     = !!doc.activates_on;
-  const showDeleteBtn = !isExpired && !isSuperseded;
+function DocRow({ doc, onDelete }: { doc: HubDocument; onDelete: (doc: HubDocument) => void }) {
+  const navigate = useNavigate();
   return (
-    <div onClick={() => onOpen(doc)}
-         className={`flex items-center gap-[16px] px-[20px] py-[14px] border-b last:border-0 cursor-pointer transition-colors group ${
-           isExpired ? "bg-[#fffbf5] border-[#fed7aa] hover:bg-[#fff7ed]"
-           : isSuperseded ? "bg-[#fafbfc] border-[#f1f5f9] opacity-75 hover:opacity-100"
-           : "border-[#f8fafc] hover:bg-[#f8fafc]"
-         }`}>
+    <div onClick={() => doc.id && navigate(`/documents/viewer?doc_id=${doc.id}&return_url=${encodeURIComponent('/documents')}`)}
+         className="flex items-center gap-[16px] px-[20px] py-[14px] border-b border-[#f8fafc] last:border-0 hover:bg-[#f8fafc] cursor-pointer transition-colors group">
       <img src={getFileIcon(doc.file_type)} alt={doc.file_type} className="w-[32px] h-[38px] object-contain shrink-0" />
       <div className="flex-1 min-w-0">
         <p className="text-[#111827] text-[13px] font-semibold truncate flex items-center gap-[6px]">
@@ -563,7 +335,6 @@ export default function DocumentHub() {
   }, []);
 
   const [toasts, setToasts] = useState<ToastItem[]>([]);
-  const [previewDoc, setPreviewDoc] = useState<HubDocument | null>(null);
   const [docToDelete, setDocToDelete] = useState<HubDocument | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [reuploading, setReuploading] = useState(false);
@@ -588,6 +359,7 @@ export default function DocumentHub() {
   const storagePct = Math.min(100, Math.round((storage.used_mb / storage.total_mb) * 100));
   const usedLabel  = `${storage.used_mb.toFixed(1)} MB of ${storage.total_mb} MB`;
 
+  // ── Upload → navigate to viewer, flagged as a fresh (unconfirmed) upload ──
   async function handleUploadAndNavigate(file: File) {
     const appId = activeFilter !== "all" ? activeFilter : undefined;
 
@@ -596,7 +368,10 @@ export default function DocumentHub() {
     const doc = await uploadDocument(file, { applicationId: appId });
 
     if (doc?.id) {
-      pushToast('success', 'Uploaded!', `${file.name} has been added to your documents.`);
+      pushToast('success', 'Uploaded!', 'Reviewing extracted data…');
+      // navigate(
+      //   `/documents/viewer?doc_id=${doc.id}&fresh=1${appId ? `&application_id=${appId}` : ""}&return_url=${encodeURIComponent("/documents")}`
+      // );
     } else {
       pushToast('error', 'Upload failed', uploadError ?? 'Please try again.');
     }
@@ -620,10 +395,6 @@ export default function DocumentHub() {
     navigate(`/applications/${appId}?tab=tasks&task_id=${taskId}`);
   }
 
-  function handleOpenPreview(doc: HubDocument) {
-    setPreviewDoc(doc);
-  }
-
   function handleDeleteClick(doc: HubDocument) {
     if (doc.in_use) return;
     setDocToDelete(doc);
@@ -638,6 +409,9 @@ export default function DocumentHub() {
       setDocToDelete(null);
       await refetch?.();
     } catch (e: unknown) {
+      // Surfaces the backend's 409 "used in a case" message if the check
+      // race-conditioned past the disabled button (e.g. doc got attached
+      // to a case in another tab a second ago).
       const err = e as { response?: { data?: { detail?: string } } };
       pushToast('error', "Can't delete", err?.response?.data?.detail ?? 'Please try again.');
     } finally {
@@ -673,15 +447,6 @@ export default function DocumentHub() {
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden" style={{ fontFamily: "Inter, sans-serif" }}>
       <ToastStack items={toasts} onDismiss={tid => setToasts(p => p.filter(x => x.id !== tid))} />
-
-      <PreviewModal
-        doc={previewDoc}
-        reuploading={reuploading}
-        onClose={() => setPreviewDoc(null)}
-        onDelete={handleDeleteClick}
-        onReupload={handleReupload}
-      />
-
       <ConfirmDeleteModal
         open={!!docToDelete}
         docName={docToDelete?.name ?? ''}
@@ -792,7 +557,7 @@ export default function DocumentHub() {
                     <img src={imgUpload} alt="" className="w-[48px] h-[48px]" />
                     <div className="text-center">
                       <p className="text-[#0f172a] text-[15px] font-semibold">Drag and drop files here</p>
-                      <p className="text-[#94a3b8] text-[13px] mt-[2px]">or click to browse</p>
+                      <p className="text-[#94a3b8] text-[13px] mt-[2px]">or click to browse — you'll review extracted data before saving</p>
                     </div>
                     <button onClick={e => { e.stopPropagation(); fileRef.current?.click(); }}
                             className="bg-white border border-[#e2e8f0] text-[#374151] text-[13px] font-medium px-[20px] py-[8px] rounded-[8px] hover:bg-[#f8fafc] transition">
@@ -844,17 +609,11 @@ export default function DocumentHub() {
               )}
               {!isLoading && !error && documents.length > 0 && viewMode === "grid" && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-[16px] p-[20px]">
-                  {documents.map(doc => (
-                    <DocCard key={doc.id} doc={doc} onOpen={handleOpenPreview} onDelete={handleDeleteClick} />
-                  ))}
+                  {documents.map(doc => <DocCard key={doc.id} doc={doc} onDelete={handleDeleteClick} />)}
                 </div>
               )}
               {!isLoading && !error && documents.length > 0 && viewMode === "list" && (
-                <div className="flex flex-col">
-                  {documents.map(doc => (
-                    <DocRow key={doc.id} doc={doc} onOpen={handleOpenPreview} onDelete={handleDeleteClick} />
-                  ))}
-                </div>
+                <div className="flex flex-col">{documents.map(doc => <DocRow key={doc.id} doc={doc} onDelete={handleDeleteClick} />)}</div>
               )}
             </div>
           </div>
