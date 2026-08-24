@@ -62,6 +62,36 @@ export interface I9FormData {
   // ── Signature ─────────────────────────────────────────────────────────
   signature_typed_name: string;   // "typed name" e-signature
   signature_date:       string;   // ISO YYYY-MM-DD (auto-filled to today on submit)
+
+  // ══════════════════════════════════════════════════════════════════
+  // Section 2 — Employer Review and Verification (filled by HR/attorney)
+  // Employee-side pages ignore these; HR-side split editor renders them.
+  // ══════════════════════════════════════════════════════════════════
+
+  // List A OR (List B + List C)
+  s2_list_a_title:               string;
+  s2_list_a_issuing_authority:   string;
+  s2_list_a_document_number:     string;
+  s2_list_a_expiration:          string;   // ISO YYYY-MM-DD
+
+  s2_list_b_title:               string;
+  s2_list_b_issuing_authority:   string;
+  s2_list_b_document_number:     string;
+  s2_list_b_expiration:          string;
+
+  s2_list_c_title:               string;
+  s2_list_c_issuing_authority:   string;
+  s2_list_c_document_number:     string;
+  s2_list_c_expiration:          string;
+
+  s2_additional_information:     string;
+
+  // Employer attestation
+  s2_first_day_of_employment:    string;   // ISO YYYY-MM-DD
+  s2_employer_signature_name:    string;   // typed rep name
+  s2_employer_signature_date:    string;   // ISO
+  s2_employer_business_name:     string;
+  s2_employer_business_address:  string;
 }
 
 /** All-empty starting state. Used on new-form open and after Reset. */
@@ -79,6 +109,13 @@ export const EMPTY_I9: I9FormData = {
   auth_passport_country: '',
   signature_typed_name:  '',
   signature_date:        '',
+  // Section 2 (employer) — empty defaults
+  s2_list_a_title: '', s2_list_a_issuing_authority: '', s2_list_a_document_number: '', s2_list_a_expiration: '',
+  s2_list_b_title: '', s2_list_b_issuing_authority: '', s2_list_b_document_number: '', s2_list_b_expiration: '',
+  s2_list_c_title: '', s2_list_c_issuing_authority: '', s2_list_c_document_number: '', s2_list_c_expiration: '',
+  s2_additional_information: '',
+  s2_first_day_of_employment: '', s2_employer_signature_name: '', s2_employer_signature_date: '',
+  s2_employer_business_name: '', s2_employer_business_address: '',
 };
 
 /** Persistence envelope. Backend stores JSON; frontend uses same shape
