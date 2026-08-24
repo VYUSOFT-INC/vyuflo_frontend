@@ -56,7 +56,6 @@ export type BookingStatus = "confirmed" | "completed" | "cancelled" | "pending";
 export interface MyBookingRecord {
   id:                   string;
   confirmation_no:      string;
-  attorney_user_id:     string | null;   // user_id of the attorney (for messaging etc.)
   attorney_name:        string;
   attorney_email:       string | null;
   attorney_photo_url:   string | null;

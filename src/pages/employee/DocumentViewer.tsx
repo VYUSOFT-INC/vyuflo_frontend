@@ -726,11 +726,11 @@ function MiniSpinner({ color = "text-[#94a3b8]" }: { color?: string }) {
 // ── Poor extraction popup ──────────────────────────────────────────────────
 function PoorExtractionModal({ open, onReupload, onDismiss }: {
   open: boolean;
-  onReupload: () => void;
+  onReupload: () => void; 
   onDismiss: () => void;
 }) {
   if (!open) return null;
-  return (
+  return ( 
     <>
       <div className="fixed inset-0 bg-black/40 z-[80]" onClick={onDismiss} />
       <div className="fixed inset-0 z-[81] flex items-center justify-center p-[16px]">

@@ -83,4 +83,4 @@ export interface DocumentHubData {
   storage:         StorageInfo;
   total:           number;
   applicationTabs: ApplicationTab[];
-}
+} 

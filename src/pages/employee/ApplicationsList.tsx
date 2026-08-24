@@ -4,7 +4,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Plus, Download, Search, ChevronDown, LayoutGrid, List,
+ Download, Search, ChevronDown, LayoutGrid, List,
   Briefcase, FileText, Clock, AlertCircle, CheckCircle2,
   MoreVertical, Eye, Bell, X, Info, AlertTriangle, XCircle,
   ShieldCheck, CalendarClock,
@@ -771,14 +771,9 @@ export default function ApplicationsList() {
                 <p className="text-[16px] font-semibold text-[#0f172a] mb-[4px]">
                   {search || statusFilter || visaFilter ? 'No applications match your filters' : 'No applications yet'}
                 </p>
-                <p className="text-[13px] text-[#64748b] mb-[16px]">
-                  {search || statusFilter || visaFilter ? 'Try clearing your filters' : 'Start a new application to begin your visa journey'}
+                <p className="text-[13px] text-[#64748b]">
+                  {search || statusFilter || visaFilter ? 'Try clearing your filters' : 'Your applications will appear here once created.'}
                 </p>
-                <button onClick={() => navigate('/applications/new')}
-                  className="flex items-center gap-[6px] h-[40px] px-[16px] rounded-[10px] text-white text-[13px] font-semibold hover:opacity-90 transition"
-                  style={{ backgroundImage: PRIMARY_GRADIENT }}>
-                  <Plus size={14} /> New Application
-                </button>
               </div>
             )}
 

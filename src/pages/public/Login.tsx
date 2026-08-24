@@ -1,11 +1,13 @@
+
 // // src/pages/public/Login.tsx
 // import { useState } from "react";
-// import { useNavigate, Link } from "react-router-dom";
+// import { useNavigate, useSearchParams, Link } from "react-router-dom";
 // import { useGoogleLogin } from "@react-oauth/google";
 // import { useMsal } from "@azure/msal-react";
-// import { authApi } from "../../api/auth.api";
+// import { authApi } from "../../api/auth/auth.api";
 // import { callSSOEndpoint } from "../../lib/sso";
 // import { useAuthStore } from '../../store/authStore';
+// import { writeUiSessionFromLogin } from '../../utils/uiSession';
 // import imgLogoIcon     from "../../assets/icons/plane-icon.svg";
 // import imgShieldIcon   from "../../assets/icons/shield-icon.svg";
 // import imgBellIcon     from "../../assets/icons/bell-icon.svg";
@@ -17,8 +19,7 @@
 // import imgArrowIcon    from "../../assets/icons/arrow-icon.svg";
 // import imgGoogleIcon   from "../../assets/icons/google-icon.svg";
 // import imgMsIcon       from "../../assets/icons/microsoft-icon.svg";
-// // import imgLinkedInIcon from "../../assets/icons/linkedin-icon.svg";
-// import imgAppleIcon from "../../assets/icons/signup-apple.svg";
+// import imgAppleIcon    from "../../assets/icons/signup-apple.svg";
 // import imgSoc2Icon     from "../../assets/icons/soc2-icon.svg";
 // import imgEncIcon      from "../../assets/icons/enc-icon.svg";
 // import imgGdprIcon     from "../../assets/icons/gdpr-icon.svg";
@@ -27,6 +28,17 @@
 
 // export default function Login() {
 //   const navigate = useNavigate();
+//   const [searchParams] = useSearchParams();
+
+//   // Same guard as PublicRoute in App.tsx and safeRedirectPath in
+//   // ProfileSetupPage.tsx — prevents an open-redirect via a crafted
+//   // "?redirect=//evil.com" query param, while honoring a legitimate
+//   // "?redirect=/accept-invite?token=..." set by AcceptInvitePage's
+//   // "Sign In to Accept" link.
+//   function getSafeRedirect(): string | null {
+//     const raw = searchParams.get('redirect');
+//     return raw && raw.startsWith('/') && !raw.startsWith('//') ? raw : null;
+//   }
 //   const { instance: msalInstance } = useMsal();
 
 //   const [email,      setEmail]      = useState("");
@@ -49,6 +61,8 @@
 //     return ok;
 //   }
 
+//   // ── Email / password login ────────────────────────────────────────────────
+
 //   async function handleLogin() {
 //     if (!validate()) return;
 //     setLoading(true);
@@ -56,7 +70,25 @@
 //     try {
 //       const data = await authApi.login({ email: email.trim().toLowerCase(), password });
 //       useAuthStore.getState().setAuth({ access_token: data.access_token });
-//       navigate('/dashboard');
+
+//       // Build ui_session cookie from scratch — no race condition
+//       writeUiSessionFromLogin({
+//         user:               data.user,
+//         roles:              data.roles ?? [],
+//         theme_color:        data.theme_color,
+//         tour_employee_seen: data.tour_employee_seen ?? false,
+//         tour_hr_seen:       data.tour_hr_seen       ?? false,
+//         tour_attorney_seen: data.tour_attorney_seen ?? false,
+//         tour_admin_seen:    data.tour_admin_seen    ?? false,
+//       });
+
+//       // FIXED: previously always navigated to '/dashboard', silently
+//       // discarding the ?redirect= param that AcceptInvitePage's
+//       // NeedsLoginCard sets when a person needs to log in before they
+//       // can accept an invitation. That meant "Sign In to Accept" always
+//       // dropped them on their normal dashboard instead of back on the
+//       // invite they were trying to accept.
+//       navigate(getSafeRedirect() ?? '/dashboard');
 //     } catch (e: unknown) {
 //       const err = e as AxiosError<{ detail: string }>;
 //       setApiError(err.response?.data?.detail ?? (e instanceof Error ? e.message : 'Invalid email or password.'));
@@ -65,13 +97,26 @@
 //     }
 //   }
 
-//   async function handleSSOSuccess(provider: 'google' | 'microsoft' | 'linkedin', token: string) {
+//   // ── SSO login ─────────────────────────────────────────────────────────────
+
+//   async function handleSSOSuccess(provider: 'google' | 'microsoft' | 'apple', token: string) {
 //     setSsoLoading(provider);
 //     setSsoError(null);
 //     try {
 //       const data = await callSSOEndpoint(provider, token);
 //       useAuthStore.getState().setAuth({ access_token: data.access_token });
-//       navigate('/dashboard');
+
+//       writeUiSessionFromLogin({
+//         user:               data.user,
+//         roles:              data.roles ?? [],
+//         theme_color:        data.theme_color,
+//         tour_employee_seen: data.tour_employee_seen ?? false,
+//         tour_hr_seen:       data.tour_hr_seen       ?? false,
+//         tour_attorney_seen: data.tour_attorney_seen ?? false,
+//         tour_admin_seen:    data.tour_admin_seen    ?? false,
+//       });
+
+//       navigate(getSafeRedirect() ?? '/dashboard');
 //     } catch (e: unknown) {
 //       setSsoError(e instanceof Error ? e.message : 'SSO sign-in failed. Please try again.');
 //     } finally {
@@ -108,8 +153,8 @@
 //   }
 
 //   const SSO_BUTTONS = [
-//     { icon: imgGoogleIcon,   label: "Sign in with Google",    provider: "google",    onClick: () => loginWithGoogle()    },
-//     { icon: imgMsIcon,       label: "Sign in with Microsoft", provider: "microsoft", onClick: loginWithMicrosoft          },
+//     { icon: imgGoogleIcon, label: "Sign in with Google",    provider: "google",    onClick: () => loginWithGoogle() },
+//     { icon: imgMsIcon,     label: "Sign in with Microsoft", provider: "microsoft", onClick: loginWithMicrosoft       },
 //     { icon: imgAppleIcon,  label: "Sign in with Apple",     provider: "apple",     onClick: loginWithApple           },
 //   ];
 
@@ -439,6 +484,7 @@ export default function Login() {
   const [showPw,     setShowPw]     = useState(false);
   const [loading,    setLoading]    = useState(false);
   const [apiError,   setApiError]   = useState<string | null>(null);
+  const [isSecurityBlock, setIsSecurityBlock] = useState(false);
   const [emailErr,   setEmailErr]   = useState<string | null>(null);
   const [pwErr,      setPwErr]      = useState<string | null>(null);
   const [ssoLoading, setSsoLoading] = useState<string | null>(null);
@@ -459,6 +505,7 @@ export default function Login() {
     if (!validate()) return;
     setLoading(true);
     setApiError(null);
+    setIsSecurityBlock(false);
     try {
       const data = await authApi.login({ email: email.trim().toLowerCase(), password });
       useAuthStore.getState().setAuth({ access_token: data.access_token });
@@ -483,7 +530,14 @@ export default function Login() {
       navigate(getSafeRedirect() ?? '/dashboard');
     } catch (e: unknown) {
       const err = e as AxiosError<{ detail: string }>;
-      setApiError(err.response?.data?.detail ?? (e instanceof Error ? e.message : 'Invalid email or password.'));
+      const detail = err.response?.data?.detail ?? (e instanceof Error ? e.message : 'Invalid email or password.');
+      setApiError(detail);
+      // Backend raises a specific message when service_login blocks a
+      // high-risk attempt (new location + VPN + failures combo). We key
+      // off that phrase to show a distinct "reset password / contact
+      // support" action instead of the generic "try again" implication
+      // of a normal invalid-credentials error.
+      setIsSecurityBlock(detail.toLowerCase().includes('blocked for your security'));
     } finally {
       setLoading(false);
     }
@@ -660,6 +714,17 @@ export default function Login() {
 
             {/* Errors */}
             <ErrorAlert title="Login Failed" message={apiError} onClose={() => setApiError(null)} />
+            {isSecurityBlock && (
+              <div className="text-sm text-center -mt-2" style={{ fontFamily: "Inter, sans-serif" }}>
+                <Link to="/forgot-password" className="text-[#2563eb] font-medium hover:underline">
+                  Reset your password
+                </Link>
+                <span className="text-[#6b7280]"> or </span>
+                <a href="mailto:support@vyuflo.com" className="text-[#2563eb] font-medium hover:underline">
+                  contact support
+                </a>
+              </div>
+            )}
             {ssoError && (
               <div className="bg-[#fef2f2] border border-[#fca5a5] text-[#dc2626] rounded-xl px-4 py-3 text-sm flex gap-2 items-center" style={{ fontFamily: "Inter, sans-serif" }}>
                 <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -684,7 +749,7 @@ export default function Login() {
                   </div>
                   <input
                     type="email" placeholder="you@example.com" value={email}
-                    onChange={e => { setEmail(e.target.value); setEmailErr(null); setApiError(null); }}
+                    onChange={e => { setEmail(e.target.value); setEmailErr(null); setApiError(null); setIsSecurityBlock(false); }}
                     onKeyDown={e => e.key === "Enter" && handleLogin()}
                     autoComplete="email"
                     className={`w-full h-[48px] sm:h-[54px] pl-11 pr-4 bg-white border rounded-[12px] text-[#111827] text-sm sm:text-base tracking-[-0.5px] leading-6 outline-none transition focus:ring-2 focus:ring-[#2563eb]/20 focus:border-[#2563eb] ${emailErr ? "border-[#ef4444]" : "border-[#d1d5db]"}`}
@@ -711,7 +776,7 @@ export default function Login() {
                   </div>
                   <input
                     type={showPw ? "text" : "password"} placeholder="Enter your password" value={password}
-                    onChange={e => { setPassword(e.target.value); setPwErr(null); setApiError(null); }}
+                    onChange={e => { setPassword(e.target.value); setPwErr(null); setApiError(null); setIsSecurityBlock(false); }}
                     onKeyDown={e => e.key === "Enter" && handleLogin()}
                     autoComplete="current-password"
                     className={`w-full h-[48px] sm:h-[54px] pl-11 pr-12 bg-white border rounded-[12px] text-[#111827] text-sm sm:text-base tracking-[-0.5px] leading-6 outline-none transition focus:ring-2 focus:ring-[#2563eb]/20 focus:border-[#2563eb] ${pwErr ? "border-[#ef4444]" : "border-[#d1d5db]"}`}
