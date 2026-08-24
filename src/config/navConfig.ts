@@ -68,6 +68,7 @@ const employeeNav: NavItem[] = [
   { to: '/documents',         label: 'Documents',             icon: { kind: 'lucide', Icon: FileText      } },
    //{ to: '/payments',          label: 'Payments & Billing',    icon: { kind: 'lucide', Icon: CreditCard    } },
   { to: '/consultations',     label: 'Book Consultation',     icon: { kind: 'lucide', Icon: CalendarDays  } },
+  { to: '/my-forms',          label: 'My Forms',              icon: { kind: 'lucide', Icon: ClipboardList } },
   { to: '/profile',           label: 'Settings',              icon: { kind: 'lucide', Icon: Settings      } },
   { to: '/notifications',     label: 'Notifications',         icon: { kind: 'lucide', Icon: Bell         } },
   { to: '/visa-checklist',    label: 'Visa Checklist',        icon: { kind: 'lucide', Icon: FileCheck2   } },

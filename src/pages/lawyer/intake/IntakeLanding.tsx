@@ -58,11 +58,15 @@ export default function IntakeLanding() {
     try {
       const res = await intakeApi.listAssignedApplications();
       // Merge locally-created cases (from New Case wizard) so they
-      // appear here alongside HR-assigned intakes. De-duped by application_id.
+      // appear here alongside HR-assigned intakes. Backend rows win
+      // over local seeds on the same application_id — local seeds
+      // have stale intake_session_id=null and would break the
+      // "Continue Intake" navigation. Local seeds only fill gaps
+      // for cases the backend hasn't returned yet.
       const localApps = readLocalCases().map(seedToAssignedApp);
       const seen = new Set<string>();
       const merged: AssignedApplication[] = [];
-      for (const a of [...localApps, ...(res || [])]) {
+      for (const a of [...(res || []), ...localApps]) {
         if (seen.has(a.application_id)) continue;
         seen.add(a.application_id);
         merged.push(a);
@@ -136,7 +140,20 @@ export default function IntakeLanding() {
       else if (status === 403) msg = 'You are not assigned to this application.';
       else if (status === 404) msg = 'Application not found.';
       else if (status === 409) {
-        // Session already exists — reload to get the latest state then retry navigation
+        // Session already exists — refetch the list, find the session id
+        // for this application, and jump straight into the wizard (no
+        // second click needed).
+        try {
+          const fresh = await intakeApi.listAssignedApplications();
+          const match = (fresh ?? []).find(
+            (a) => a.application_id === app.application_id,
+          );
+          if (match?.intake_session_id) {
+            const step = match.status === 'intake_completed' ? 5 : (match.intake_step ?? 3);
+            navigate(`/lawyer/intake/${match.intake_session_id}?step=${step}`);
+            return;
+          }
+        } catch { /* fall through to reload */ }
         msg = 'A session already exists. Refreshing list…';
         await load();
       }
@@ -236,11 +253,14 @@ function ApplicationCard({
   // Detect that so we can visually distinguish them from HR-assigned ones.
   const isSelfCreated = app.application_id?.startsWith("mock-case-") ?? false;
 
-  // Use the application_id we ALREADY have — no pre-fetch needed.
-  // The profile page looks this up in the assigned-applications list
-  // (its own security boundary) and aggregates the data from there.
+  // Prefer client_id → user_id → application_id. Backend's
+  // /lawyer/applications response includes user_id (the actual client's
+  // user UUID) but not always client_id, so falling back straight to
+  // application_id used to route the lawyer to a profile page whose
+  // URL param wasn't a user at all — matchesClient() then filtered out
+  // every other case for that client. user_id fallback fixes it.
   const handleViewProfile = () => {
-    navigate(`/lawyer/clients/${app.client_id || app.application_id}`);
+    navigate(`/lawyer/clients/${app.client_id || app.user_id || app.application_id}`);
   };
 
   return (

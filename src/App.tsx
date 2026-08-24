@@ -359,6 +359,10 @@ import AttorneyDetail        from './pages/employee/AttorneyDetail';
 import BookConsultation      from './pages/employee/BookConsultation';
 import MyBookingsPage        from './pages/employee/MyBookingsPage';
 import EmployeeIntakePage    from './pages/employee/EmployeeIntakePage';
+import MyFormsPage           from './pages/employee/MyFormsPage';
+import I9FormPage            from './pages/employee/I9FormPage';
+import I9SplitEditorPage     from './pages/employee/I9SplitEditorPage';
+import I983FormPage          from './pages/employee/I983FormPage';
 import ConnectEmployer       from './pages/employee/ConnectEmployer';
 
 // ── hr pages ──────────────────────────────────────────────────────────────────
@@ -525,6 +529,10 @@ export default function App() {
               <Route path="/consultations/attorney/:attorneyId" element={<AttorneyDetail />} />
               <Route path="/consultations/book/:attorneyId"     element={<BookConsultation />} />
               <Route path="/my-intake/:sessionId"               element={<EmployeeIntakePage />} />
+              <Route path="/my-forms"                           element={<MyFormsPage />} />
+              <Route path="/employee/forms/i9/:applicationId"         element={<I9FormPage />} />
+              <Route path="/employee/forms/i9/:applicationId/pdf"     element={<I9SplitEditorPage />} />
+              <Route path="/employee/forms/i983/:applicationId"       element={<I983FormPage />} />
               <Route path="/profile"                          element={<ProfileSecurity />} />
               <Route path="/profile/authentication"           element={<ProfileSecurity />} />
               <Route path="/profile/mfa"                      element={<ProfileSecurity />} />
