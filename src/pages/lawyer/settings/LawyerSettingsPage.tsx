@@ -12,12 +12,19 @@
 //
 // ── CAUTIONS ────────────────────────────────────────────────────────
 //   1. URL-driven tab state (?tab=profile|notifications|ai_extraction|security|appearance).
-//   2. Profile tab is fully wired to backend (5 endpoints).
+//   2. Profile tab is fully wired to backend (5 endpoints, mounted under
+//      /api/v1/attorney to resolve a route collision — see lawyerProfile.api.ts).
 //   3. Notifications + AI Extraction tabs use LOCAL STORAGE as fallback
 //      until backend wires those endpoints — swap storage layer later
 //      without touching the component.
-//   4. Avatar response carries a RELATIVE path; use getFileUrl() helper
-//      to resolve it to a displayable absolute URL.
+//   4. FIXED: avatar now uses the same simple getFileUrl() pattern as
+//      Sidebar.tsx/SettingsSidebar.tsx. profile_settings_service.py's
+//      service_update_avatar/service_get_my_profile now delegate to the
+//      shared S3/Spaces-backed user_profile_service functions, so
+//      profile_picture_url arrives as a ready "/api/v1/users/me/avatar?v=..."
+//      URL — no custom blob-fetch, no ngrok header, no manual host-prepending
+//      needed. Falls back to initials on load failure via ProfileAvatar,
+//      same as every other page in the app.
 //   5. Email IS editable. Backend may reject the email field today —
 //      banner surfaces the error; user is warned about re-verification.
 //   6. Single "Save Changes" button — only fires the endpoints whose
@@ -25,11 +32,11 @@
 //   7. Mock fallback when GET /me/profile fails so demo doesn't break.
 //   8. Mobile responsive: tabs stack horizontally below md.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import axios from '../../../api/axios';
 import { lawyerProfileApi } from '../../../api/lawyer/lawyerProfile.api';
 import { getUiSession } from '../../../utils/uiSession';
+import { ProfileAvatar } from '../../../components/ui/ProfileAvatar';
 import {
   DEFAULT_AI_PREFS,
   DEFAULT_NOTIF_PREFS,
@@ -100,9 +107,6 @@ const TABS: { id: SettingsTab; label: string }[] = [
 
 /* ─── Helpers ─────────────────────────────────────────────────────── */
 
-const initials = (a?: string | null, b?: string | null): string =>
-  `${(a || '?').charAt(0)}${(b || '').charAt(0)}`.toUpperCase();
-
 const centsToDollars = (cents?: number | null): string =>
   cents == null ? '' : (cents / 100).toFixed(0);
 
@@ -115,28 +119,11 @@ const dollarsToCents = (raw: string): number | undefined => {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
- * Resolve a backend-returned image path into a usable <img src>.
- *
- * If the path is already absolute (http/https), use as-is. Otherwise
- * prepend the API host (axios.defaults.baseURL minus the /api/v1 segment)
- * — backend serves uploaded files from the root host, not under the API
- * prefix.
- */
-function resolveAvatarUrl(path?: string | null): string {
-  if (!path) return '';
-  if (/^https?:\/\//i.test(path)) return path;
-
-  const apiBase = axios.defaults.baseURL || window.location.origin;
-  const host    = apiBase.replace(/\/api\/v\d+\/?$/, '').replace(/\/+$/, '');
-  const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  return `${host}${cleanPath}`;
-}
-
-/**
- * Backend currently stores name as a single `full_legal_name` string and
- * does NOT return first_name/last_name on GET. To keep the UI working
- * today AND survive a future backend fix, we derive first/last from
- * whichever shape the server returns.
+ * Backend (profile_settings_service.py's service_get_my_profile) now
+ * returns first_name/last_name/email/role directly — these derived
+ * helpers stay only as a defensive fallback (e.g. against MOCK_PROFILE,
+ * or a genuinely older cached response shape), not as the primary path
+ * they used to be.
  */
 function derivedFirstName(p: MyProfile): string {
   if (p.first_name) return p.first_name;
@@ -154,9 +141,9 @@ function derivedLastName(p: MyProfile): string {
 }
 
 /**
- * Email isn't on the current GET response, so we sniff it from the
- * ui_session cookie (set at login). When backend adds email to the
- * profile payload, that wins over the cookie automatically.
+ * Email is on the current GET response now, but keep the ui_session
+ * cookie fallback for the brief window before the first profile load
+ * resolves, and as a safety net against MOCK_PROFILE.
  */
 function derivedEmail(p: MyProfile): string {
   if (p.email) return p.email;
@@ -202,12 +189,9 @@ export default function LawyerSettingsPage() {
     setLoading(true);
     lawyerProfileApi.getMyProfile()
       .then((p) => {
-        // eslint-disable-next-line no-console
-        console.log('[Settings] GET /me/profile →', p);
         setProfile(p || MOCK_PROFILE);
       })
       .catch((err) => {
-        // eslint-disable-next-line no-console
         console.warn('[Settings] GET /me/profile FAILED — falling back to mock:', err);
         setProfile(MOCK_PROFILE);
       })
@@ -226,9 +210,6 @@ export default function LawyerSettingsPage() {
     );
   }
 
-  /* Role detection — falls back to ui_session cookie when GET doesn't
-     return it. So attorney-credentials section renders even though
-     backend's current response omits the role field. */
   const isAttorney = derivedRole(profile) === 'attorney';
 
   return (
@@ -257,7 +238,6 @@ export default function LawyerSettingsPage() {
 
         <div className="mt-6 grid gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
 
-          {/* Left tab nav */}
           <nav className="rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
             <ul className="flex flex-row gap-1 overflow-x-auto md:flex-col md:overflow-visible">
               {TABS.map((t) => (
@@ -328,10 +308,6 @@ function ProfileTab({
   onBanner:       (b: { tone: 'ok' | 'err'; text: string } | null) => void;
   onReload:       () => void;
 }) {
-  /* Seed form state from the profile snapshot — using derived helpers so
-     it works whether backend returns first/last separately OR a single
-     full_legal_name. Email pulled from ui_session cookie until backend
-     adds it to the GET response. */
   const [firstName, setFirstName]                 = useState(derivedFirstName(profile));
   const [lastName,  setLastName]                  = useState(derivedLastName(profile));
   const [email,     setEmail]                     = useState(derivedEmail(profile));
@@ -360,8 +336,12 @@ function ProfileTab({
   const [saving,    setSaving]    = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  const emailChanged   = email !== derivedEmail(profile);
-  const emailIsValid   = !email || EMAIL_RE.test(email);
+  const emailChanged = email !== derivedEmail(profile);
+  // FIXED: previously `!email || EMAIL_RE.test(email)` — an empty string made
+  // !email true, so clearing the field entirely counted as "valid" and was
+  // saveable, silently wiping the email on the backend. Now empty is only
+  // valid if the field started empty (nothing to accidentally clear).
+  const emailIsValid = email.length > 0 ? EMAIL_RE.test(email) : !derivedEmail(profile);
 
   const profileChanged =
        firstName         !== derivedFirstName(profile)
@@ -391,22 +371,13 @@ function ProfileTab({
 
     try {
       if (profileChanged) {
-        /* Send the Swagger-documented shape (first_name / last_name /
-           email / timezone / preferred_language). Backend currently
-           writes first_name+last_name into users.first_name/last_name
-           per the PATCH doc; once GET starts aggregating them, this
-           code keeps working untouched. We also send full_legal_name
-           defensively for backends that read that single field. */
-        const fullLegalName = `${firstName} ${lastName}`.trim();
-        const payload: ProfileUpdate & { email?: string; full_legal_name?: string } = {};
-        if (firstName !== derivedFirstName(profile))          payload.first_name = firstName;
-        if (lastName  !== derivedLastName(profile))           payload.last_name  = lastName;
-        if (firstName !== derivedFirstName(profile)
-            || lastName !== derivedLastName(profile))         payload.full_legal_name = fullLegalName;
-        if (emailChanged)                                      payload.email      = email;
-        if (timezone !== (profile.timezone || ''))            payload.timezone   = timezone;
+        const payload: ProfileUpdate & { email?: string } = {};
+        if (firstName !== derivedFirstName(profile))            payload.first_name = firstName;
+        if (lastName  !== derivedLastName(profile))             payload.last_name  = lastName;
+        if (emailChanged)                                        payload.email      = email;
+        if (timezone !== (profile.timezone || ''))              payload.timezone   = timezone;
         if (preferredLanguage !== (profile.preferred_language || ''))
-                                                              payload.preferred_language = preferredLanguage;
+                                                                payload.preferred_language = preferredLanguage;
         updated = await lawyerProfileApi.updateMyProfile(payload);
       }
 
@@ -452,88 +423,11 @@ function ProfileTab({
   };
 
   /* ── Avatar ───────────────────────────────────────────────────────── */
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const handleAvatarPick = () => fileInputRef.current?.click();
-
-  // Resolve backend's relative path → displayable absolute URL.
-  const displayAvatarUrl = resolveAvatarUrl(profile.profile_picture_url);
-
-  /* Avatar loading — we fetch the image via JS (instead of letting <img>
-     load it directly) for two reasons:
-       1. ngrok-free.dev returns an HTML browser-warning page on direct
-          requests unless the 'ngrok-skip-browser-warning' header is set.
-          <img> tags can't attach headers → fetch + blob is the way.
-       2. Once we have a Blob, we expose it via a blob: URL — same-origin,
-          immune to CORS / cache / referrer / mixed-content quirks.
-
-     CACHE BUSTING:
-     Backend overwrites the same file path (`/static/avatars/<user_id>.jpg`)
-     on every upload — the URL never changes, so neither the browser cache
-     nor React's effect deps detect that the IMAGE actually changed. We
-     bump `avatarVersion` on each successful upload / remove and append
-     ?v=N to the fetch URL to force a fresh response.
-
-     Initials remain the base layer; the <img> only fades in once we have
-     a valid blob URL. */
-  const [avatarImgOk,    setAvatarImgOk]    = useState(false);
-  const [avatarBlobUrl,  setAvatarBlobUrl]  = useState<string | null>(null);
-  const [avatarVersion,  setAvatarVersion]  = useState(0);
-
-  useEffect(() => {
-    setAvatarImgOk(false);
-
-    // eslint-disable-next-line no-console
-    console.log('[Settings] avatar state:', {
-      raw_profile_picture_url: profile.profile_picture_url,
-      resolved_url:             displayAvatarUrl,
-      version:                  avatarVersion,
-    });
-
-    if (!displayAvatarUrl) {
-      setAvatarBlobUrl(null);
-      return;
-    }
-
-    // Append a version query param so each re-upload forces a refetch.
-    const sep = displayAvatarUrl.includes('?') ? '&' : '?';
-    const fetchUrl = `${displayAvatarUrl}${sep}v=${avatarVersion}`;
-
-    let cancelled = false;
-    let createdObjectUrl: string | null = null;
-
-    fetch(fetchUrl, {
-      headers: {
-        // ngrok free tunnel — skip the HTML interstitial so we get the image.
-        'ngrok-skip-browser-warning': '1',
-      },
-      cache: 'no-store',
-    })
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status} ${r.statusText}`);
-        return r.blob();
-      })
-      .then((blob) => {
-        if (cancelled) return;
-        createdObjectUrl = URL.createObjectURL(blob);
-        setAvatarBlobUrl(createdObjectUrl);
-        setAvatarImgOk(true);
-        // eslint-disable-next-line no-console
-        console.log('[Settings] avatar blob ready (', blob.type, blob.size, 'bytes)');
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        // eslint-disable-next-line no-console
-        console.warn('[Settings] avatar fetch failed:', err);
-        setAvatarBlobUrl(null);
-        setAvatarImgOk(false);
-      });
-
-    return () => {
-      cancelled = true;
-      if (createdObjectUrl) URL.revokeObjectURL(createdObjectUrl);
-    };
-  }, [displayAvatarUrl, profile.profile_picture_url, avatarVersion]);
-
+  // FIXED: entire custom blob-fetch/ngrok-header/host-prepending pipeline
+  // removed. profile.profile_picture_url now arrives as a ready-to-use
+  // versioned URL, so this is the exact same pattern as
+  // Sidebar.tsx/SettingsSidebar.tsx: <ProfileAvatar> handles both display
+  // and the initials fallback on any load failure.
   const handleAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -551,17 +445,8 @@ function ProfileTab({
 
     setUploading(true);
     try {
-      // eslint-disable-next-line no-console
-      console.log('[Settings] uploadAvatar — sending file:', { name: file.name, size: file.size, type: file.type });
       const r = await lawyerProfileApi.uploadAvatar(file);
-      // eslint-disable-next-line no-console
-      console.log('[Settings] uploadAvatar response:', r);
-
       onProfileChange({ ...profile, profile_picture_url: r.profile_picture_url });
-      // Bump version → fetch effect re-runs with a fresh ?v= so even
-      // when the server URL is identical, the new bytes are fetched.
-      setAvatarVersion((v) => v + 1);
-      // Let other listeners (Sidebar avatar etc.) know to re-pull the session.
       window.dispatchEvent(new Event('ui-session-updated'));
 
       if (!r.profile_picture_url) {
@@ -573,8 +458,6 @@ function ProfileTab({
         onBanner({ tone: 'ok', text: r.message || 'Avatar updated.' });
       }
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('[Settings] uploadAvatar FAILED:', err);
       const detail =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
         || 'Avatar upload failed.';
@@ -593,7 +476,6 @@ function ProfileTab({
 
     try {
       await lawyerProfileApi.removeAvatar();
-      setAvatarVersion((v) => v + 1);
       window.dispatchEvent(new Event('ui-session-updated'));
       onBanner({ tone: 'ok', text: 'Avatar removed.' });
     } catch (err) {
@@ -613,29 +495,13 @@ function ProfileTab({
       <SectionCard title="Profile Information" subtitle="Manage your personal details and professional credentials.">
 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-          {/* Avatar slot — initials are the BASE layer (always rendered).
-              The <img> overlays only when its load actually succeeds.
-              This way a 404/401/CORS failure leaves the initials visible
-              instead of an empty circle. */}
-          <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full bg-indigo-100 ring-4 ring-white shadow">
-            <span
-              className="absolute inset-0 flex items-center justify-center text-xl font-semibold text-indigo-700"
-              aria-hidden={avatarImgOk}
-            >
-              {initials(derivedFirstName(profile), derivedLastName(profile))}
-            </span>
-            {avatarBlobUrl && (
-              <img
-                src={avatarBlobUrl}
-                alt={`${derivedFirstName(profile)} ${derivedLastName(profile)}`}
-                className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${
-                  avatarImgOk ? 'opacity-100' : 'opacity-0'
-                }`}
-                onLoad={() => setAvatarImgOk(true)}
-                onError={() => setAvatarImgOk(false)}
-              />
-            )}
-          </div>
+          <ProfileAvatar
+            src={profile.profile_picture_url}
+            name={`${derivedFirstName(profile)} ${derivedLastName(profile)}`.trim() || '—'}
+            sizeClass="h-20 w-20"
+            avatarSize="lg"
+            ringClass="ring-4 ring-white shadow"
+          />
 
           <div className="flex flex-1 flex-col gap-1">
             <div className="text-sm font-medium text-slate-900">
@@ -643,14 +509,17 @@ function ProfileTab({
             </div>
             <div className="text-xs text-slate-500">{derivedEmail(profile) || '—'}</div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={handleAvatarPick}
-                disabled={uploading}
-                className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-              >
+              <label className="cursor-pointer rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 aria-disabled:opacity-50 aria-disabled:pointer-events-none"
+                aria-disabled={uploading}>
                 {uploading ? 'Uploading…' : 'Change Avatar'}
-              </button>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/webp"
+                  className="hidden"
+                  disabled={uploading}
+                  onChange={handleAvatarFile}
+                />
+              </label>
               {profile.profile_picture_url && (
                 <button
                   type="button"
@@ -662,13 +531,6 @@ function ProfileTab({
               )}
               <span className="text-[11px] text-slate-500">JPG, PNG, or WebP · max 5 MB</span>
             </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/jpg,image/png,image/webp"
-              className="hidden"
-              onChange={handleAvatarFile}
-            />
           </div>
         </div>
 
@@ -691,7 +553,6 @@ function ProfileTab({
           </Field>
         </div>
 
-        {/* Email — now editable. Validation + warning. */}
         <div className="mt-4">
           <Field
             label="Email Address"
@@ -803,7 +664,6 @@ function ProfileTab({
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
                 rows={3}
-                cols={1}
                 placeholder="Short bio about your practice areas, languages, etc."
                 className="block w-full min-w-0 resize-y rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
               />
@@ -866,8 +726,6 @@ function NotificationsTab({
 
   const handleSave = () => {
     setSaving(true);
-    // Persist locally — when backend wires PATCH /me/notification-preferences,
-    // call that here and keep the localStorage write as the fallback layer.
     try {
       writeNotifPrefs(prefs);
       onBanner({ tone: 'ok', text: 'Notification preferences saved.' });

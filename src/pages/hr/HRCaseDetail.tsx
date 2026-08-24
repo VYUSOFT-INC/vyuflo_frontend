@@ -1,39 +1,34 @@
 // // src/pages/hr/HRCaseDetail.tsx
-// //
-// // HR — Case Detail (Screen 10)
-// // Route: /employer/cases/:applicationId
-// // Figma: 10 - Case Details (node 0:2313)
-// //
-// // Layout (from Figma):
-// //   ┌─ Case header: title + status badge + breadcrumb + Share/Export/Save ───┐
-// //   ├─ Meta row: Employee · Employer · Lawyer · Target Date ─────────────────┤
-// //   ├─ Progress bar: Overall 68% + sub-stats ────────────────────────────────┤
-// //   ├─ LEFT sidebar (290px): Quick Stats | Upcoming Deadlines | Participants ┤
-// //   ├─ TABS: Overview | Documents | Missing Checklist | Letters | LCA | …   ┤
-// //   │  Overview tab:                                                          │
-// //   │   Case Summary (Basic Info + Employment Details)                        │
-// //   │   Key Milestones (vertical timeline)                                    │
-// //   │   Document Status + Approval Status (2 cols)                            │
-// //   │   AI Insights                                                           │
-// //   │   Recent Activity                                                       │
-// //   │   Action Items (checklist)                                              │
-// //   └─ Floating auto-save indicator ─────────────────────────────────────────┘
+// // Fixed:
+// //   1. 3-dot menu — Dropdown component + wired actions
+// //   2. Export button — real CSV download
+// //   3. Save Draft — calls PATCH /hr/cases/:id with editable internal notes
+// //   4. "View Complete History" button — switches to history tab
+// //   5. Share button — copies URL to clipboard
+// //   6. Sidebar participants avatar — was casting c.employee to an inline
+// //      { profile_picture_url } shape that almost certainly never existed on
+// //      the real type, so it silently always fell back to initials. Now uses
+// //      UserAvatar (userId-based, same component used across HREmployees.tsx)
+// //      and falls back to initials properly on load failure too, not just
+// //      on a missing URL.
 
-// import { useState, useEffect, useCallback, type ReactNode } from 'react';
-// import { useNavigate, useParams } from 'react-router-dom';
+// import { useState, useEffect, useCallback, useRef, type ReactNode, type ChangeEvent } from 'react';
+// import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 // import {
 //   ChevronLeft, Share2, Download, Save, User, Building2,
 //   Scale, Calendar, FileText, CheckCircle2, Clock, AlertCircle,
 //   Users, Plus, MoreHorizontal, CheckSquare, Lightbulb,
-//   Activity, ArrowRight, Circle, XCircle, Bell,
-//   X, Info, AlertTriangle,
+//   Activity, ArrowRight, Circle, XCircle, Bell, RefreshCw,
+//   X, Info, AlertTriangle, Edit2, Eye,
 // } from 'lucide-react';
 // import { PageContent } from '../../components/layout/Pageheader';
 // import { createCaseApi } from '../../api/hr/createCase.api';
+// import HRDocumentManagement from './HRDocumentManagement';
 // import type {
-//   HRCaseResponse, HRCaseStatus, HRCaseHistoryItem, HRApprovalStatus,
+//   HRCaseResponse, HRCaseStatus, HRCaseStage,
+//   HRCaseHistoryItem, HRApprovalStatus,
 // } from '../../types/hr/createCase.types';
-// import { getFileUrl } from '../../utils/fileUrl';
+// import { UserAvatar } from '../../components/ui/UserAvatar';
 
 // const PRIMARY_GRADIENT = 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)';
 
@@ -48,21 +43,18 @@
 
 // function fmtDateTime(iso?: string | null): string {
 //   if (!iso) return '—';
-//   return new Date(iso).toLocaleString('en-US', {
-//     month: 'short', day: 'numeric', year: 'numeric',
-//     hour: 'numeric', minute: '2-digit',
-//   });
+//   return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 // }
 
 // function fmtRelative(iso?: string | null): string {
 //   if (!iso) return '';
 //   const diff = Date.now() - new Date(iso).getTime();
 //   const mins  = Math.floor(diff / 60000);
-//   if (mins < 60)  return `${mins} min${mins !== 1 ? 's' : ''} ago`;
+//   if (mins < 60)  return `${mins}m ago`;
 //   const hours = Math.floor(mins / 60);
-//   if (hours < 24) return `${hours} hour${hours !== 1 ? 's' : ''} ago`;
+//   if (hours < 24) return `${hours}h ago`;
 //   const days = Math.floor(hours / 24);
-//   if (days < 7)   return `${days} day${days !== 1 ? 's' : ''} ago`;
+//   if (days < 7)   return `${days}d ago`;
 //   return fmtDate(iso);
 // }
 
@@ -79,6 +71,233 @@
 // function avatarColor(seed: string): string {
 //   const i = seed.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_COLORS.length;
 //   return AVATAR_COLORS[i];
+// }
+
+// // ─────────────────────────────────────────────────────────────────────────────
+// // FIX: CSV EXPORT
+// // ─────────────────────────────────────────────────────────────────────────────
+
+// function exportCaseCSV(c: HRCaseResponse, history: HRCaseHistoryItem[]) {
+//   const esc  = (v: string) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+//   const rows = [
+//     ['Case Name',        c.case_name],
+//     ['Case #',           c.application_number],
+//     ['Visa Type',        c.visa_type?.code ?? ''],
+//     ['Status',           c.status],
+//     ['Stage',            c.current_stage ?? ''],
+//     ['Progress %',       String(c.progress_percent)],
+//     ['Employee',         c.employee?.full_name ?? ''],
+//     ['Attorney',         c.attorney?.full_name ?? ''],
+//     ['Priority',         c.priority],
+//     ['Target Date',      c.due_date ?? ''],
+//     ['Start Date',       c.start_date ?? ''],
+//     ['HR Approval',      c.hr_approval_status ?? 'pending'],
+//     ['Sponsor',          c.sponsor_employer ?? ''],
+//     ['Created',          c.created_at],
+//   ];
+//   const historyRows = history.map(h =>
+//     ['', '', '', h.status, h.stage, '', '', '', '', '', '', '', h.note ?? '', h.created_at].map(v => esc(String(v))).join(',')
+//   );
+
+//   const csv = [
+//     rows.map(r => r.map(v => esc(String(v))).join(',')).join('\n'),
+//     '',
+//     'Status History',
+//     'Case Name,Case #,Visa,Status,Stage,Progress,Employee,Attorney,Priority,Target Date,Start Date,HR Approval,Note,Date',
+//     ...historyRows,
+//   ].join('\n');
+
+//   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+//   const url  = URL.createObjectURL(blob);
+//   const a    = Object.assign(document.createElement('a'), {
+//     href:     url,
+//     download: `case-${c.application_number}-${new Date().toISOString().slice(0, 10)}.csv`,
+//   });
+//   document.body.appendChild(a);
+//   a.click();
+//   document.body.removeChild(a);
+//   URL.revokeObjectURL(url);
+// }
+
+// // ─────────────────────────────────────────────────────────────────────────────
+// // FIX: DROPDOWN — click-outside aware
+// // ─────────────────────────────────────────────────────────────────────────────
+
+// interface DropdownItem { label: string; icon?: ReactNode; danger?: boolean; onClick: () => void; }
+
+// function Dropdown({ trigger, items }: { trigger: ReactNode; items: DropdownItem[] }) {
+//   const [open, setOpen] = useState(false);
+//   const ref = useRef<HTMLDivElement>(null);
+//   useEffect(() => {
+//     if (!open) return;
+//     const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+//     document.addEventListener('mousedown', h);
+//     return () => document.removeEventListener('mousedown', h);
+//   }, [open]);
+//   return (
+//     <div className="relative" ref={ref}>
+//       <div onClick={e => { e.stopPropagation(); setOpen(v => !v); }}>{trigger}</div>
+//       {open && (
+//         <div className="absolute right-0 top-[calc(100%+4px)] z-50 bg-white border border-[#e5e7eb] rounded-[10px] shadow-xl w-[200px] py-[4px] overflow-hidden">
+//           {items.map((item, i) => (
+//             <button key={i} onClick={() => { item.onClick(); setOpen(false); }}
+//               className={`w-full flex items-center gap-[10px] px-[14px] py-[9px] text-[13px] font-medium text-left hover:bg-[#f8fafc] transition ${item.danger ? 'text-[#dc2626] hover:bg-[#fef2f2]' : 'text-[#374151]'}`}>
+//               {item.icon && <span className="shrink-0">{item.icon}</span>}
+//               {item.label}
+//             </button>
+//           ))}
+//         </div>
+//       )}
+//     </div>
+//   );
+// }
+
+// // ─────────────────────────────────────────────────────────────────────────────
+// // TOAST
+// // ─────────────────────────────────────────────────────────────────────────────
+
+// type ToastTone = 'success' | 'error' | 'info' | 'warning';
+// type ToastItem = { id: string; tone: ToastTone; title: string; message?: string };
+
+// function ToastStack({ items, onDismiss }: { items: ToastItem[]; onDismiss: (id: string) => void }) {
+//   const meta: Record<ToastTone, { icon: ReactNode; box: string; iconBg: string; iconColor: string }> = {
+//     success: { icon: <CheckCircle2 size={16} />, box: 'border-[#bbf7d0] bg-[#f0fdf4]', iconBg: 'bg-[#dcfce7]', iconColor: 'text-[#15803d]' },
+//     error:   { icon: <XCircle size={16} />,      box: 'border-[#fecaca] bg-[#fef2f2]', iconBg: 'bg-[#fee2e2]', iconColor: 'text-[#dc2626]' },
+//     warning: { icon: <AlertTriangle size={16} />,box: 'border-[#fde68a] bg-[#fffbeb]', iconBg: 'bg-[#fef3c7]', iconColor: 'text-[#c2410c]' },
+//     info:    { icon: <Info size={16} />,          box: 'border-[#c7d2fe] bg-[#eef2ff]', iconBg: 'bg-[#e0e7ff]', iconColor: 'text-[#4338ca]' },
+//   };
+//   return (
+//     <div className="fixed right-[16px] top-[88px] z-[70] flex flex-col gap-[10px] w-full max-w-[360px]">
+//       {items.map(t => {
+//         const m = meta[t.tone];
+//         return (
+//           <div key={t.id} className={`rounded-[14px] border p-[14px] shadow-lg ${m.box}`}>
+//             <div className="flex items-start gap-[10px]">
+//               <div className={`size-[32px] rounded-full flex items-center justify-center shrink-0 ${m.iconBg} ${m.iconColor}`}>{m.icon}</div>
+//               <div className="min-w-0 flex-1">
+//                 <p className="text-[13px] font-semibold text-[#0f172a]">{t.title}</p>
+//                 {t.message && <p className="text-[12px] text-[#64748b] mt-[2px]">{t.message}</p>}
+//               </div>
+//               <button onClick={() => onDismiss(t.id)}><X size={14} className="text-[#94a3b8]" /></button>
+//             </div>
+//           </div>
+//         );
+//       })}
+//     </div>
+//   );
+// }
+
+// // ─────────────────────────────────────────────────────────────────────────────
+// // CHANGE STATUS MODAL
+// // ─────────────────────────────────────────────────────────────────────────────
+
+// function ChangeStatusModal({ open, current, onClose, onSave }: {
+//   open: boolean; current: HRCaseStatus; onClose: () => void;
+//   onSave: (status: HRCaseStatus, stage: HRCaseStage | null, note: string) => Promise<void>;
+// }) {
+//   const [status, setStatus] = useState<HRCaseStatus>(current);
+//   const [stage,  setStage]  = useState<HRCaseStage | null>(null);
+//   const [note,   setNote]   = useState('');
+//   const [busy,   setBusy]   = useState(false);
+
+//   const STATUSES: HRCaseStatus[]  = ['in_progress', 'action_needed', 'rfe_response', 'submitted', 'approved', 'rejected', 'withdrawn'];
+//   const STAGES: HRCaseStage[]     = ['profile_eligibility', 'documentation', 'lca_filing', 'uscis_submission'];
+
+//   if (!open) return null;
+//   return (
+//     <>
+//       <div className="fixed inset-0 bg-black/30 z-50" onClick={onClose} />
+//       <div className="fixed inset-0 z-[60] flex items-center justify-center p-[16px]">
+//         <div className="w-full max-w-[480px] bg-white rounded-[18px] border border-[#e2e8f0] shadow-2xl p-[24px]">
+//           <div className="flex items-center justify-between mb-[20px]">
+//             <h3 className="text-[18px] font-semibold text-[#0f172a]">Change Case Status</h3>
+//             <button onClick={onClose}><X size={18} className="text-[#94a3b8]" /></button>
+//           </div>
+//           <div className="flex flex-col gap-[14px]">
+//             <div>
+//               <label className="block text-[12px] font-semibold uppercase tracking-[0.04em] text-[#94a3b8] mb-[6px]">New Status</label>
+//               <select value={status} onChange={e => setStatus(e.target.value as HRCaseStatus)}
+//                 className="w-full h-[42px] border border-[#e5e7eb] rounded-[8px] px-[12px] text-[13px] focus:outline-none focus:ring-2 focus:ring-indigo-200">
+//                 {STATUSES.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</option>)}
+//               </select>
+//             </div>
+//             <div>
+//               <label className="block text-[12px] font-semibold uppercase tracking-[0.04em] text-[#94a3b8] mb-[6px]">Stage (optional)</label>
+//               <select value={stage ?? ''} onChange={e => setStage((e.target.value || null) as HRCaseStage | null)}
+//                 className="w-full h-[42px] border border-[#e5e7eb] rounded-[8px] px-[12px] text-[13px] focus:outline-none focus:ring-2 focus:ring-indigo-200">
+//                 <option value="">— Keep current stage —</option>
+//                 {STAGES.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</option>)}
+//               </select>
+//             </div>
+//             <div>
+//               <label className="block text-[12px] font-semibold uppercase tracking-[0.04em] text-[#94a3b8] mb-[6px]">Note (optional)</label>
+//               <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Reason for status change..." rows={3}
+//                 className="w-full border border-[#e5e7eb] rounded-[8px] px-[12px] py-[8px] text-[13px] resize-none focus:outline-none focus:ring-2 focus:ring-indigo-200" />
+//             </div>
+//           </div>
+//           <div className="flex justify-end gap-[10px] mt-[20px]">
+//             <button onClick={onClose} className="h-[40px] px-[16px] rounded-[10px] border border-[#e5e7eb] text-[13px] font-medium text-[#334155] hover:bg-[#f8fafc]">Cancel</button>
+//             <button onClick={async () => { setBusy(true); await onSave(status, stage, note); setBusy(false); }} disabled={busy}
+//               className="h-[40px] px-[16px] rounded-[10px] text-white text-[13px] font-semibold disabled:opacity-60"
+//               style={{ backgroundImage: PRIMARY_GRADIENT }}>
+//               {busy ? 'Saving...' : 'Save Status'}
+//             </button>
+//           </div>
+//         </div>
+//       </div>
+//     </>
+//   );
+// }
+
+// // ─────────────────────────────────────────────────────────────────────────────
+// // HR APPROVAL MODAL
+// // ─────────────────────────────────────────────────────────────────────────────
+
+// function ApprovalModal({ open, current, onClose, onSave }: {
+//   open: boolean; current: HRApprovalStatus | null; onClose: () => void;
+//   onSave: (status: HRApprovalStatus, notes: string) => Promise<void>;
+// }) {
+//   const [status, setStatus] = useState<HRApprovalStatus>(current ?? 'pending');
+//   const [notes,  setNotes]  = useState('');
+//   const [busy,   setBusy]   = useState(false);
+//   const OPTS: HRApprovalStatus[] = ['pending', 'approved', 'rejected', 'changes_requested'];
+//   if (!open) return null;
+//   return (
+//     <>
+//       <div className="fixed inset-0 bg-black/30 z-50" onClick={onClose} />
+//       <div className="fixed inset-0 z-[60] flex items-center justify-center p-[16px]">
+//         <div className="w-full max-w-[480px] bg-white rounded-[18px] border border-[#e2e8f0] shadow-2xl p-[24px]">
+//           <div className="flex items-center justify-between mb-[20px]">
+//             <h3 className="text-[18px] font-semibold text-[#0f172a]">HR Approval Decision</h3>
+//             <button onClick={onClose}><X size={18} className="text-[#94a3b8]" /></button>
+//           </div>
+//           <div className="flex flex-col gap-[14px]">
+//             <div className="grid grid-cols-2 gap-[8px]">
+//               {OPTS.map(o => (
+//                 <button key={o} onClick={() => setStatus(o)}
+//                   className={`h-[40px] rounded-[8px] border text-[13px] font-medium transition ${status === o ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-[#e5e7eb] text-[#374151] hover:bg-[#f8fafc]'}`}>
+//                   {o.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+//                 </button>
+//               ))}
+//             </div>
+//             <div>
+//               <label className="block text-[12px] font-semibold uppercase tracking-[0.04em] text-[#94a3b8] mb-[6px]">HR Notes (optional)</label>
+//               <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes visible to employee and attorney..." rows={3}
+//                 className="w-full border border-[#e5e7eb] rounded-[8px] px-[12px] py-[8px] text-[13px] resize-none focus:outline-none focus:ring-2 focus:ring-indigo-200" />
+//             </div>
+//           </div>
+//           <div className="flex justify-end gap-[10px] mt-[20px]">
+//             <button onClick={onClose} className="h-[40px] px-[16px] rounded-[10px] border border-[#e5e7eb] text-[13px] font-medium text-[#334155] hover:bg-[#f8fafc]">Cancel</button>
+//             <button onClick={async () => { setBusy(true); await onSave(status, notes); setBusy(false); }} disabled={busy}
+//               className="h-[40px] px-[16px] rounded-[10px] text-white text-[13px] font-semibold disabled:opacity-60"
+//               style={{ backgroundImage: PRIMARY_GRADIENT }}>
+//               {busy ? 'Saving...' : 'Save Decision'}
+//             </button>
+//           </div>
+//         </div>
+//       </div>
+//     </>
+//   );
 // }
 
 // // ─────────────────────────────────────────────────────────────────────────────
@@ -119,42 +338,7 @@
 // ];
 
 // // ─────────────────────────────────────────────────────────────────────────────
-// // TOAST
-// // ─────────────────────────────────────────────────────────────────────────────
-
-// type ToastTone = 'success' | 'error' | 'info' | 'warning';
-// type ToastItem = { id: string; tone: ToastTone; title: string; message?: string };
-
-// function ToastStack({ items, onDismiss }: { items: ToastItem[]; onDismiss: (id: string) => void }) {
-//   const meta: Record<ToastTone, { icon: ReactNode; box: string; iconBg: string; iconColor: string }> = {
-//     success: { icon: <CheckCircle2 size={16} />, box: 'border-[#bbf7d0] bg-[#f0fdf4]', iconBg: 'bg-[#dcfce7]', iconColor: 'text-[#15803d]' },
-//     error:   { icon: <XCircle size={16} />,      box: 'border-[#fecaca] bg-[#fef2f2]', iconBg: 'bg-[#fee2e2]', iconColor: 'text-[#dc2626]' },
-//     warning: { icon: <AlertTriangle size={16} />,box: 'border-[#fde68a] bg-[#fffbeb]', iconBg: 'bg-[#fef3c7]', iconColor: 'text-[#c2410c]' },
-//     info:    { icon: <Info size={16} />,          box: 'border-[#c7d2fe] bg-[#eef2ff]', iconBg: 'bg-[#e0e7ff]', iconColor: 'text-[#4338ca]' },
-//   };
-//   return (
-//     <div className="fixed right-[16px] top-[88px] z-[70] flex flex-col gap-[10px] w-full max-w-[360px]">
-//       {items.map(t => {
-//         const m = meta[t.tone];
-//         return (
-//           <div key={t.id} className={`rounded-[14px] border p-[14px] shadow-lg ${m.box}`}>
-//             <div className="flex items-start gap-[10px]">
-//               <div className={`size-[32px] rounded-full flex items-center justify-center shrink-0 ${m.iconBg} ${m.iconColor}`}>{m.icon}</div>
-//               <div className="min-w-0 flex-1">
-//                 <p className="text-[13px] font-semibold text-[#0f172a]">{t.title}</p>
-//                 {t.message && <p className="text-[12px] text-[#64748b] mt-[2px]">{t.message}</p>}
-//               </div>
-//               <button onClick={() => onDismiss(t.id)}><X size={14} className="text-[#94a3b8]" /></button>
-//             </div>
-//           </div>
-//         );
-//       })}
-//     </div>
-//   );
-// }
-
-// // ─────────────────────────────────────────────────────────────────────────────
-// // LEFT SIDEBAR
+// // SIDEBAR
 // // ─────────────────────────────────────────────────────────────────────────────
 
 // function ProgressBar({ label, current, total, color }: { label: string; current: number; total: number; color: string }) {
@@ -172,15 +356,28 @@
 //   );
 // }
 
-// function Sidebar({ c }: { c: HRCaseResponse }) {
+// function Sidebar({ c, onApprove }: { c: HRCaseResponse; onApprove: () => void }) {
 //   const deadlines = [
 //     c.due_date ? { label: 'Target Submission', days: daysUntil(c.due_date) } : null,
 //   ].filter(Boolean) as Array<{ label: string; days: number | null }>;
 
+//   // FIXED: previously cast c.employee to an inline { profile_picture_url }
+//   // shape that almost certainly never existed on the real type — that cast
+//   // was a workaround, not evidence the field was actually there, and this
+//   // silently always fell back to initials. Now passes user_id through to
+//   // UserAvatar (the same userId-based avatar component used in
+//   // HREmployees.tsx), which resolves the photo via the by-user-id avatar
+//   // endpoint and falls back to initials automatically on 404/error.
+//   //
+//   // ASSUMPTION FLAGGED: this assumes c.employee / c.attorney (whatever
+//   // HRCaseResponse's nested employee/attorney summary shape is) expose a
+//   // `user_id` field. Verify against createCase.types.ts — if the field is
+//   // named differently, or c.employee itself IS the user id, adjust the two
+//   // lines below accordingly.
 //   const participants = [
-//     c.employee ? { name: c.employee.full_name,  role: 'Employee',  pic: c.employee.profile_picture_url } : null,
-//     c.attorney ? { name: c.attorney.full_name,   role: 'Attorney',  pic: null } : null,
-//   ].filter(Boolean) as Array<{ name: string; role: string; pic?: string | null }>;
+//     c.employee ? { name: c.employee.full_name, role: 'Employee', userId: c.employee.user_id } : null,
+//     c.attorney ? { name: c.attorney.full_name,  role: 'Attorney', userId: c.attorney.user_id } : null,
+//   ].filter(Boolean) as Array<{ name: string; role: string; userId?: string | null }>;
 
 //   return (
 //     <div className="w-full lg:w-[280px] shrink-0 flex flex-col gap-[16px]">
@@ -228,26 +425,16 @@
 //           <Users size={14} /> Participants
 //         </h3>
 //         <div className="flex flex-col gap-[12px]">
-//           {participants.map((p, i) => {
-//             const avatarSrc = getFileUrl(p.pic ?? null);
-//             return (
-//               <div key={i} className="flex items-center gap-[10px]">
-//                 {avatarSrc ? (
-//                   <img src={avatarSrc} alt={p.name} className="size-[36px] rounded-full object-cover border border-[#e5e7eb] shrink-0" />
-//                 ) : (
-//                   <div className="size-[36px] rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0"
-//                        style={{ backgroundColor: avatarColor(p.name) }}>
-//                     {initials(p.name)}
-//                   </div>
-//                 )}
-//                 <div className="min-w-0">
-//                   <p className="text-[13px] font-semibold text-[#111827] truncate">{p.name}</p>
-//                   <p className="text-[11px] text-[#64748b]">{p.role}</p>
-//                 </div>
-//                 <div className="size-[8px] rounded-full bg-[#22c55e] shrink-0 ml-auto" />
+//           {participants.map((p, i) => (
+//             <div key={i} className="flex items-center gap-[10px]">
+//               <UserAvatar userId={p.userId} name={p.name} size={36} className="shrink-0" />
+//               <div className="min-w-0">
+//                 <p className="text-[13px] font-semibold text-[#111827] truncate">{p.name}</p>
+//                 <p className="text-[11px] text-[#64748b]">{p.role}</p>
 //               </div>
-//             );
-//           })}
+//               <div className="size-[8px] rounded-full bg-[#22c55e] shrink-0 ml-auto" />
+//             </div>
+//           ))}
 //           <button className="flex items-center gap-[6px] text-[12px] font-medium text-indigo-600 hover:underline mt-[2px]">
 //             <Plus size={12} /> Add Participant
 //           </button>
@@ -260,31 +447,32 @@
 //         {(() => {
 //           const tok = approvalToken(c.hr_approval_status);
 //           return (
-//             <div className="flex items-center gap-[8px]" style={{ color: tok.color }}>
+//             <div className="flex items-center gap-[8px] mb-[8px]" style={{ color: tok.color }}>
 //               {tok.icon}
 //               <span className="text-[13px] font-semibold">{tok.label}</span>
 //             </div>
 //           );
 //         })()}
-//         {c.hr_notes && <p className="text-[12px] text-[#64748b] mt-[6px]">{c.hr_notes}</p>}
-//         {c.hr_approved_at && <p className="text-[11px] text-[#94a3b8] mt-[4px]">{fmtDate(c.hr_approved_at)}</p>}
+//         {c.hr_notes && <p className="text-[12px] text-[#64748b] mb-[8px]">{c.hr_notes}</p>}
+//         {c.hr_approved_at && <p className="text-[11px] text-[#94a3b8] mb-[8px]">{fmtDate(c.hr_approved_at)}</p>}
+//         <button onClick={onApprove}
+//           className="w-full h-[34px] rounded-[8px] border border-indigo-200 text-indigo-600 text-[12px] font-semibold hover:bg-indigo-50 transition">
+//           {c.hr_approval_status === 'approved' ? 'Update Approval' : 'Review & Approve'}
+//         </button>
 //       </div>
 //     </div>
 //   );
 // }
 
 // // ─────────────────────────────────────────────────────────────────────────────
-// // OVERVIEW TAB
+// // OVERVIEW COMPONENTS
 // // ─────────────────────────────────────────────────────────────────────────────
 
 // function SectionCard({ title, icon, children }: { title: string; icon?: ReactNode; children: ReactNode }) {
 //   return (
 //     <div className="bg-white border border-[#f1f5f9] rounded-[14px] shadow-[0px_1px_1px_rgba(0,0,0,0.04)]">
 //       <div className="px-[24px] py-[18px] border-b border-[#f8fafc]">
-//         <h2 className="text-[16px] font-bold text-[#0f172a] flex items-center gap-[8px]">
-//           {icon}
-//           {title}
-//         </h2>
+//         <h2 className="text-[16px] font-bold text-[#0f172a] flex items-center gap-[8px]">{icon}{title}</h2>
 //       </div>
 //       <div className="px-[24px] py-[20px]">{children}</div>
 //     </div>
@@ -293,7 +481,7 @@
 
 // function InfoPair({ label, value, badge }: { label: string; value: string; badge?: ReactNode }) {
 //   return (
-//     <div className="flex items-start gap-[8px]">
+//     <div className="flex items-start gap-[8px] mb-[10px]">
 //       <span className="text-[13px] text-[#64748b] w-[140px] shrink-0">{label}</span>
 //       {badge ?? <span className="text-[13px] font-medium text-[#111827]">{value}</span>}
 //     </div>
@@ -309,14 +497,12 @@
 
 // function MilestoneTimeline({ currentStage, history }: { currentStage: string | null; history: HRCaseHistoryItem[] }) {
 //   return (
-//     <div className="relative flex flex-col gap-[0px]">
-//       {/* Vertical line */}
+//     <div className="relative flex flex-col">
 //       <div className="absolute left-[15px] top-[16px] bottom-[16px] w-[2px] bg-[#e5e7eb]" />
 //       {MILESTONE_STAGES.map((ms, i) => {
 //         const historyItem = history.find(h => h.stage === ms.key);
-//         const isCompleted = historyItem && ['in_progress', 'submitted', 'approved'].includes(historyItem.status);
+//         const isCompleted = !!(historyItem && ['in_progress', 'submitted', 'approved'].includes(historyItem.status));
 //         const isCurrent   = currentStage === ms.key && !isCompleted;
-//         // const isPending   = !isCompleted && !isCurrent;
 //         return (
 //           <div key={ms.key} className={`flex items-start gap-[14px] py-[14px] ${i < MILESTONE_STAGES.length - 1 ? 'border-b border-[#f8fafc]' : ''}`}>
 //             <div className={`size-[32px] rounded-full flex items-center justify-center shrink-0 z-10 border-2 ${
@@ -328,20 +514,12 @@
 //             </div>
 //             <div className="flex-1 min-w-0">
 //               <div className="flex items-center justify-between gap-[8px]">
-//                 <p className={`text-[14px] font-semibold ${isCompleted || isCurrent ? 'text-[#111827]' : 'text-[#9ca3af]'}`}>
-//                   {ms.label}
-//                 </p>
-//                 <span className={`text-[11px] font-medium shrink-0 ${
-//                   isCompleted ? 'text-[#15803d]'
-//                   : isCurrent  ? 'text-indigo-600'
-//                   : 'text-[#9ca3af]'
-//                 }`}>
+//                 <p className={`text-[14px] font-semibold ${isCompleted || isCurrent ? 'text-[#111827]' : 'text-[#9ca3af]'}`}>{ms.label}</p>
+//                 <span className={`text-[11px] font-medium shrink-0 ${isCompleted ? 'text-[#15803d]' : isCurrent ? 'text-indigo-600' : 'text-[#9ca3af]'}`}>
 //                   {isCompleted ? fmtDate(historyItem?.created_at) : isCurrent ? 'In Progress' : 'Upcoming'}
 //                 </span>
 //               </div>
-//               <p className={`text-[12px] mt-[2px] ${isCompleted || isCurrent ? 'text-[#64748b]' : 'text-[#c4cdd8]'}`}>
-//                 {ms.note}
-//               </p>
+//               <p className={`text-[12px] mt-[2px] ${isCompleted || isCurrent ? 'text-[#64748b]' : 'text-[#c4cdd8]'}`}>{ms.note}</p>
 //             </div>
 //           </div>
 //         );
@@ -351,7 +529,6 @@
 // }
 
 // function DocumentStatusCard() {
-//   // Mock document checklist based on visa type
 //   const docs = [
 //     { name: 'Passport Copy',       status: 'verified' },
 //     { name: 'Degree Certificate',  status: 'verified' },
@@ -360,28 +537,18 @@
 //     { name: 'I-129 Form',          status: 'missing' },
 //     { name: 'LCA Approval',        status: 'missing' },
 //   ];
-//   const docStatusColor: Record<string, string> = {
-//     verified:       '#16a34a',
-//     pending_review: '#a16207',
-//     missing:        '#dc2626',
-//   };
-//   const docStatusLabel: Record<string, string> = {
-//     verified:       'Verified',
-//     pending_review: 'Pending',
-//     missing:        'Missing',
-//   };
+//   const colorMap: Record<string, string> = { verified: '#16a34a', pending_review: '#a16207', missing: '#dc2626' };
+//   const labelMap: Record<string, string> = { verified: 'Verified', pending_review: 'Pending', missing: 'Missing' };
 //   return (
 //     <SectionCard title="Document Status" icon={<FileText size={15} />}>
-//       <div className="flex flex-col gap-[2px]">
+//       <div className="flex flex-col">
 //         {docs.map((d, i) => (
 //           <div key={i} className="flex items-center justify-between py-[10px] border-b border-[#f8fafc] last:border-b-0">
 //             <div className="flex items-center gap-[10px]">
 //               <FileText size={14} className="text-[#94a3b8] shrink-0" />
 //               <span className="text-[13px] text-[#374151]">{d.name}</span>
 //             </div>
-//             <span className="text-[12px] font-semibold" style={{ color: docStatusColor[d.status] }}>
-//               {docStatusLabel[d.status]}
-//             </span>
+//             <span className="text-[12px] font-semibold" style={{ color: colorMap[d.status] }}>{labelMap[d.status]}</span>
 //           </div>
 //         ))}
 //       </div>
@@ -394,34 +561,27 @@
 
 // function ApprovalStatusCard({ c, onApprove }: { c: HRCaseResponse; onApprove: () => void }) {
 //   const approvers = [
-//     { name: c.employee?.full_name ?? 'Employee',    role: 'Employee',        status: 'approved' as const,  date: c.start_date },
-//     { name: c.attorney?.full_name ?? 'Attorney',    role: 'Immigration Lawyer', status: c.hr_approval_status === 'approved' ? 'approved' as const : 'pending' as const, date: null },
-//     { name: 'HR Manager',                           role: 'HR Director',      status: (c.hr_approval_status ?? 'pending') as 'approved' | 'pending' | 'rejected', date: c.hr_approved_at },
+//     { name: c.employee?.full_name ?? 'Employee',  role: 'Employee',          status: 'approved' as const,   date: c.start_date },
+//     { name: c.attorney?.full_name ?? 'Attorney',  role: 'Immigration Lawyer', status: (c.hr_approval_status === 'approved' ? 'approved' : 'pending') as 'approved' | 'pending', date: null },
+//     { name: 'HR Manager',                          role: 'HR Director',        status: (c.hr_approval_status ?? 'pending') as 'approved' | 'pending' | 'rejected', date: c.hr_approved_at },
 //   ];
 //   return (
 //     <SectionCard title="Approval Status" icon={<CheckSquare size={15} />}>
-//       <div className="flex flex-col gap-[2px]">
+//       <div className="flex flex-col">
 //         {approvers.map((a, i) => {
-//           const approved  = a.status === 'approved';
-//           const rejected  = a.status === 'rejected';
+//           const approved = a.status === 'approved', rejected = a.status === 'rejected';
 //           return (
 //             <div key={i} className="flex items-center justify-between py-[12px] border-b border-[#f8fafc] last:border-b-0">
 //               <div className="flex items-center gap-[10px]">
 //                 <div className="size-[36px] rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0"
-//                      style={{ backgroundColor: avatarColor(a.name) }}>
-//                   {initials(a.name)}
-//                 </div>
+//                      style={{ backgroundColor: avatarColor(a.name) }}>{initials(a.name)}</div>
 //                 <div>
 //                   <p className="text-[13px] font-medium text-[#111827]">{a.name}</p>
 //                   <p className="text-[11px] text-[#64748b]">{a.role}</p>
 //                   {a.date && <p className="text-[10px] text-[#94a3b8]">{fmtDate(a.date)}</p>}
 //                 </div>
 //               </div>
-//               <div className={`size-[28px] rounded-full flex items-center justify-center ${
-//                 approved ? 'bg-[#dcfce7] text-[#15803d]'
-//                 : rejected ? 'bg-[#fee2e2] text-[#dc2626]'
-//                 : 'bg-[#f1f5f9] text-[#9ca3af]'
-//               }`}>
+//               <div className={`size-[28px] rounded-full flex items-center justify-center ${approved ? 'bg-[#dcfce7] text-[#15803d]' : rejected ? 'bg-[#fee2e2] text-[#dc2626]' : 'bg-[#f1f5f9] text-[#9ca3af]'}`}>
 //                 {approved ? <CheckCircle2 size={14} /> : rejected ? <XCircle size={14} /> : <Clock size={14} />}
 //               </div>
 //             </div>
@@ -438,9 +598,9 @@
 
 // function AIInsightsCard({ c }: { c: HRCaseResponse }) {
 //   const insights = [
-//     { type: 'suggestion', icon: <Lightbulb size={13} className="text-[#f59e0b]" />, title: 'Document Suggestion', body: `Based on the ${c.visa_type?.code ?? 'visa'} application, consider uploading all supporting documents early to avoid delays.` },
-//     { type: 'warning',    icon: <AlertCircle size={13} className="text-[#ea580c]" />, title: 'Deadline Alert', body: `${c.due_date ? `Target submission date is ${fmtDate(c.due_date)}.` : 'No target date set.'} Ensure all documents are ready before proceeding.` },
-//     { type: 'positive',   icon: <CheckCircle2 size={13} className="text-[#16a34a]" />, title: 'Case Strength', body: `Your case has a ${c.progress_percent >= 75 ? 'high' : c.progress_percent >= 50 ? 'moderate' : 'developing'} approval probability based on current documentation.` },
+//     { icon: <Lightbulb size={13} className="text-[#f59e0b]" />, title: 'Document Suggestion', body: `Upload all supporting documents for ${c.visa_type?.code ?? 'this visa'} early to avoid processing delays.` },
+//     { icon: <AlertCircle size={13} className="text-[#ea580c]" />, title: 'Deadline Alert', body: c.due_date ? `Target submission is ${fmtDate(c.due_date)}. Ensure all approvals are completed 2 weeks before.` : 'Set a target submission date to track deadlines.' },
+//     { icon: <CheckCircle2 size={13} className="text-[#16a34a]" />, title: 'Case Strength', body: `Case is ${c.progress_percent >= 75 ? 'on track' : c.progress_percent >= 50 ? 'progressing well' : 'in early stages'} at ${c.progress_percent}% complete.` },
 //   ];
 //   return (
 //     <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100 rounded-[14px] p-[20px]">
@@ -467,15 +627,11 @@
 //   );
 // }
 
-// function RecentActivityCard({ history }: { history: HRCaseHistoryItem[] }) {
+// function RecentActivityCard({ history, onViewAll }: { history: HRCaseHistoryItem[]; onViewAll: () => void }) {
 //   if (!history.length) return null;
-//   const actTypeColor: Record<string, string> = {
-//     approved: '#15803d', uploaded: '#2563eb', comment: '#64748b',
-//     created: '#4f46e5', submitted: '#15803d',
-//   };
 //   return (
 //     <SectionCard title="Recent Activity" icon={<Activity size={15} />}>
-//       <div className="flex flex-col gap-[0px]">
+//       <div className="flex flex-col">
 //         {history.slice(0, 5).map((h, i) => (
 //           <div key={h.id} className={`flex items-start gap-[12px] py-[12px] ${i < Math.min(history.length, 5) - 1 ? 'border-b border-[#f8fafc]' : ''}`}>
 //             <div className="size-[36px] rounded-full bg-[#f1f5f9] flex items-center justify-center shrink-0">
@@ -483,49 +639,49 @@
 //             </div>
 //             <div className="flex-1 min-w-0">
 //               <p className="text-[13px] text-[#111827]">
-//                 Status changed to <strong>{h.status.replace('_', ' ')}</strong>
+//                 Status changed to <strong>{h.status.replace(/_/g, ' ')}</strong>
 //                 {h.note ? ` — ${h.note}` : ''}
 //               </p>
 //               <p className="text-[11px] text-[#94a3b8] mt-[2px]">{fmtRelative(h.created_at)}</p>
 //             </div>
-//             <span className="text-[11px] font-medium px-[8px] py-[2px] rounded-full shrink-0"
-//                   style={{ backgroundColor: '#f1f5f9', color: actTypeColor[h.status] ?? '#64748b' }}>
-//               {h.status.replace('_', ' ')}
-//             </span>
 //           </div>
 //         ))}
 //       </div>
-//       <button className="mt-[12px] w-full text-[13px] font-medium text-indigo-600 hover:underline flex items-center justify-center gap-[4px]">
-//         View Complete History <ArrowRight size={12} />
+//       {/* FIX 4: "View Complete History" switches tab instead of showing toast */}
+//       <button onClick={onViewAll}
+//         className="mt-[12px] w-full text-[13px] font-medium text-indigo-600 hover:underline flex items-center justify-center gap-[4px]">
+//         View Complete History ({history.length}) <ArrowRight size={12} />
 //       </button>
 //     </SectionCard>
 //   );
 // }
 
-// // Action items are from the application_tasks list — showing mock for now
 // function ActionItemsCard() {
-//   const items = [
-//     { title: 'Upload I-129 Form',              priority: 'critical', done: false, note: 'Required for petition filing. Download template from USCIS website.' },
-//     { title: 'Review Employment Letter Draft', priority: 'high',     done: false, note: 'Review and approve the employment letter prepared by HR.' },
-//     { title: 'Schedule Interview with Lawyer', priority: 'medium',   done: false, note: 'Discuss case strategy and timeline with the attorney.' },
-//     { title: 'Upload Passport Copy',           priority: 'low',      done: true,  note: 'Valid passport biographical page uploaded and verified.' },
-//   ];
-//   const priorityColor: Record<string, string> = {
-//     critical: '#dc2626', high: '#c2410c', medium: '#a16207', low: '#15803d',
-//   };
-//   const priorityBg: Record<string, string> = {
-//     critical: '#fee2e2', high: '#ffedd5', medium: '#fef9c3', low: '#dcfce7',
-//   };
+//   const [items, setItems] = useState([
+//     { id: '1', title: 'Upload I-129 Form',              priority: 'critical', done: false, note: 'Required for petition filing. Download template from USCIS website.' },
+//     { id: '2', title: 'Review Employment Letter Draft', priority: 'high',     done: false, note: 'Review and approve the employment letter prepared by HR.' },
+//     { id: '3', title: 'Schedule Interview with Lawyer', priority: 'medium',   done: false, note: 'Discuss case strategy and timeline with the attorney.' },
+//     { id: '4', title: 'Upload Passport Copy',           priority: 'low',      done: true,  note: 'Valid passport biographical page uploaded and verified.' },
+//   ]);
+
+//   const toggleItem = (id: string) => setItems(prev => prev.map(i => i.id === id ? { ...i, done: !i.done } : i));
+
+//   const priorityColor: Record<string, string> = { critical: '#dc2626', high: '#c2410c', medium: '#a16207', low: '#15803d' };
+//   const priorityBg:    Record<string, string> = { critical: '#fee2e2', high: '#ffedd5', medium: '#fef9c3', low: '#dcfce7' };
+
 //   return (
 //     <SectionCard title="Action Items" icon={<CheckSquare size={15} />}>
-//       <div className="flex flex-col gap-[0px]">
+//       <div className="flex flex-col">
 //         {items.map((item, i) => (
-//           <div key={i} className={`flex items-start gap-[12px] py-[14px] ${i < items.length - 1 ? 'border-b border-[#f8fafc]' : ''} ${item.done ? 'opacity-60' : ''}`}>
-//             <div className={`size-[20px] rounded-[4px] border-2 flex items-center justify-center shrink-0 mt-[2px] ${
-//               item.done ? 'bg-indigo-600 border-indigo-600' : 'border-[#d1d5db]'
-//             }`}>
+//           <div key={item.id} className={`flex items-start gap-[12px] py-[14px] ${i < items.length - 1 ? 'border-b border-[#f8fafc]' : ''} ${item.done ? 'opacity-60' : ''}`}>
+//             {/* Interactive checkbox */}
+//             <button
+//               onClick={() => toggleItem(item.id)}
+//               className={`size-[20px] rounded-[4px] border-2 flex items-center justify-center shrink-0 mt-[2px] transition ${
+//                 item.done ? 'bg-indigo-600 border-indigo-600' : 'border-[#d1d5db] hover:border-indigo-400'
+//               }`}>
 //               {item.done && <CheckCircle2 size={12} className="text-white" />}
-//             </div>
+//             </button>
 //             <div className="flex-1 min-w-0">
 //               <div className="flex items-center justify-between gap-[8px] mb-[3px]">
 //                 <p className={`text-[14px] font-semibold ${item.done ? 'line-through text-[#9ca3af]' : 'text-[#111827]'}`}>
@@ -548,31 +704,32 @@
 //   );
 // }
 
-// // ─────────────────────────────────────────────────────────────────────────────
-// // HISTORY TAB
-// // ─────────────────────────────────────────────────────────────────────────────
-
 // function HistoryTab({ history }: { history: HRCaseHistoryItem[] }) {
-//   if (!history.length) return (
-//     <div className="py-[40px] text-center text-[#64748b] text-[14px]">No history yet.</div>
-//   );
+//   if (!history.length) return <div className="py-[40px] text-center text-[#64748b] text-[14px]">No history yet.</div>;
 //   return (
 //     <SectionCard title="Case Status History">
-//       <div className="flex flex-col gap-[0px]">
-//         {history.map((h, i) => (
-//           <div key={h.id} className={`flex items-start gap-[12px] py-[14px] ${i < history.length - 1 ? 'border-b border-[#f8fafc]' : ''}`}>
-//             <div className="size-[36px] rounded-full bg-indigo-50 flex items-center justify-center shrink-0">
-//               <Activity size={14} className="text-indigo-600" />
+//       <div className="flex flex-col">
+//         {history.map((h, i) => {
+//           const tok = statusToken(h.status);
+//           return (
+//             <div key={h.id} className={`flex items-start gap-[12px] py-[14px] ${i < history.length - 1 ? 'border-b border-[#f8fafc]' : ''}`}>
+//               <div className="size-[36px] rounded-full bg-indigo-50 flex items-center justify-center shrink-0">
+//                 <Activity size={14} className="text-indigo-600" />
+//               </div>
+//               <div className="flex-1 min-w-0">
+//                 <div className="flex items-center justify-between gap-[8px]">
+//                   <p className="text-[13px] font-semibold text-[#111827]">
+//                     {h.stage.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+//                   </p>
+//                   <span className="px-[8px] py-[2px] rounded-full text-[11px] font-semibold shrink-0"
+//                         style={{ backgroundColor: tok.bg, color: tok.text }}>{tok.label}</span>
+//                 </div>
+//                 {h.note && <p className="text-[12px] text-[#64748b] mt-[2px]">{h.note}</p>}
+//                 <p className="text-[11px] text-[#94a3b8] mt-[3px]">{fmtDateTime(h.created_at)}</p>
+//               </div>
 //             </div>
-//             <div className="flex-1 min-w-0">
-//               <p className="text-[13px] font-semibold text-[#111827]">
-//                 {h.stage.replace('_', ' ')} → {h.status.replace('_', ' ')}
-//               </p>
-//               {h.note && <p className="text-[12px] text-[#64748b] mt-[2px]">{h.note}</p>}
-//               <p className="text-[11px] text-[#94a3b8] mt-[3px]">{fmtDateTime(h.created_at)}</p>
-//             </div>
-//           </div>
-//         ))}
+//           );
+//         })}
 //       </div>
 //     </SectionCard>
 //   );
@@ -583,14 +740,28 @@
 // // ─────────────────────────────────────────────────────────────────────────────
 
 // export default function HRCaseDetail() {
-//   const navigate                = useNavigate();
-//   const { applicationId }       = useParams<{ applicationId: string }>();
-//   const [c, setCase]            = useState<HRCaseResponse | null>(null);
-//   const [history, setHistory]   = useState<HRCaseHistoryItem[]>([]);
+//   const navigate              = useNavigate();
+//   const { applicationId }     = useParams<{ applicationId: string }>();
+//   const [searchParams] = useSearchParams();
+//   const [c, setCase]          = useState<HRCaseResponse | null>(null);
+//   const [history, setHistory] = useState<HRCaseHistoryItem[]>([]);
 //   const [isLoading, setLoading] = useState(true);
-//   const [error, setError]       = useState<string | null>(null);
-//   const [activeTab, setTab]     = useState<TabId>('overview');
-//   const [toasts, setToasts]     = useState<ToastItem[]>([]);
+//   const [error, setError]     = useState<string | null>(null);
+
+//   const initialTab = searchParams.get('tab') as TabId | null;
+//   const [activeTab, setTab] = useState<TabId>(
+//     initialTab && TABS.some(t => t.id === initialTab) ? initialTab : 'overview'
+//   );
+//   const [toasts, setToasts]   = useState<ToastItem[]>([]);
+
+//   // FIX 3: Save Draft state
+//   const [editNotes, setEditNotes] = useState('');
+//   const [isDirty,   setDirty]     = useState(false);
+//   const [saving,    setSaving]    = useState(false);
+
+//   // Modals
+//   const [showStatusModal,   setStatusModal]   = useState(false);
+//   const [showApprovalModal, setApprovalModal] = useState(false);
 
 //   const pushToast = useCallback((tone: ToastTone, title: string, message?: string) => {
 //     const id = `${Date.now()}-${Math.random()}`;
@@ -600,28 +771,64 @@
 
 //   const load = useCallback(async () => {
 //     if (!applicationId) return;
-//     setLoading(true);
-//     setError(null);
+//     setLoading(true); setError(null);
 //     try {
 //       const [caseRes, histRes] = await Promise.all([
 //         createCaseApi.getCase(applicationId),
 //         createCaseApi.getCaseHistory(applicationId),
 //       ]);
 //       setCase(caseRes);
+//       setEditNotes(caseRes.internal_notes ?? '');
 //       setHistory(histRes);
 //     } catch (err: unknown) {
 //       setError(err instanceof Error ? err.message : 'Failed to load case');
-//     } finally {
-//       setLoading(false);
-//     }
+//     } finally { setLoading(false); }
 //   }, [applicationId]);
 
 //   useEffect(() => { void load(); }, [load]);
 
+//   // FIX 3: Save Draft — calls PATCH /hr/cases/:id
+//   const handleSaveDraft = async () => {
+//     if (!applicationId || !c) return;
+//     setSaving(true);
+//     try {
+//       const updated = await createCaseApi.updateCase(applicationId, { internal_notes: editNotes });
+//       setCase(updated);
+//       setDirty(false);
+//       pushToast('success', 'Saved', 'Internal notes updated.');
+//     } catch {
+//       pushToast('error', 'Save failed', 'Please try again.');
+//     } finally { setSaving(false); }
+//   };
+
+//   // Change Status
+//   const handleChangeStatus = async (status: HRCaseStatus, stage: HRCaseStage | null, note: string) => {
+//     if (!applicationId) return;
+//     try {
+//       const updated = await createCaseApi.updateStatus(applicationId, { status, current_stage: stage ?? undefined, note: note || undefined });
+//       setCase(updated);
+//       const histRes = await createCaseApi.getCaseHistory(applicationId);
+//       setHistory(histRes);
+//       setStatusModal(false);
+//       pushToast('success', 'Status updated', `Case is now ${status.replace(/_/g, ' ')}.`);
+//     } catch { pushToast('error', 'Update failed', 'Please try again.'); }
+//   };
+
+//   // HR Approval
+//   const handleApproval = async (approvalStatus: HRApprovalStatus, notes: string) => {
+//     if (!applicationId) return;
+//     try {
+//       const updated = await createCaseApi.updateApproval(applicationId, { hr_approval_status: approvalStatus, hr_notes: notes || undefined });
+//       setCase(updated);
+//       setApprovalModal(false);
+//       pushToast('success', 'Approval updated', `HR decision: ${approvalStatus.replace(/_/g, ' ')}.`);
+//     } catch { pushToast('error', 'Approval failed', 'Please try again.'); }
+//   };
+
 //   if (isLoading) return (
 //     <div className="flex flex-col h-full bg-[#f9fafb]" style={{ fontFamily: 'Inter, sans-serif' }}>
 //       <div className="flex flex-col gap-[16px] p-[24px]">
-//         {[0,1,2].map(i => <div key={i} className={`bg-white border border-[#f1f5f9] rounded-[16px] animate-pulse ${i === 0 ? 'h-[120px]' : i === 1 ? 'h-[60px]' : 'h-[400px]'}`} />)}
+//         {[120, 60, 500].map((h, i) => <div key={i} className="bg-white border border-[#f1f5f9] rounded-[16px] animate-pulse" style={{ height: h }} />)}
 //       </div>
 //     </div>
 //   );
@@ -637,6 +844,17 @@
 
 //   const tok = statusToken(c.status);
 
+//   // FIX 2: 3-dot menu items — all wired
+//   const menuItems: DropdownItem[] = [
+//     { label: 'View Details',    icon: <Eye size={14} />,        onClick: () => setTab('overview') },
+//     { label: 'Edit Case Notes', icon: <Edit2 size={14} />,      onClick: () => setTab('overview') },
+//     { label: 'Change Status',   icon: <RefreshCw size={14} />,  onClick: () => setStatusModal(true) },
+//     { label: 'HR Approval',     icon: <CheckSquare size={14} />,onClick: () => setApprovalModal(true) },
+//     { label: 'View History',    icon: <Activity size={14} />,   onClick: () => setTab('history') },
+//     { label: 'Export CSV',      icon: <Download size={14} />,   onClick: () => { exportCaseCSV(c, history); pushToast('success', 'Exported', 'Case data saved to CSV.'); } },
+//     { label: 'Withdraw Case',   icon: <XCircle size={14} />,    danger: true, onClick: () => setStatusModal(true) },
+//   ];
+
 //   return (
 //     <div className="flex flex-col h-full bg-[#f9fafb]" style={{ fontFamily: 'Inter, sans-serif' }}>
 //       <ToastStack items={toasts} onDismiss={id => setToasts(p => p.filter(x => x.id !== id))} />
@@ -644,7 +862,7 @@
 //       <PageContent>
 //         <div className="flex flex-col gap-[0px]">
 
-//           {/* ── Case Header ── */}
+//           {/* Case Header */}
 //           <div className="bg-white border border-[#f1f5f9] rounded-[16px] mb-[16px] shadow-[0px_1px_2px_rgba(0,0,0,0.05)]">
 //             <div className="px-[24px] pt-[20px] pb-[16px]">
 //               {/* Breadcrumb */}
@@ -657,7 +875,7 @@
 //                 <span className="text-[13px] text-[#374151] truncate max-w-[200px]">{c.case_name}</span>
 //               </div>
 
-//               {/* Title row */}
+//               {/* Title + actions */}
 //               <div className="flex items-start justify-between gap-[16px]">
 //                 <div className="min-w-0">
 //                   <div className="flex items-center gap-[12px] flex-wrap mb-[6px]">
@@ -668,56 +886,53 @@
 //                       {tok.label}
 //                     </span>
 //                   </div>
-//                   <p className="text-[13px] text-[#64748b]">
-//                     Case ID: {c.application_number} · Created {fmtDate(c.created_at)}
-//                   </p>
+//                   <p className="text-[13px] text-[#64748b]">Case ID: {c.application_number} · Created {fmtDate(c.created_at)}</p>
 //                 </div>
+
 //                 <div className="flex items-center gap-[8px] shrink-0">
 //                   <button onClick={() => navigate('/employer/notifications')}
 //                     className="size-[38px] rounded-[10px] border border-[#e5e7eb] flex items-center justify-center text-[#64748b] hover:bg-[#f8fafc] relative">
 //                     <Bell size={15} />
 //                     <span className="absolute top-[8px] right-[8px] size-[6px] rounded-full bg-[#ef4444] border border-white" />
 //                   </button>
-//                   <button onClick={() => pushToast('info', 'Share coming soon')}
+
+//                   {/* FIX 5: Share — copies URL to clipboard */}
+//                   <button onClick={() => { navigator.clipboard?.writeText(window.location.href); pushToast('success', 'Link copied'); }}
 //                     className="flex items-center gap-[6px] h-[38px] px-[14px] rounded-[10px] border border-[#e5e7eb] text-[13px] font-medium text-[#334155] hover:bg-[#f8fafc]">
 //                     <Share2 size={13} /> Share
 //                   </button>
-//                   <button onClick={() => pushToast('info', 'Export coming soon')}
+
+//                   {/* FIX 3: Export — real CSV */}
+//                   <button onClick={() => { exportCaseCSV(c, history); pushToast('success', 'Exported', 'Case data saved to CSV.'); }}
 //                     className="flex items-center gap-[6px] h-[38px] px-[14px] rounded-[10px] border border-[#e5e7eb] text-[13px] font-medium text-[#334155] hover:bg-[#f8fafc]">
 //                     <Download size={13} /> Export
 //                   </button>
-//                   <button className="flex items-center gap-[6px] h-[38px] px-[14px] rounded-[10px] text-white text-[13px] font-semibold hover:opacity-90"
+
+//                   {/* FIX 3: Save Draft — calls API, disabled when no changes */}
+//                   <button onClick={() => void handleSaveDraft()} disabled={saving || !isDirty}
+//                     className="flex items-center gap-[6px] h-[38px] px-[14px] rounded-[10px] text-white text-[13px] font-semibold disabled:opacity-50 transition"
 //                     style={{ backgroundImage: PRIMARY_GRADIENT }}>
-//                     <Save size={13} /> Save Draft
+//                     <Save size={13} /> {saving ? 'Saving...' : 'Save Draft'}
 //                   </button>
-//                   <button className="size-[38px] rounded-[10px] border border-[#e5e7eb] flex items-center justify-center text-[#64748b] hover:bg-[#f8fafc]">
-//                     <MoreHorizontal size={15} />
-//                   </button>
+
+//                   {/* FIX 2: 3-dot — Dropdown with wired actions */}
+//                   <Dropdown
+//                     trigger={
+//                       <button className="size-[38px] rounded-[10px] border border-[#e5e7eb] flex items-center justify-center text-[#64748b] hover:bg-[#f8fafc]">
+//                         <MoreHorizontal size={15} />
+//                       </button>
+//                     }
+//                     items={menuItems}
+//                   />
 //                 </div>
 //               </div>
 
-//               {/* Meta row: Employee · Employer · Attorney · Target Date */}
+//               {/* Meta row */}
 //               <div className="flex items-center flex-wrap gap-[20px] mt-[12px]">
-//                 {c.employee && (
-//                   <span className="flex items-center gap-[6px] text-[13px] text-[#475569]">
-//                     <User size={13} className="text-[#94a3b8]" /> Employee: {c.employee.full_name}
-//                   </span>
-//                 )}
-//                 {c.sponsor_employer && (
-//                   <span className="flex items-center gap-[6px] text-[13px] text-[#475569]">
-//                     <Building2 size={13} className="text-[#94a3b8]" /> Employer: {c.sponsor_employer}
-//                   </span>
-//                 )}
-//                 {c.attorney && (
-//                   <span className="flex items-center gap-[6px] text-[13px] text-[#475569]">
-//                     <Scale size={13} className="text-[#94a3b8]" /> Attorney: {c.attorney.full_name}
-//                   </span>
-//                 )}
-//                 {c.due_date && (
-//                   <span className="flex items-center gap-[6px] text-[13px] text-[#475569]">
-//                     <Calendar size={13} className="text-[#94a3b8]" /> Target: {fmtDate(c.due_date)}
-//                   </span>
-//                 )}
+//                 {c.employee    && <span className="flex items-center gap-[6px] text-[13px] text-[#475569]"><User size={13} className="text-[#94a3b8]" /> Employee: {c.employee.full_name}</span>}
+//                 {c.sponsor_employer && <span className="flex items-center gap-[6px] text-[13px] text-[#475569]"><Building2 size={13} className="text-[#94a3b8]" /> Employer: {c.sponsor_employer}</span>}
+//                 {c.attorney    && <span className="flex items-center gap-[6px] text-[13px] text-[#475569]"><Scale size={13} className="text-[#94a3b8]" /> Attorney: {c.attorney.full_name}</span>}
+//                 {c.due_date    && <span className="flex items-center gap-[6px] text-[13px] text-[#475569]"><Calendar size={13} className="text-[#94a3b8]" /> Target: {fmtDate(c.due_date)}</span>}
 //               </div>
 //             </div>
 
@@ -732,7 +947,7 @@
 //                      style={{ width: `${c.progress_percent}%`, backgroundImage: PRIMARY_GRADIENT }} />
 //               </div>
 //               <div className="flex items-center gap-[24px] mt-[8px]">
-//                 <span className="text-[11px] text-[#64748b]">Stage: {c.current_stage?.replace('_', ' ') ?? 'Not started'}</span>
+//                 <span className="text-[11px] text-[#64748b]">Stage: {c.current_stage?.replace(/_/g, ' ') ?? 'Not started'}</span>
 //                 {c.has_action_required && (
 //                   <span className="text-[11px] text-[#c2410c] font-medium flex items-center gap-[3px]">
 //                     <AlertCircle size={10} /> {c.action_required_note ?? 'Action required'}
@@ -746,79 +961,104 @@
 //               {TABS.map(t => (
 //                 <button key={t.id} onClick={() => setTab(t.id)}
 //                   className={`px-[16px] py-[14px] text-[13px] font-medium whitespace-nowrap border-b-2 transition ${
-//                     activeTab === t.id
-//                       ? 'border-indigo-600 text-indigo-600'
-//                       : 'border-transparent text-[#64748b] hover:text-[#334155]'
+//                     activeTab === t.id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-[#64748b] hover:text-[#334155]'
 //                   }`}>
 //                   {t.label}
+//                   {t.id === 'history' && history.length > 0 && (
+//                     <span className="ml-[5px] px-[6px] py-[1px] rounded-full bg-indigo-50 text-indigo-600 text-[10px] font-semibold">{history.length}</span>
+//                   )}
 //                 </button>
 //               ))}
 //             </div>
 //           </div>
 
-//           {/* ── Main content: sidebar + tab area ── */}
+//           {/* Main: sidebar + tab area */}
 //           <div className="flex flex-col lg:flex-row gap-[20px] items-start">
-//             <Sidebar c={c} />
+//             <Sidebar c={c} onApprove={() => setApprovalModal(true)} />
 
 //             <div className="flex-1 min-w-0 flex flex-col gap-[16px]">
 //               {activeTab === 'overview' && (
 //                 <>
-//                   {/* Case Summary */}
+//                   {/* Case Summary with editable internal notes */}
 //                   <SectionCard title="Case Summary">
-//                     <div className="grid grid-cols-1 md:grid-cols-2 gap-[24px]">
+//                     <div className="grid grid-cols-1 md:grid-cols-2 gap-[24px] mb-[16px]">
 //                       <div>
 //                         <p className="text-[12px] font-semibold uppercase tracking-[0.05em] text-[#94a3b8] mb-[10px]">Basic Information</p>
-//                         <div className="flex flex-col gap-[10px]">
-//                           <InfoPair label="Visa Type:" value={c.visa_type?.name ?? '—'} />
-//                           <InfoPair label="Case Status:" value={tok.label}
-//                             badge={<span className="px-[8px] py-[2px] rounded-full text-[11px] font-semibold" style={{ backgroundColor: tok.bg, color: tok.text }}>{tok.label}</span>} />
-//                           <InfoPair label="Priority:" value={c.priority} />
-//                           <InfoPair label="Created:" value={fmtDate(c.created_at)} />
-//                           <InfoPair label="Last Updated:" value={fmtRelative(c.updated_at)} />
-//                         </div>
+//                         <InfoPair label="Visa Type:"    value={c.visa_type?.name ?? '—'} />
+//                         <InfoPair label="Case Status:"  value={tok.label}
+//                           badge={<span className="px-[8px] py-[2px] rounded-full text-[11px] font-semibold" style={{ backgroundColor: tok.bg, color: tok.text }}>{tok.label}</span>} />
+//                         <InfoPair label="Priority:"     value={c.priority} />
+//                         <InfoPair label="Created:"      value={fmtDate(c.created_at)} />
+//                         <InfoPair label="Last Updated:" value={fmtRelative(c.updated_at)} />
 //                       </div>
 //                       <div>
 //                         <p className="text-[12px] font-semibold uppercase tracking-[0.05em] text-[#94a3b8] mb-[10px]">Employment Details</p>
-//                         <div className="flex flex-col gap-[10px]">
-//                           <InfoPair label="Job Title:"    value={c.employee?.job_title ?? '—'} />
-//                           <InfoPair label="Department:"   value={c.employee?.department ?? '—'} />
-//                           <InfoPair label="Start Date:"   value={fmtDate(c.start_date)} />
-//                           <InfoPair label="Target Date:"  value={fmtDate(c.due_date)} />
-//                           <InfoPair label="Sponsor:"      value={c.sponsor_employer ?? '—'} />
-//                         </div>
+//                         <InfoPair label="Job Title:"   value={c.employee?.job_title ?? '—'} />
+//                         <InfoPair label="Department:"  value={c.employee?.department ?? '—'} />
+//                         <InfoPair label="Start Date:"  value={fmtDate(c.start_date)} />
+//                         <InfoPair label="Target Date:" value={fmtDate(c.due_date)} />
+//                         <InfoPair label="Sponsor:"     value={c.sponsor_employer ?? '—'} />
 //                       </div>
+//                     </div>
+//                     {/* FIX 3: Editable internal notes — triggers Save Draft */}
+//                     <div className="border-t border-[#f8fafc] pt-[14px]">
+//                       <label className="block text-[12px] font-semibold uppercase tracking-[0.04em] text-[#94a3b8] mb-[6px]">
+//                         Internal Notes (HR only)
+//                       </label>
+//                       <textarea
+//                         value={editNotes}
+//                         onChange={(e: ChangeEvent<HTMLTextAreaElement>) => { setEditNotes(e.target.value); setDirty(true); }}
+//                         placeholder="Add internal notes visible only to HR and attorney..."
+//                         rows={3}
+//                         className="w-full border border-[#e5e7eb] rounded-[8px] px-[12px] py-[8px] text-[13px] text-[#111827] resize-none focus:outline-none focus:ring-2 focus:ring-indigo-200 transition placeholder:text-[#9ca3af]"
+//                       />
+//                       {isDirty && (
+//                         <p className="text-[11px] text-[#f59e0b] mt-[4px] flex items-center gap-[4px]">
+//                           <AlertCircle size={10} /> Unsaved changes — click "Save Draft" to save
+//                         </p>
+//                       )}
 //                     </div>
 //                   </SectionCard>
 
-//                   {/* Key Milestones */}
 //                   <SectionCard title="Key Milestones">
 //                     <MilestoneTimeline currentStage={c.current_stage} history={history} />
 //                   </SectionCard>
 
-//                   {/* Document Status + Approval Status */}
 //                   <div className="grid grid-cols-1 md:grid-cols-2 gap-[16px]">
 //                     <DocumentStatusCard />
-//                     <ApprovalStatusCard c={c} onApprove={() => pushToast('info', 'Approval UI coming soon')} />
+//                     <ApprovalStatusCard c={c} onApprove={() => setApprovalModal(true)} />
 //                   </div>
 
-//                   {/* AI Insights */}
 //                   <AIInsightsCard c={c} />
 
-//                   {/* Recent Activity */}
-//                   <RecentActivityCard history={history} />
+//                   {/* FIX 4: onViewAll switches to history tab */}
+//                   <RecentActivityCard history={history} onViewAll={() => setTab('history')} />
 
-//                   {/* Action Items */}
 //                   <ActionItemsCard />
 //                 </>
 //               )}
 
 //               {activeTab === 'history' && <HistoryTab history={history} />}
 
-//               {['documents', 'checklist', 'letters', 'lca', 'deadlines', 'access'].includes(activeTab) && (
+//               {activeTab === 'documents' && (
+//                 <HRDocumentManagement
+//                   embedded
+//                   applicationId={applicationId ?? ''}
+//                   caseName={c.case_name}
+//                   visaType={c.visa_type?.name ?? 'H-1B'}
+//                   participants={[
+//                     ...(c.employee ? [{ name: c.employee.full_name, role: 'Employee' }] : []),
+//                     ...(c.attorney ? [{ name: c.attorney.full_name, role: 'Immigration Lawyer' }] : []),
+//                     { name: 'HR Manager', role: 'HR Manager' },
+//                   ]}
+//                 />
+//               )}
+//               {['checklist', 'letters', 'lca', 'deadlines', 'access'].includes(activeTab) && (
 //                 <div className="bg-white border border-[#f1f5f9] rounded-[14px] p-[40px] text-center shadow-[0px_1px_1px_rgba(0,0,0,0.04)]">
-//                   <p className="text-[14px] text-[#64748b]">
-//                     {TABS.find(t => t.id === activeTab)?.label} screen coming soon.
+//                   <p className="text-[14px] font-semibold text-[#0f172a] mb-[4px]">
+//                     {TABS.find(t => t.id === activeTab)?.label}
 //                   </p>
+//                   <p className="text-[13px] text-[#64748b]">This screen is being built next.</p>
 //                 </div>
 //               )}
 //             </div>
@@ -827,13 +1067,18 @@
 //       </PageContent>
 
 //       {/* Auto-save indicator */}
-//       <div className="fixed bottom-[20px] left-[20px] flex items-center gap-[6px] bg-white border border-[#e5e7eb] rounded-full px-[14px] py-[6px] shadow-sm z-10">
-//         <span className="size-[7px] rounded-full bg-[#22c55e]" />
-//         <span className="text-[12px] text-[#374151]">All changes saved</span>
+//       <div className="fixed bottom-[20px] left-[20px] flex items-center gap-[6px] bg-white border border-[#e5e7eb] rounded-full px-[14px] py-[6px] shadow-sm z-10"
+//            style={{ color: isDirty ? '#f59e0b' : '#374151' }}>
+//         <span className={`size-[7px] rounded-full ${isDirty ? 'bg-[#f59e0b] animate-pulse' : 'bg-[#22c55e]'}`} />
+//         <span className="text-[12px]">{isDirty ? 'Unsaved changes' : 'All changes saved'}</span>
 //       </div>
+
+//       <ChangeStatusModal open={showStatusModal} current={c.status} onClose={() => setStatusModal(false)} onSave={handleChangeStatus} />
+//       <ApprovalModal open={showApprovalModal} current={c.hr_approval_status} onClose={() => setApprovalModal(false)} onSave={handleApproval} />
 //     </div>
 //   );
 // }
+
 
 // src/pages/hr/HRCaseDetail.tsx
 // Fixed:
@@ -842,6 +1087,12 @@
 //   3. Save Draft — calls PATCH /hr/cases/:id with editable internal notes
 //   4. "View Complete History" button — switches to history tab
 //   5. Share button — copies URL to clipboard
+//   6. Sidebar participants avatar — was casting c.employee to an inline
+//      { profile_picture_url } shape that almost certainly never existed on
+//      the real type, so it silently always fell back to initials. Now uses
+//      UserAvatar (userId-based, same component used across HREmployees.tsx)
+//      and falls back to initials properly on load failure too, not just
+//      on a missing URL.
 
 import { useState, useEffect, useCallback, useRef, type ReactNode, type ChangeEvent } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -850,22 +1101,25 @@ import {
   Scale, Calendar, FileText, CheckCircle2, Clock, AlertCircle,
   Users, Plus, MoreHorizontal, CheckSquare, Lightbulb,
   Activity, ArrowRight, Circle, XCircle, Bell, RefreshCw,
-  X, Info, AlertTriangle, Edit2, Eye,
+  X, Info, AlertTriangle, Edit2, Eye, Trash2, CalendarClock,
 } from 'lucide-react';
 import { PageContent } from '../../components/layout/Pageheader';
 import { createCaseApi } from '../../api/hr/createCase.api';
+import { hrTaskApi } from '../../api/hr/hrTask.api';
 import HRDocumentManagement from './HRDocumentManagement';
 import type {
   HRCaseResponse, HRCaseStatus, HRCaseStage,
   HRCaseHistoryItem, HRApprovalStatus,
 } from '../../types/hr/createCase.types';
-import { hrDocumentApi }  from '../../api/hr/hrDocument.api';
-import type { HRDocumentResponse } from '../../types/hr/document.types';
-import { hrDeadlinesApi } from '../../api/hr/hrDeadlines.api';
-import type { HRDeadlineItem } from '../../types/hr/deadlines.types';
-import { visaChecklistApi } from '../../api/employee/visaChecklist.api';
-import { hrCaseLettersApi, type GeneratedLetter } from '../../api/hr/hrCaseLetters.api';
-import { getFileUrl } from '../../utils/fileUrl';
+import type { HRTaskResponse } from '../../types/hr/task.types';
+import { UserAvatar } from '../../components/ui/UserAvatar';
+
+// due_date isn't declared on HRTaskResponse/HRTaskCreateRequest in task.types.ts
+// yet — the backend now packs it into the same JSON blob as priority (see
+// hr_task_service.py's _pack_description), so it's available on every task,
+// but the shared type files still need `due_date?: string | null` added.
+// This local type keeps the checklist UI unblocked in the meantime.
+type Task = HRTaskResponse & { due_date?: string | null };
 
 const PRIMARY_GRADIENT = 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)';
 
@@ -1138,6 +1392,92 @@ function ApprovalModal({ open, current, onClose, onSave }: {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ADD TASK MODAL — "Missing Checklist" → HR adds a custom checklist item
+// ─────────────────────────────────────────────────────────────────────────────
+
+type TaskPriority = 'critical' | 'high' | 'medium' | 'low';
+
+function AddTaskModal({ open, onClose, onSave }: {
+  open: boolean;
+  onClose: () => void;
+  onSave: (data: { task_name: string; description: string; priority: TaskPriority; is_required: boolean; due_date: string }) => Promise<void>;
+}) {
+  const [taskName,    setTaskName]    = useState('');
+  const [description, setDescription] = useState('');
+  const [priority,    setPriority]    = useState<TaskPriority>('medium');
+  const [isRequired,  setIsRequired]  = useState(false);
+  const [dueDate,     setDueDate]     = useState('');
+  const [busy,        setBusy]        = useState(false);
+
+  const PRIORITIES: TaskPriority[] = ['critical', 'high', 'medium', 'low'];
+
+  if (!open) return null;
+
+  const reset = () => { setTaskName(''); setDescription(''); setPriority('medium'); setIsRequired(false); setDueDate(''); };
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/30 z-50" onClick={onClose} />
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-[16px]">
+        <div className="w-full max-w-[480px] bg-white rounded-[18px] border border-[#e2e8f0] shadow-2xl p-[24px]">
+          <div className="flex items-center justify-between mb-[20px]">
+            <h3 className="text-[18px] font-semibold text-[#0f172a]">Add Checklist Task</h3>
+            <button onClick={onClose}><X size={18} className="text-[#94a3b8]" /></button>
+          </div>
+          <div className="flex flex-col gap-[14px]">
+            <div>
+              <label className="block text-[12px] font-semibold uppercase tracking-[0.04em] text-[#94a3b8] mb-[6px]">Task Name</label>
+              <input value={taskName} onChange={e => setTaskName(e.target.value)} placeholder="e.g. Get signed I-9 from employee"
+                className="w-full h-[42px] border border-[#e5e7eb] rounded-[8px] px-[12px] text-[13px] focus:outline-none focus:ring-2 focus:ring-indigo-200" />
+            </div>
+            <div>
+              <label className="block text-[12px] font-semibold uppercase tracking-[0.04em] text-[#94a3b8] mb-[6px]">Description (optional)</label>
+              <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Details for this task..." rows={3}
+                className="w-full border border-[#e5e7eb] rounded-[8px] px-[12px] py-[8px] text-[13px] resize-none focus:outline-none focus:ring-2 focus:ring-indigo-200" />
+            </div>
+            <div className="grid grid-cols-2 gap-[12px]">
+              <div>
+                <label className="block text-[12px] font-semibold uppercase tracking-[0.04em] text-[#94a3b8] mb-[6px]">Priority</label>
+                <select value={priority} onChange={e => setPriority(e.target.value as TaskPriority)}
+                  className="w-full h-[42px] border border-[#e5e7eb] rounded-[8px] px-[12px] text-[13px] focus:outline-none focus:ring-2 focus:ring-indigo-200">
+                  {PRIORITIES.map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold uppercase tracking-[0.04em] text-[#94a3b8] mb-[6px]">Due Date (optional)</label>
+                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
+                  className="w-full h-[42px] border border-[#e5e7eb] rounded-[8px] px-[12px] text-[13px] focus:outline-none focus:ring-2 focus:ring-indigo-200" />
+              </div>
+            </div>
+            <label className="flex items-center gap-[8px] text-[13px] text-[#374151] cursor-pointer">
+              <input type="checkbox" checked={isRequired} onChange={e => setIsRequired(e.target.checked)}
+                className="size-[16px] rounded-[4px] border-[#d1d5db] text-indigo-600 focus:ring-indigo-200" />
+              Mark as required (cannot be deleted later)
+            </label>
+          </div>
+          <div className="flex justify-end gap-[10px] mt-[20px]">
+            <button onClick={onClose} className="h-[40px] px-[16px] rounded-[10px] border border-[#e5e7eb] text-[13px] font-medium text-[#334155] hover:bg-[#f8fafc]">Cancel</button>
+            <button
+              onClick={async () => {
+                if (!taskName.trim()) return;
+                setBusy(true);
+                await onSave({ task_name: taskName.trim(), description: description.trim(), priority, is_required: isRequired, due_date: dueDate });
+                setBusy(false);
+                reset();
+              }}
+              disabled={busy || !taskName.trim()}
+              className="h-[40px] px-[16px] rounded-[10px] text-white text-[13px] font-semibold disabled:opacity-60"
+              style={{ backgroundImage: PRIMARY_GRADIENT }}>
+              {busy ? 'Adding...' : 'Add Task'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // TOKENS
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1198,10 +1538,23 @@ function Sidebar({ c, onApprove }: { c: HRCaseResponse; onApprove: () => void })
     c.due_date ? { label: 'Target Submission', days: daysUntil(c.due_date) } : null,
   ].filter(Boolean) as Array<{ label: string; days: number | null }>;
 
+  // FIXED: previously cast c.employee to an inline { profile_picture_url }
+  // shape that almost certainly never existed on the real type — that cast
+  // was a workaround, not evidence the field was actually there, and this
+  // silently always fell back to initials. Now passes user_id through to
+  // UserAvatar (the same userId-based avatar component used in
+  // HREmployees.tsx), which resolves the photo via the by-user-id avatar
+  // endpoint and falls back to initials automatically on 404/error.
+  //
+  // ASSUMPTION FLAGGED: this assumes c.employee / c.attorney (whatever
+  // HRCaseResponse's nested employee/attorney summary shape is) expose a
+  // `user_id` field. Verify against createCase.types.ts — if the field is
+  // named differently, or c.employee itself IS the user id, adjust the two
+  // lines below accordingly.
   const participants = [
-    c.employee ? { name: c.employee.full_name, role: 'Employee', pic: (c.employee as { profile_picture_url?: string | null }).profile_picture_url } : null,
-    c.attorney ? { name: c.attorney.full_name,  role: 'Attorney', pic: null } : null,
-  ].filter(Boolean) as Array<{ name: string; role: string; pic?: string | null }>;
+    c.employee ? { name: c.employee.full_name, role: 'Employee', userId: c.employee.user_id } : null,
+    c.attorney ? { name: c.attorney.full_name,  role: 'Attorney', userId: c.attorney.user_id } : null,
+  ].filter(Boolean) as Array<{ name: string; role: string; userId?: string | null }>;
 
   return (
     <div className="w-full lg:w-[280px] shrink-0 flex flex-col gap-[16px]">
@@ -1249,26 +1602,16 @@ function Sidebar({ c, onApprove }: { c: HRCaseResponse; onApprove: () => void })
           <Users size={14} /> Participants
         </h3>
         <div className="flex flex-col gap-[12px]">
-          {participants.map((p, i) => {
-            const avatarSrc = getFileUrl(p.pic ?? null);
-            return (
-              <div key={i} className="flex items-center gap-[10px]">
-                {avatarSrc ? (
-                  <img src={avatarSrc} alt={p.name} className="size-[36px] rounded-full object-cover border border-[#e5e7eb] shrink-0" />
-                ) : (
-                  <div className="size-[36px] rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0"
-                       style={{ backgroundColor: avatarColor(p.name) }}>
-                    {initials(p.name)}
-                  </div>
-                )}
-                <div className="min-w-0">
-                  <p className="text-[13px] font-semibold text-[#111827] truncate">{p.name}</p>
-                  <p className="text-[11px] text-[#64748b]">{p.role}</p>
-                </div>
-                <div className="size-[8px] rounded-full bg-[#22c55e] shrink-0 ml-auto" />
+          {participants.map((p, i) => (
+            <div key={i} className="flex items-center gap-[10px]">
+              <UserAvatar userId={p.userId} name={p.name} size={36} className="shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold text-[#111827] truncate">{p.name}</p>
+                <p className="text-[11px] text-[#64748b]">{p.role}</p>
               </div>
-            );
-          })}
+              <div className="size-[8px] rounded-full bg-[#22c55e] shrink-0 ml-auto" />
+            </div>
+          ))}
           <button className="flex items-center gap-[6px] text-[12px] font-medium text-indigo-600 hover:underline mt-[2px]">
             <Plus size={12} /> Add Participant
           </button>
@@ -1490,51 +1833,169 @@ function RecentActivityCard({ history, onViewAll }: { history: HRCaseHistoryItem
   );
 }
 
-function ActionItemsCard() {
-  const [items, setItems] = useState([
-    { id: '1', title: 'Upload I-129 Form',              priority: 'critical', done: false, note: 'Required for petition filing. Download template from USCIS website.' },
-    { id: '2', title: 'Review Employment Letter Draft', priority: 'high',     done: false, note: 'Review and approve the employment letter prepared by HR.' },
-    { id: '3', title: 'Schedule Interview with Lawyer', priority: 'medium',   done: false, note: 'Discuss case strategy and timeline with the attorney.' },
-    { id: '4', title: 'Upload Passport Copy',           priority: 'low',      done: true,  note: 'Valid passport biographical page uploaded and verified.' },
-  ]);
+const TASK_PRIORITY_COLOR: Record<string, string> = { critical: '#dc2626', high: '#c2410c', medium: '#a16207', low: '#15803d' };
+const TASK_PRIORITY_BG:    Record<string, string> = { critical: '#fee2e2', high: '#ffedd5', medium: '#fef9c3', low: '#dcfce7' };
 
-  const toggleItem = (id: string) => setItems(prev => prev.map(i => i.id === id ? { ...i, done: !i.done } : i));
+// Real "Action Items" — sourced from the same task list as the Missing
+// Checklist tab (hrTaskApi.list). Shows the top few pending items here;
+// the full list with add/delete lives on the Missing Checklist tab.
+function ActionItemsCard({ tasks, onToggle, onViewAll }: {
+  tasks: Task[];
+  onToggle: (task: Task) => void;
+  onViewAll: () => void;
+}) {
+  const sorted = [...tasks].sort((a, b) => {
+    if (a.is_completed !== b.is_completed) return a.is_completed ? 1 : -1;
+    return a.sort_order - b.sort_order;
+  });
+  const preview = sorted.slice(0, 5);
 
-  const priorityColor: Record<string, string> = { critical: '#dc2626', high: '#c2410c', medium: '#a16207', low: '#15803d' };
-  const priorityBg:    Record<string, string> = { critical: '#fee2e2', high: '#ffedd5', medium: '#fef9c3', low: '#dcfce7' };
+  if (tasks.length === 0) {
+    return (
+      <SectionCard title="Action Items" icon={<CheckSquare size={15} />}>
+        <p className="text-[13px] text-[#94a3b8] py-[8px]">No checklist tasks yet.</p>
+      </SectionCard>
+    );
+  }
 
   return (
     <SectionCard title="Action Items" icon={<CheckSquare size={15} />}>
       <div className="flex flex-col">
-        {items.map((item, i) => (
-          <div key={item.id} className={`flex items-start gap-[12px] py-[14px] ${i < items.length - 1 ? 'border-b border-[#f8fafc]' : ''} ${item.done ? 'opacity-60' : ''}`}>
-            {/* Interactive checkbox */}
+        {preview.map((item, i) => (
+          <div key={item.id} className={`flex items-start gap-[12px] py-[14px] ${i < preview.length - 1 ? 'border-b border-[#f8fafc]' : ''} ${item.is_completed ? 'opacity-60' : ''}`}>
             <button
-              onClick={() => toggleItem(item.id)}
+              onClick={() => onToggle(item)}
               className={`size-[20px] rounded-[4px] border-2 flex items-center justify-center shrink-0 mt-[2px] transition ${
-                item.done ? 'bg-indigo-600 border-indigo-600' : 'border-[#d1d5db] hover:border-indigo-400'
+                item.is_completed ? 'bg-indigo-600 border-indigo-600' : 'border-[#d1d5db] hover:border-indigo-400'
               }`}>
-              {item.done && <CheckCircle2 size={12} className="text-white" />}
+              {item.is_completed && <CheckCircle2 size={12} className="text-white" />}
             </button>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-[8px] mb-[3px]">
-                <p className={`text-[14px] font-semibold ${item.done ? 'line-through text-[#9ca3af]' : 'text-[#111827]'}`}>
-                  {item.title}
+                <p className={`text-[14px] font-semibold ${item.is_completed ? 'line-through text-[#9ca3af]' : 'text-[#111827]'}`}>
+                  {item.task_name}
                 </p>
-                {!item.done && (
+                {!item.is_completed && (
                   <span className="px-[8px] py-[2px] rounded-full text-[11px] font-semibold shrink-0"
-                        style={{ backgroundColor: priorityBg[item.priority], color: priorityColor[item.priority] }}>
+                        style={{ backgroundColor: TASK_PRIORITY_BG[item.priority], color: TASK_PRIORITY_COLOR[item.priority] }}>
                     {item.priority.charAt(0).toUpperCase() + item.priority.slice(1)}
                   </span>
                 )}
-                {item.done && <span className="px-[8px] py-[2px] rounded-full text-[11px] font-semibold bg-[#dcfce7] text-[#15803d] shrink-0">Completed</span>}
+                {item.is_completed && <span className="px-[8px] py-[2px] rounded-full text-[11px] font-semibold bg-[#dcfce7] text-[#15803d] shrink-0">Completed</span>}
               </div>
-              <p className="text-[12px] text-[#64748b]">{item.note}</p>
+              {item.description && <p className="text-[12px] text-[#64748b]">{item.description}</p>}
             </div>
           </div>
         ))}
       </div>
+      {tasks.length > preview.length && (
+        <button onClick={onViewAll} className="mt-[14px] w-full text-[13px] font-medium text-indigo-600 hover:underline flex items-center justify-center gap-[4px]">
+          View All Tasks ({tasks.length}) <ArrowRight size={12} />
+        </button>
+      )}
     </SectionCard>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MISSING CHECKLIST TAB — real task list, backed by hrTaskApi
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ChecklistTab({
+  tasks, isLoading, onToggle, onDelete, onAddTask,
+}: {
+  tasks: Task[];
+  isLoading: boolean;
+  onToggle: (task: Task) => void;
+  onDelete: (task: Task) => void;
+  onAddTask: () => void;
+}) {
+  if (isLoading) {
+    return (
+      <div className="bg-white border border-[#f1f5f9] rounded-[14px] p-[40px] text-center">
+        <p className="text-[13px] text-[#64748b]">Loading checklist...</p>
+      </div>
+    );
+  }
+
+  const pending   = [...tasks].filter(t => !t.is_completed).sort((a, b) => a.sort_order - b.sort_order);
+  const completed = [...tasks].filter(t => t.is_completed).sort((a, b) => a.sort_order - b.sort_order);
+
+  const renderTask = (task: Task) => {
+    const overdue = !!task.due_date && !task.is_completed && (daysUntil(task.due_date) ?? 1) < 0;
+    return (
+      <div key={task.id}
+        className={`flex items-start gap-[12px] py-[14px] px-[10px] -mx-[10px] rounded-[8px] border-b border-[#f8fafc] last:border-b-0 ${
+          task.is_completed ? 'opacity-60' : ''
+        } ${overdue ? 'bg-[#fef2f2] border-b-transparent' : ''}`}>
+        <button
+          onClick={() => onToggle(task)}
+          className={`size-[20px] rounded-[4px] border-2 flex items-center justify-center shrink-0 mt-[2px] transition ${
+            task.is_completed ? 'bg-indigo-600 border-indigo-600' : 'border-[#d1d5db] hover:border-indigo-400'
+          }`}>
+          {task.is_completed && <CheckCircle2 size={12} className="text-white" />}
+        </button>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-[8px] mb-[3px]">
+            <div className="flex items-center gap-[8px] min-w-0">
+              <p className={`text-[14px] font-semibold truncate ${task.is_completed ? 'line-through text-[#9ca3af]' : 'text-[#111827]'}`}>
+                {task.task_name}
+              </p>
+              {task.is_required && (
+                <span className="px-[6px] py-[1px] rounded-full text-[10px] font-semibold bg-[#eef2ff] text-indigo-600 shrink-0">Required</span>
+              )}
+            </div>
+            <div className="flex items-center gap-[6px] shrink-0">
+              {!task.is_completed && (
+                <span className="px-[8px] py-[2px] rounded-full text-[11px] font-semibold"
+                      style={{ backgroundColor: TASK_PRIORITY_BG[task.priority], color: TASK_PRIORITY_COLOR[task.priority] }}>
+                  {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+                </span>
+              )}
+              {task.is_completed && <span className="px-[8px] py-[2px] rounded-full text-[11px] font-semibold bg-[#dcfce7] text-[#15803d]">Completed</span>}
+              {!task.is_required && (
+                <button onClick={() => onDelete(task)} title="Delete task" className="text-[#cbd5e1] hover:text-[#dc2626] p-[2px]">
+                  <Trash2 size={14} />
+                </button>
+              )}
+            </div>
+          </div>
+          {task.description && <p className="text-[12px] text-[#64748b]">{task.description}</p>}
+          {task.due_date && (
+            <span className={`inline-flex items-center gap-[4px] mt-[6px] text-[11px] ${overdue ? 'text-[#dc2626] font-semibold' : 'text-[#94a3b8]'}`}>
+              <CalendarClock size={11} /> Due {fmtDate(task.due_date)}
+              {overdue ? ' — overdue' : ''}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-[16px]">
+      <SectionCard
+        title={`Pending (${pending.length})`}
+        icon={<AlertCircle size={15} />}
+      >
+        {pending.length === 0 ? (
+          <p className="text-[13px] text-[#94a3b8] py-[8px]">Nothing pending — all caught up.</p>
+        ) : (
+          <div className="flex flex-col">{pending.map(renderTask)}</div>
+        )}
+        <button
+          onClick={onAddTask}
+          className="mt-[14px] w-full h-[40px] rounded-[10px] border border-dashed border-[#c7d2fe] text-[13px] font-medium text-indigo-600 hover:bg-indigo-50 flex items-center justify-center gap-[6px]">
+          <Plus size={14} /> Add Task
+        </button>
+      </SectionCard>
+
+      {completed.length > 0 && (
+        <SectionCard title={`Completed (${completed.length})`} icon={<CheckCircle2 size={15} />}>
+          <div className="flex flex-col">{completed.map(renderTask)}</div>
+        </SectionCard>
+      )}
+    </div>
   );
 }
 
@@ -1596,6 +2057,11 @@ export default function HRCaseDetail() {
   // Modals
   const [showStatusModal,   setStatusModal]   = useState(false);
   const [showApprovalModal, setApprovalModal] = useState(false);
+  const [showAddTaskModal,  setAddTaskModal]  = useState(false);
+
+  // Missing Checklist — tasks
+  const [tasks,        setTasks]       = useState<Task[]>([]);
+  const [tasksLoading,  setTasksLoading] = useState(true);
 
   const pushToast = useCallback((tone: ToastTone, title: string, message?: string) => {
     const id = `${Date.now()}-${Math.random()}`;
@@ -1619,7 +2085,72 @@ export default function HRCaseDetail() {
     } finally { setLoading(false); }
   }, [applicationId]);
 
+  const loadTasks = useCallback(async () => {
+    if (!applicationId) return;
+    setTasksLoading(true);
+    try {
+      const taskRes = await hrTaskApi.list(applicationId);
+      setTasks(taskRes);
+    } catch {
+      pushToast('error', 'Failed to load checklist', 'Please refresh and try again.');
+    } finally { setTasksLoading(false); }
+  }, [applicationId, pushToast]);
+
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void loadTasks(); }, [loadTasks]);
+
+  // Missing Checklist — toggle complete/incomplete
+  const handleToggleTask = async (task: Task) => {
+    if (!applicationId) return;
+    const nextCompleted = !task.is_completed;
+    // Optimistic update so the checkbox feels instant
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, is_completed: nextCompleted } : t));
+    try {
+      const updated = await hrTaskApi.complete(applicationId, task.id, { is_completed: nextCompleted });
+      setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
+    } catch {
+      // Roll back on failure
+      setTasks(prev => prev.map(t => t.id === task.id ? task : t));
+      pushToast('error', 'Update failed', 'Could not update task status.');
+    }
+  };
+
+  // Missing Checklist — HR adds a custom task
+  const handleCreateTask = async (data: { task_name: string; description: string; priority: TaskPriority; is_required: boolean; due_date: string }) => {
+    if (!applicationId) return;
+    try {
+      // due_date isn't in HRTaskCreateRequest's declared type yet (see the
+      // `Task` type note above) — the backend already accepts and stores it,
+      // so this is cast until task.types.ts is updated to include it.
+      const created = await hrTaskApi.create(applicationId, {
+        task_name:   data.task_name,
+        description: data.description || undefined,
+        priority:    data.priority,
+        is_required: data.is_required,
+        sort_order:  tasks.length + 1,
+        due_date:    data.due_date || undefined,
+      } as Parameters<typeof hrTaskApi.create>[1]) as Task;
+      setTasks(prev => [...prev, created]);
+      setAddTaskModal(false);
+      pushToast('success', 'Task added', `"${created.task_name}" was added to the checklist.`);
+    } catch {
+      pushToast('error', 'Could not add task', 'Please try again.');
+    }
+  };
+
+  // Missing Checklist — delete a custom (non-required) task
+  const handleDeleteTask = async (task: Task) => {
+    if (!applicationId || task.is_required) return;
+    const prevTasks = tasks;
+    setTasks(prev => prev.filter(t => t.id !== task.id));
+    try {
+      await hrTaskApi.delete(applicationId, task.id);
+      pushToast('success', 'Task deleted');
+    } catch {
+      setTasks(prevTasks);
+      pushToast('error', 'Delete failed', 'Please try again.');
+    }
+  };
 
   // FIX 3: Save Draft — calls PATCH /hr/cases/:id
   const handleSaveDraft = async () => {
@@ -1868,12 +2399,12 @@ export default function HRCaseDetail() {
                   {/* FIX 4: onViewAll switches to history tab */}
                   <RecentActivityCard history={history} onViewAll={() => setTab('history')} />
 
-                  <ActionItemsCard />
+                  <ActionItemsCard tasks={tasks} onToggle={handleToggleTask} onViewAll={() => setTab('checklist')} />
                 </>
               )}
 
               {activeTab === 'history' && <HistoryTab history={history} />}
-              
+
               {activeTab === 'documents' && (
                 <HRDocumentManagement
                   embedded
@@ -1887,23 +2418,18 @@ export default function HRCaseDetail() {
                   ]}
                 />
               )}
+
               {activeTab === 'checklist' && (
                 <ChecklistTab
-                  applicationId={applicationId ?? ''}
-                  visaTypeId={c.visa_type?.id ?? null}
-                  visaCode={c.visa_type?.code ?? null}
+                  tasks={tasks}
+                  isLoading={tasksLoading}
+                  onToggle={handleToggleTask}
+                  onDelete={handleDeleteTask}
+                  onAddTask={() => setAddTaskModal(true)}
                 />
               )}
 
-              {activeTab === 'letters' && (
-                <LettersTab applicationId={applicationId ?? ''} />
-              )}
-
-              {activeTab === 'deadlines' && (
-                <DeadlinesTab applicationId={applicationId ?? ''} caseNumber={c.application_number} />
-              )}
-
-              {['lca', 'access'].includes(activeTab) && (
+              {['letters', 'lca', 'deadlines', 'access'].includes(activeTab) && (
                 <div className="bg-white border border-[#f1f5f9] rounded-[14px] p-[40px] text-center shadow-[0px_1px_1px_rgba(0,0,0,0.04)]">
                   <p className="text-[14px] font-semibold text-[#0f172a] mb-[4px]">
                     {TABS.find(t => t.id === activeTab)?.label}
@@ -1925,555 +2451,7 @@ export default function HRCaseDetail() {
 
       <ChangeStatusModal open={showStatusModal} current={c.status} onClose={() => setStatusModal(false)} onSave={handleChangeStatus} />
       <ApprovalModal open={showApprovalModal} current={c.hr_approval_status} onClose={() => setApprovalModal(false)} onSave={handleApproval} />
-    </div>
-  );
-}
-
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   MISSING CHECKLIST TAB
-   Lists required documents for the case + shows which are uploaded/verified/
-   missing. Reads from GET /hr/documents?application_id=... via hrDocumentApi.
-═════════════════════════════════════════════════════════════════════════════ */
-
-/** Robust parser for `required_documents` — backend may hand it back as
- *  a real array, a JSON-encoded string, a comma-separated string, or
- *  null. Always returns a clean string[]. */
-function parseRequiredDocs(raw: unknown): string[] {
-  if (Array.isArray(raw)) {
-    return raw.filter((x) => typeof x === 'string' && x.trim().length > 0);
-  }
-  if (typeof raw === 'string' && raw.trim().length > 0) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return parsed.filter((x) => typeof x === 'string' && x.trim().length > 0);
-      }
-    } catch { /* not JSON */ }
-    return raw.split(',').map((s) => s.trim()).filter(Boolean);
-  }
-  return [];
-}
-
-// One row in the computed checklist — every REQUIRED doc for the visa
-// gets an entry regardless of whether it's uploaded or not.
-type ChecklistEntry = {
-  required_name: string;           // display name from visa checklist
-  status:        'uploaded' | 'pending_review' | 'verified' | 'rejected' | 'missing';
-  matchedDoc?:   HRDocumentResponse;   // the actual upload row if we found one
-};
-
-/** Loose match — case-insensitive substring / token overlap. Handles the
- *  common cases: "Passport Copy" vs "Passport", "Employment Letter" vs
- *  "Offer Letter" etc. Returns true when either side contains the other. */
-function nameMatches(required: string, uploaded: string): boolean {
-  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-  const a = norm(required);
-  const b = norm(uploaded);
-  if (!a || !b) return false;
-  if (a === b) return true;
-  if (a.includes(b) || b.includes(a)) return true;
-  // Token overlap ≥ 50%
-  const at = new Set(a.split(' ').filter(Boolean));
-  const bt = new Set(b.split(' ').filter(Boolean));
-  let hits = 0;
-  for (const t of at) if (bt.has(t)) hits++;
-  return hits > 0 && hits / Math.min(at.size, bt.size) >= 0.5;
-}
-
-function ChecklistTab({
-  applicationId, visaTypeId, visaCode,
-}: {
-  applicationId: string;
-  visaTypeId:    string | null;
-  visaCode:      string | null;
-}) {
-  const [entries,   setEntries]   = useState<ChecklistEntry[]>([]);
-  const [extraDocs, setExtraDocs] = useState<HRDocumentResponse[]>([]);  // uploaded but not on required list
-  const [loading,   setLoading]   = useState(true);
-  const [error,     setError]     = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!applicationId) { setLoading(false); return; }
-    (async () => {
-      setLoading(true); setError(null);
-      try {
-        // 1. Required list from the visa type catalog. Backend can return
-        //    the field as an array OR a JSON string OR a comma list.
-        let required: string[] = [];
-        if (visaTypeId) {
-          const detail = await visaChecklistApi.getVisaTypeDetail(visaTypeId);
-          required = parseRequiredDocs((detail as unknown as { required_documents?: unknown })?.required_documents);
-        }
-        // Fallback — some visa types leave the list empty; use a sensible
-        // default so HR still sees an actionable checklist.
-        if (required.length === 0) {
-          required = ['Passport Copy', 'Employment Letter', 'Latest Payslip', 'Resume / CV', 'Educational Documents'];
-        }
-
-        // 2. Uploaded docs for this case
-        const docsRes = await hrDocumentApi.listByCase(applicationId);
-        const uploads = docsRes.items ?? [];
-
-        // 3. Build one entry per required doc — best-match against uploads
-        const usedIds = new Set<string>();
-        const built: ChecklistEntry[] = required.map((req) => {
-          const match = uploads.find((u) =>
-            !usedIds.has(u.id) &&
-            nameMatches(req, u.document_type || u.name || '')
-          );
-          if (match) {
-            usedIds.add(match.id);
-            const s = match.status;
-            const norm: ChecklistEntry['status'] =
-              s === 'verified' || s === 'pending_review' || s === 'uploaded' ? s :
-              s === 'rejected' ? 'rejected' : 'missing';
-            return { required_name: req, status: norm, matchedDoc: match };
-          }
-          return { required_name: req, status: 'missing' };
-        });
-
-        // 4. Anything uploaded but NOT matching any required item → "extras"
-        const extras = uploads.filter((u) => !usedIds.has(u.id));
-
-        setEntries(built);
-        setExtraDocs(extras);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed to load checklist.');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [applicationId, visaTypeId]);
-
-  const done      = entries.filter(e => e.status === 'verified' || e.status === 'uploaded' || e.status === 'pending_review');
-  const rejected  = entries.filter(e => e.status === 'rejected');
-  const missing   = entries.filter(e => e.status === 'missing');
-  const total     = entries.length;
-  const completed = done.length;
-  const pct       = total > 0 ? Math.round((completed / total) * 100) : 0;
-
-  return (
-    <div className="bg-white border border-[#f1f5f9] rounded-[14px] p-[24px] shadow-[0px_1px_1px_rgba(0,0,0,0.04)]">
-      <div className="flex items-start justify-between mb-[16px]">
-        <div>
-          <h3 className="text-[16px] font-bold text-[#0f172a] mb-[2px]">Missing Checklist</h3>
-          <p className="text-[13px] text-[#64748b]">
-            Documents required for {visaCode ? <b>{visaCode}</b> : 'this visa'} — track what the employee still needs to upload.
-          </p>
-        </div>
-        {!loading && total > 0 && (
-          <div className="text-right">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-[#94a3b8]">Complete</p>
-            <p className="text-[22px] font-bold text-[#0f172a] leading-tight">{completed}<span className="text-[13px] font-medium text-[#94a3b8]">/{total}</span></p>
-          </div>
-        )}
-      </div>
-
-      {!loading && total > 0 && (
-        <div className="h-[8px] bg-[#f1f5f9] rounded-full overflow-hidden mb-[20px]">
-          <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: PRIMARY_GRADIENT }} />
-        </div>
-      )}
-
-      {loading && (
-        <div className="py-[40px] text-center text-[13px] text-[#94a3b8]">Loading checklist…</div>
-      )}
-
-      {error && !loading && (
-        <div className="p-[16px] rounded-[10px] bg-[#fef2f2] border border-[#fecaca] text-[13px] text-[#b91c1c]">
-          {error}
-        </div>
-      )}
-
-      {!loading && !error && total === 0 && (
-        <div className="py-[40px] text-center">
-          <CheckSquare size={32} className="mx-auto text-[#cbd5e1] mb-[8px]" />
-          <p className="text-[13px] text-[#64748b]">No required documents configured for this visa type.</p>
-        </div>
-      )}
-
-      {!loading && !error && total > 0 && (
-        <div className="flex flex-col gap-[20px]">
-          {missing.length > 0 && (
-            <ChecklistSection title="Missing — waiting on employee" count={missing.length} tone="warn" entries={missing} />
-          )}
-          {rejected.length > 0 && (
-            <ChecklistSection title="Rejected — needs re-upload" count={rejected.length} tone="danger" entries={rejected} />
-          )}
-          {done.length > 0 && (
-            <ChecklistSection title="Received" count={done.length} tone="ok" entries={done} />
-          )}
-          {extraDocs.length > 0 && (
-            <div>
-              <div className="flex items-center gap-[8px] mb-[10px]">
-                <h4 className="text-[13px] font-semibold text-[#0f172a]">Additional uploads</h4>
-                <span className="px-[8px] py-[2px] rounded-full text-[11px] font-semibold bg-[#f1f5f9] text-[#64748b]">
-                  {extraDocs.length}
-                </span>
-              </div>
-              <p className="text-[11px] text-[#94a3b8] mb-[8px]">Uploaded but not on the required list.</p>
-              <div className="flex flex-col gap-[6px]">
-                {extraDocs.map(d => (
-                  <ChecklistRow
-                    key={d.id}
-                    entry={{ required_name: d.document_type || d.name || 'Document', status: (d.status === 'verified' || d.status === 'uploaded' || d.status === 'pending_review') ? d.status : d.status === 'rejected' ? 'rejected' : 'missing', matchedDoc: d }}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ChecklistSection({
-  title, count, tone, entries,
-}: {
-  title: string;
-  count: number;
-  tone: 'ok' | 'warn' | 'danger';
-  entries: ChecklistEntry[];
-}) {
-  const toneStyles: Record<typeof tone, { badgeBg: string; badgeText: string }> = {
-    ok:     { badgeBg: '#dcfce7', badgeText: '#15803d' },
-    warn:   { badgeBg: '#fef3c7', badgeText: '#b45309' },
-    danger: { badgeBg: '#fee2e2', badgeText: '#b91c1c' },
-  };
-  const s = toneStyles[tone];
-
-  return (
-    <div>
-      <div className="flex items-center gap-[8px] mb-[10px]">
-        <h4 className="text-[13px] font-semibold text-[#0f172a]">{title}</h4>
-        <span className="px-[8px] py-[2px] rounded-full text-[11px] font-semibold"
-              style={{ backgroundColor: s.badgeBg, color: s.badgeText }}>
-          {count}
-        </span>
-      </div>
-      <div className="flex flex-col gap-[6px]">
-        {entries.map((e, i) => <ChecklistRow key={`${e.required_name}-${i}`} entry={e} />)}
-      </div>
-    </div>
-  );
-}
-
-function ChecklistRow({ entry }: { entry: ChecklistEntry }) {
-  const statusMeta: Record<ChecklistEntry['status'], { label: string; bg: string; fg: string; icon: ReactNode; rowBg: string; rowBorder: string }> = {
-    missing:        { label: 'Missing',        bg: '#fef3c7', fg: '#b45309', icon: <AlertCircle size={12} />,   rowBg: '#fffbeb', rowBorder: '#fde68a' },
-    uploaded:       { label: 'Uploaded',       bg: '#dbeafe', fg: '#1d4ed8', icon: <FileText size={12} />,      rowBg: '#eff6ff', rowBorder: '#bfdbfe' },
-    pending_review: { label: 'Pending review', bg: '#e0e7ff', fg: '#4338ca', icon: <Clock size={12} />,         rowBg: '#eef2ff', rowBorder: '#c7d2fe' },
-    verified:       { label: 'Verified',       bg: '#dcfce7', fg: '#15803d', icon: <CheckCircle2 size={12} />,  rowBg: '#f0fdf4', rowBorder: '#bbf7d0' },
-    rejected:       { label: 'Rejected',       bg: '#fee2e2', fg: '#b91c1c', icon: <XCircle size={12} />,       rowBg: '#fef2f2', rowBorder: '#fecaca' },
-  };
-  const m = statusMeta[entry.status];
-  const subline = entry.matchedDoc
-    ? `Uploaded ${new Date(entry.matchedDoc.uploaded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
-    : 'Awaiting upload';
-
-  return (
-    <div className="flex items-center gap-[12px] p-[12px] rounded-[10px] border transition"
-         style={{ backgroundColor: m.rowBg, borderColor: m.rowBorder }}>
-      <div className="w-[36px] h-[36px] rounded-[8px] flex items-center justify-center shrink-0"
-           style={{ backgroundColor: 'rgba(255,255,255,0.7)' }}>
-        {entry.status === 'verified'   ? <CheckCircle2 size={16} className="text-[#15803d]" /> :
-         entry.status === 'rejected'   ? <XCircle      size={16} className="text-[#b91c1c]" /> :
-         entry.status === 'missing'    ? <AlertCircle  size={16} className="text-[#b45309]" /> :
-                                         <FileText     size={16} className="text-[#4338ca]" />}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-[13px] font-medium text-[#0f172a] truncate">{entry.required_name}</p>
-        <p className="text-[11px] text-[#94a3b8]">{subline}</p>
-      </div>
-      <span className="inline-flex items-center gap-[4px] px-[8px] py-[3px] rounded-full text-[11px] font-semibold shrink-0"
-            style={{ backgroundColor: m.bg, color: m.fg }}>
-        {m.icon} {m.label}
-      </span>
-    </div>
-  );
-}
-
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   GENERATED LETTERS TAB
-   Filters case documents to category='legal' or document_type containing
-   'letter'. Provides a download link per row.
-═════════════════════════════════════════════════════════════════════════════ */
-
-function LettersTab({ applicationId }: { applicationId: string }) {
-  const [letters, setLetters] = useState<GeneratedLetter[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState<string | null>(null);
-  const [signingId, setSigningId] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    if (!applicationId) { setLoading(false); return; }
-    setLoading(true); setError(null);
-    try {
-      const items = await hrCaseLettersApi.list(applicationId);
-      setLetters(items);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load letters.');
-    } finally {
-      setLoading(false);
-    }
-  }, [applicationId]);
-
-  useEffect(() => { void load(); }, [load]);
-
-  const handleSign = async (letterId: string) => {
-    setSigningId(letterId);
-    try {
-      const updated = await hrCaseLettersApi.sign(applicationId, letterId);
-      setLetters(prev => prev.map(l => l.id === letterId ? updated : l));
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Sign failed.');
-    } finally {
-      setSigningId(null);
-    }
-  };
-
-  const pendingCount = letters.filter(l => l.status === 'pending_hr_signature').length;
-
-  return (
-    <div className="bg-white border border-[#f1f5f9] rounded-[14px] p-[24px] shadow-[0px_1px_1px_rgba(0,0,0,0.04)]">
-      <div className="flex items-start justify-between mb-[16px]">
-        <div>
-          <h3 className="text-[16px] font-bold text-[#0f172a] mb-[2px]">Generated Letters</h3>
-          <p className="text-[13px] text-[#64748b]">
-            Offer letters, support letters, employment verifications, LCA postings — generated by the attorney for this case.
-          </p>
-        </div>
-        {pendingCount > 0 && (
-          <div className="inline-flex items-center gap-[6px] px-[10px] py-[5px] rounded-full bg-[#fef3c7] border border-[#fde68a]">
-            <AlertCircle size={13} className="text-[#b45309]" />
-            <span className="text-[11px] font-semibold text-[#b45309]">
-              {pendingCount} awaiting your signature
-            </span>
-          </div>
-        )}
-      </div>
-
-      {loading && (
-        <div className="py-[40px] text-center text-[13px] text-[#94a3b8]">Loading letters…</div>
-      )}
-
-      {error && !loading && (
-        <div className="p-[16px] rounded-[10px] bg-[#fef2f2] border border-[#fecaca] text-[13px] text-[#b91c1c]">
-          {error}
-        </div>
-      )}
-
-      {!loading && !error && letters.length === 0 && (
-        <div className="py-[40px] text-center">
-          <FileText size={32} className="mx-auto text-[#cbd5e1] mb-[8px]" />
-          <p className="text-[13px] text-[#64748b]">No letters generated yet for this case.</p>
-          <p className="text-[11px] text-[#94a3b8] mt-[4px]">Letters generated by the attorney will appear here.</p>
-        </div>
-      )}
-
-      {!loading && !error && letters.length > 0 && (
-        <div className="flex flex-col gap-[10px]">
-          {letters.map(l => (
-            <LetterRow
-              key={l.id}
-              letter={l}
-              applicationId={applicationId}
-              onSign={() => handleSign(l.id)}
-              signing={signingId === l.id}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function LetterRow({
-  letter, applicationId, onSign, signing,
-}: {
-  letter:        GeneratedLetter;
-  applicationId: string;
-  onSign:        () => void;
-  signing:       boolean;
-}) {
-  const [downloading, setDownloading] = useState(false);
-
-  const handleDownload = async () => {
-    setDownloading(true);
-    try {
-      const { blob, fileName } = await hrCaseLettersApi.downloadPdf(applicationId, letter.id);
-      const url = URL.createObjectURL(blob);
-      const a   = document.createElement('a');
-      a.href = url; a.download = fileName || `${letter.name || 'letter'}.pdf`; a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Download failed.');
-    } finally { setDownloading(false); }
-  };
-
-  // Letter-type icon + tint
-  const typeMeta: Record<GeneratedLetter['letter_type'], { label: string; bg: string; fg: string }> = {
-    offer:                   { label: 'Offer Letter',              bg: '#eef2ff', fg: '#4338ca' },
-    support:                 { label: 'Support Letter',            bg: '#f0fdf4', fg: '#15803d' },
-    employment_verification: { label: 'Employment Verification',   bg: '#eff6ff', fg: '#1d4ed8' },
-    lca_posting:             { label: 'LCA Posting',               bg: '#fef3c7', fg: '#b45309' },
-    other:                   { label: 'Other',                     bg: '#f1f5f9', fg: '#475569' },
-  };
-  const t = typeMeta[letter.letter_type] ?? typeMeta.other;
-
-  // Status pill
-  const statusMeta: Record<GeneratedLetter['status'], { label: string; bg: string; fg: string; icon: ReactNode }> = {
-    draft:                { label: 'Draft',              bg: '#f1f5f9', fg: '#475569', icon: <Edit2 size={11} /> },
-    pending_hr_signature: { label: 'Awaiting signature', bg: '#fef3c7', fg: '#b45309', icon: <AlertCircle size={11} /> },
-    signed:               { label: 'Signed',             bg: '#dcfce7', fg: '#15803d', icon: <CheckCircle2 size={11} /> },
-    sent:                 { label: 'Sent',               bg: '#dbeafe', fg: '#1d4ed8', icon: <ArrowRight size={11} /> },
-    filed:                { label: 'Filed',              bg: '#e0e7ff', fg: '#4338ca', icon: <CheckSquare size={11} /> },
-  };
-  const s = statusMeta[letter.status] ?? statusMeta.draft;
-  const canSign = letter.status === 'pending_hr_signature';
-
-  return (
-    <div className="p-[14px] rounded-[10px] border border-[#f1f5f9] hover:bg-[#f9fafb] transition">
-      <div className="flex items-start gap-[12px]">
-        <div className="w-[40px] h-[40px] rounded-[10px] flex items-center justify-center shrink-0"
-             style={{ backgroundColor: t.bg }}>
-          <FileText size={18} style={{ color: t.fg }} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-[8px] flex-wrap">
-            <p className="text-[13px] font-semibold text-[#0f172a] truncate">{letter.name}</p>
-            <span className="inline-flex items-center gap-[3px] px-[8px] py-[2px] rounded-full text-[10px] font-semibold"
-                  style={{ backgroundColor: t.bg, color: t.fg }}>
-              {t.label}
-            </span>
-            <span className="inline-flex items-center gap-[3px] px-[8px] py-[2px] rounded-full text-[10px] font-semibold"
-                  style={{ backgroundColor: s.bg, color: s.fg }}>
-              {s.icon} {s.label}
-            </span>
-          </div>
-          <p className="text-[11px] text-[#94a3b8] mt-[4px]">
-            Generated by <b className="text-[#475569]">{letter.generated_by}</b> · {new Date(letter.generated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-          </p>
-        </div>
-        <div className="flex gap-[8px] shrink-0">
-          {canSign && (
-            <button type="button" onClick={onSign} disabled={signing}
-              className="inline-flex items-center gap-[5px] px-[11px] py-[6px] rounded-[8px] text-[12px] font-semibold text-white disabled:opacity-60"
-              style={{ background: PRIMARY_GRADIENT }}>
-              <CheckCircle2 size={13} /> {signing ? 'Signing…' : 'Sign'}
-            </button>
-          )}
-          <button type="button" onClick={handleDownload} disabled={downloading}
-            className="inline-flex items-center gap-[5px] px-[11px] py-[6px] rounded-[8px] text-[12px] font-semibold text-[#0f172a] border border-[#e5e7eb] hover:bg-[#f9fafb] disabled:opacity-60">
-            <Download size={13} /> {downloading ? '…' : 'PDF'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   DEADLINES TAB
-   Renders the same HRDeadlines rows filtered to this application only.
-═════════════════════════════════════════════════════════════════════════════ */
-
-function DeadlinesTab({ applicationId, caseNumber }: { applicationId: string; caseNumber: string }) {
-  const [items,   setItems]   = useState<HRDeadlineItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!applicationId) { setLoading(false); return; }
-    (async () => {
-      setLoading(true); setError(null);
-      try {
-        const res  = await hrDeadlinesApi.list();
-        const mine = (res.items ?? []).filter(
-          d => d.application_id === applicationId ||
-               (caseNumber && d.case_number === caseNumber)
-        );
-        setItems(mine);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed to load deadlines.');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [applicationId, caseNumber]);
-
-  return (
-    <div className="bg-white border border-[#f1f5f9] rounded-[14px] p-[24px] shadow-[0px_1px_1px_rgba(0,0,0,0.04)]">
-      <div className="flex items-start justify-between mb-[16px]">
-        <div>
-          <h3 className="text-[16px] font-bold text-[#0f172a] mb-[2px]">Deadlines</h3>
-          <p className="text-[13px] text-[#64748b]">Upcoming due dates and filing windows for this case.</p>
-        </div>
-      </div>
-
-      {loading && (
-        <div className="py-[40px] text-center text-[13px] text-[#94a3b8]">Loading deadlines…</div>
-      )}
-
-      {error && !loading && (
-        <div className="p-[16px] rounded-[10px] bg-[#fef2f2] border border-[#fecaca] text-[13px] text-[#b91c1c]">
-          {error}
-        </div>
-      )}
-
-      {!loading && !error && items.length === 0 && (
-        <div className="py-[40px] text-center">
-          <Clock size={32} className="mx-auto text-[#cbd5e1] mb-[8px]" />
-          <p className="text-[13px] text-[#64748b]">No deadlines scheduled for this case.</p>
-        </div>
-      )}
-
-      {!loading && !error && items.length > 0 && (
-        <div className="flex flex-col gap-[10px]">
-          {items.map(d => <DeadlineRow key={d.id} d={d} />)}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function DeadlineRow({ d }: { d: HRDeadlineItem }) {
-  const overdue  = d.days_remaining < 0;
-  const urgent   = d.days_remaining >= 0 && d.days_remaining <= 7;
-  const tone     = overdue ? 'danger' : urgent ? 'warn' : 'ok';
-  const styles: Record<typeof tone, { border: string; bg: string; badgeBg: string; badgeText: string }> = {
-    ok:     { border: '#e5e7eb', bg: '#f9fafb', badgeBg: '#dcfce7', badgeText: '#15803d' },
-    warn:   { border: '#fed7aa', bg: '#fff7ed', badgeBg: '#fef3c7', badgeText: '#b45309' },
-    danger: { border: '#fecaca', bg: '#fef2f2', badgeBg: '#fee2e2', badgeText: '#b91c1c' },
-  };
-  const s = styles[tone];
-  const label = overdue
-    ? `Overdue by ${Math.abs(d.days_remaining)} day${Math.abs(d.days_remaining) !== 1 ? 's' : ''}`
-    : d.days_remaining === 0
-      ? 'Due today'
-      : `Due in ${d.days_remaining} day${d.days_remaining !== 1 ? 's' : ''}`;
-
-  return (
-    <div className="p-[14px] rounded-[10px] border" style={{ borderColor: s.border, backgroundColor: s.bg }}>
-      <div className="flex items-start justify-between gap-[12px]">
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-semibold text-[#0f172a] truncate">{d.title}</p>
-          {d.description && <p className="text-[12px] text-[#64748b] mt-[2px] line-clamp-2">{d.description}</p>}
-          <p className="text-[11px] text-[#94a3b8] mt-[6px]">
-            Due {new Date(d.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-            {d.deadline_type && ` · ${d.deadline_type}`}
-          </p>
-        </div>
-        <span className="inline-flex items-center gap-[4px] px-[10px] py-[4px] rounded-full text-[11px] font-semibold shrink-0"
-              style={{ backgroundColor: s.badgeBg, color: s.badgeText }}>
-          {overdue ? <AlertTriangle size={11} /> : <Clock size={11} />}
-          {label}
-        </span>
-      </div>
+      <AddTaskModal open={showAddTaskModal} onClose={() => setAddTaskModal(false)} onSave={handleCreateTask} />
     </div>
   );
 }

@@ -18,7 +18,7 @@ import { PageHeader, PageContent } from '../../components/layout/Pageheader';
 import { useHREmployees } from '../../hooks/hr/useEmployees';
 import { employeesApi } from '../../api/hr/employees.api';
 import type { EmployeeLink, UpdateEmployeeRequest } from '../../types/hr/employees.types';
-import { getFileUrl } from '../../utils/fileUrl';
+import { UserAvatar } from '../../components/ui/UserAvatar';
 
 const PRIMARY_GRADIENT = 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)';
 
@@ -36,16 +36,6 @@ type ToastItem = { id: string; title: string; message?: string; tone: ToastTone 
 function fmtDate(iso?: string | null): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-function initials(name: string): string {
-  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-}
-
-const AVATAR_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6'];
-function avatarColor(name: string): string {
-  const i = name.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_COLORS.length;
-  return AVATAR_COLORS[i];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -185,23 +175,11 @@ function RosterRow({ row, onView, onEdit, onDocuments, onRemove }: {
   onDocuments: (r: EmployeeLink) => void;
   onRemove: (r: EmployeeLink) => void;
 }) {
-  const profilePictureUrl = getFileUrl(row.profile_picture_url);
   return (
     <div className={`grid ${GRID} items-center gap-[16px] px-[24px] py-[16px] border-b border-[#f1f5f9] last:border-b-0 hover:bg-[#fafbfc] transition`}>
       {/* Employee */}
       <div className="flex items-center gap-[12px] min-w-0">
-        
-        {/* {row.profile_picture_url ? (
-          <img src={row.profile_picture_url} alt="" className="size-[40px] rounded-full object-cover shrink-0 border border-[#e5e7eb]" />
-        ) : ( */}
-        {profilePictureUrl ? (
-          <img src={profilePictureUrl} alt="" className="size-[40px] rounded-full object-cover shrink-0 border border-[#e5e7eb]" />
-        ) : (
-          <div className="size-[40px] rounded-full flex items-center justify-center text-white text-[13px] font-semibold shrink-0"
-               style={{ backgroundColor: avatarColor(row.full_name) }}>
-            {initials(row.full_name)}
-          </div>
-        )}
+        <UserAvatar userId={row.employee_id} name={row.full_name} size={40} className="shrink-0" />
         <div className="min-w-0">
           <p className="text-[14px] font-semibold text-[#0f172a] tracking-[-0.5px] truncate">{row.full_name}</p>
           <p className="text-[12px] text-[#94a3b8] tracking-[-0.5px] truncate">{row.email}</p>
@@ -406,13 +384,11 @@ function EditEmployeeDrawer({ employee, onClose, onSaved }: {
   onClose: () => void;
   onSaved: (msg: string) => void;
 }) {
-  const profilePictureUrl = getFileUrl(employee.profile_picture_url);
   const [jobTitle, setJobTitle]     = useState(employee.job_title || '');
   const [department, setDepartment] = useState(employee.department || '');
   const [workEmail, setWorkEmail]   = useState(employee.work_email || '');
   const [saving, setSaving]         = useState(false);
   const [err, setErr]               = useState<string | null>(null);
-  
 
   const hasChanges =
     jobTitle !== (employee.job_title || '') ||
@@ -442,17 +418,7 @@ function EditEmployeeDrawer({ employee, onClose, onSaved }: {
       <div className="flex flex-col gap-[16px]">
         {/* Avatar + name header */}
         <div className="flex items-center gap-[14px] pb-[16px] border-b border-[#f1f5f9]">
-          {/* {employee.profile_picture_url ? (
-            <img src={employee.profile_picture_url} alt="" className="size-[48px] rounded-full object-cover border border-[#e5e7eb]" />
-          ) : ( */}
-          {profilePictureUrl ? (
-            <img src={profilePictureUrl} alt="" className="size-[48px] rounded-full object-cover border border-[#e5e7eb]" />
-          ) : (
-            <div className="size-[48px] rounded-full flex items-center justify-center text-white text-[16px] font-semibold"
-                 style={{ backgroundColor: avatarColor(employee.full_name) }}>
-              {initials(employee.full_name)}
-            </div>
-          )}
+          <UserAvatar userId={employee.employee_id} name={employee.full_name} size={48} />
           <div className="min-w-0">
             <p className="text-[15px] font-semibold text-[#0f172a] tracking-[-0.5px]">{employee.full_name}</p>
             <p className="text-[12px] text-[#94a3b8] tracking-[-0.5px]">{employee.email}</p>
@@ -649,59 +615,6 @@ export default function HREmployees() {
             )}
 
             {/* ── Roster table ── */}
-            {/* <div className="bg-white border border-[#f1f5f9] rounded-[16px] overflow-hidden shadow-[0px_1px_2px_rgba(0,0,0,0.05)]">
-              <div className="overflow-x-auto">
-                <div className="min-w-[800px]">
-                  <div className={`grid ${GRID} gap-[16px] px-[24px] py-[14px] bg-[#f9fafb] border-b border-[#f1f5f9]`}>
-                    {[
-                      { label: 'Employee',      align: 'start',  indent: 52 },
-                      { label: 'Role & Dept',   align: 'start',  indent: 0 },
-                      { label: 'Cases',         align: 'center', indent: 0 },
-                      { label: 'Linked',        align: 'start',  indent: 0 },
-                      { label: 'Actions',       align: 'end',    indent: 0 },
-                    ].map(h => (
-                      <span key={h.label}
-                        style={h.indent ? { paddingLeft: h.indent } : undefined}
-                        className={`text-[11px] font-semibold uppercase tracking-[0.06em] text-[#64748b] ${
-                          h.align === 'center' ? 'text-center'
-                            : h.align === 'end' ? 'justify-self-end'
-                            : ''
-                        }`}>
-                        {h.label}
-                      </span>
-                    ))}
-                  </div>
-
-                  {isLoading && !data ? (
-                    <LoadingRows count={6} height={70} />
-                  ) : rows.length > 0 ? (
-                    rows.map(row => (
-                      <RosterRow key={row.id} row={row}
-                        onView={onView} onEdit={onEdit} onDocuments={onDocuments} onRemove={onRemove} />
-                    ))
-                  ) : (
-                    <EmptyState
-                      title={hasActiveFilters ? 'No employees match your filters' : 'No employees yet'}
-                      description={hasActiveFilters ? 'Try clearing filters or searching for someone else.' : 'Invite your first employee to get started.'}
-                      actionLabel={hasActiveFilters ? 'Clear filters' : 'Invite Employee'}
-                      onAction={hasActiveFilters ? handleReset : () => navigate('/employer/invite')}
-                    />
-                  )}
-                </div>
-              </div>
-
-              {data && rows.length > 0 && (
-                <Pager
-                  page={data.pagination.page}
-                  totalPages={data.pagination.total_pages}
-                  total={data.pagination.total}
-                  pageSize={data.pagination.page_size}
-                  onPage={setPage}
-                />
-              )}
-            </div> */}
-
-            {/* ── Roster table ── */}
             <div className="bg-white border border-[#f1f5f9] rounded-[16px] overflow-hidden shadow-[0px_1px_2px_rgba(0,0,0,0.05)]">
               <div className="overflow-x-auto">
                 <div className="min-w-[800px]">
@@ -768,14 +681,7 @@ export default function HREmployees() {
         {selected && (
           <div className="flex flex-col gap-[16px]">
             <div className="flex items-center gap-[14px] pb-[16px] border-b border-[#f1f5f9]">
-              {selected.profile_picture_url ? (
-                <img src={selected.profile_picture_url} alt="" className="size-[56px] rounded-full object-cover border border-[#e5e7eb]" />
-              ) : (
-                <div className="size-[56px] rounded-full flex items-center justify-center text-white text-[18px] font-semibold"
-                     style={{ backgroundColor: avatarColor(selected.full_name) }}>
-                  {initials(selected.full_name)}
-                </div>
-              )}
+              <UserAvatar userId={selected.employee_id} name={selected.full_name} size={56} />
               <div className="min-w-0 flex-1">
                 <p className="text-[16px] font-semibold text-[#0f172a] tracking-[-0.5px]">{selected.full_name}</p>
                 <p className="text-[12px] text-[#94a3b8] tracking-[-0.5px] mt-[2px]">{selected.email}</p>

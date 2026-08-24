@@ -78,8 +78,14 @@ export function DashboardLayout() {
   const [collapsed,    setCollapsed]    = useState(false);
   const location = useLocation();
 
+  // FIXED: HR's personal-settings routes live under /employer/profile/*
+  // (see SettingsSidebar.tsx HR_PERSONAL/HR_SYSTEM), but this check only
+  // matched /profile (employee) and /settings — so for HR the settings
+  // sub-sidebar never rendered and it silently fell back to the main
+  // <Sidebar /> (HR console nav) instead of <SettingsSidebar />.
   const isSettingsPage = location.pathname.startsWith('/profile') ||
-                         location.pathname.startsWith('/settings');
+                         location.pathname.startsWith('/settings') ||
+                         location.pathname.startsWith('/employer/profile');
 
   const isNoSidebarPage = /^\/applications\/[^/]+\/documents/.test(location.pathname) ||
                           /^\/applications\/[^/]+\/review/.test(location.pathname);

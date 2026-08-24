@@ -5,7 +5,7 @@ export interface AddPersonalEmailRequest {
 }
 
 export interface VerifyPersonalEmailRequest {
-  token: string;
+  otp_code: string;
 }
 
 export interface MessageResponse {

@@ -349,7 +349,6 @@ import ApplicationsList      from './pages/employee/ApplicationsList';
 import NewApplication        from './pages/employee/NewApplication';
 import ApplicationDetail     from './pages/employee/ApplicationDetail';
 import DocumentHub           from './pages/employee/DocumentHub';
-import DocumentUploadV2      from './pages/employee/DocumentUpload';
 import DocumentViewer        from './pages/employee/DocumentViewer';
 import SecureMessaging       from './pages/employee/SecureMessaging';
 import NotificationsCenterV2 from './pages/employee/NotificationsCenterV2';
@@ -375,6 +374,7 @@ import HRDeadlines           from './pages/hr/HRDeadlines';
 import HRApprovalQueue       from './pages/hr/HRApprovalQueue';
 import HRDocumentManagement  from './pages/hr/HRDocumentManagement';
 import HRNotificationsCenter from './pages/hr/HRNotificationsCenter';
+import HRDocumentsOverview    from './pages/hr/HRDocumentsOverview';
 
 // ── admin pages ──────────────────────────────────────────────────────────────
 import AdminDashboard         from './pages/admin/AdminDashboard';
@@ -516,7 +516,6 @@ export default function App() {
               <Route path="/applications/new"                 element={<NewApplication />} />
               <Route path="/applications/:id"                 element={<ApplicationDetail />} />
               <Route path="/documents"                        element={<DocumentHub />} />
-              <Route path="/documents/upload"                 element={<DocumentUploadV2 />} />
               <Route path="/documents/viewer"                 element={<DocumentViewer />} />
               <Route path="/messages"                         element={<SecureMessaging />} />
               <Route path="/notifications"                    element={<NotificationsCenterV2 />} />
@@ -552,6 +551,7 @@ export default function App() {
               <Route path="/employer/messages"                     element={<HRMessages />} />
               <Route path="/employer/deadlines"                    element={<HRDeadlines />} />
               <Route path="/employer/approvals"                    element={<HRApprovalQueue />} />
+              <Route path="/employer/documents"                    element={<HRDocumentsOverview />} />
               <Route path="/employer/documents/:applicationId"     element={<HRDocumentManagement />} />
               <Route path="/employer/notifications"                element={<HRNotificationsCenter />} />
               <Route path="/employer/profile"                      element={<ProfileSecurity />} />
@@ -562,7 +562,7 @@ export default function App() {
               <Route path="/employer/profile/devices"              element={<ProfileSecurity />} />
               <Route path="/employer/profile/session"              element={<ProfileSecurity />} />
               <Route path="/employer/profile/security-alerts"      element={<ProfileSecurity />} />
-                 <Route path="/employer/profile/notifications" element={<ProfileSecurity />} />
+              <Route path="/employer/profile/notifications" element={<ProfileSecurity />} />
               <Route path="/profile"                               element={<ProfileSecurity />} />
             </Route>
           </Route>

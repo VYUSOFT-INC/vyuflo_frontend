@@ -36,6 +36,14 @@ const documentsApi = {
     return { blob: res.data, fileName, contentType };
   },
 
+    // documents.api.ts — add alongside reupload()
+  getVersions: async (documentId: string): Promise<{
+    id: string; file_name: string; version: number; status: string; uploaded_at: string;
+  }[]> => {
+    const res = await axios.get(`/documents/${documentId}/versions`);
+    return res.data;
+  },
+
   // POST /documents/upload — multipart upload
   upload: async (body: {
     application_id: string;
@@ -55,8 +63,8 @@ const documentsApi = {
   },
 
   // GET /documents/hub — all of the current user's documents across every
-  // case (scoped server-side to their own user_id), optionally filtered by
-  // a search term. Used by the "From Hub" picker.
+  // case (scoped server-side to their own user_id), optionally filtered by 
+  // a search term. Used by the "From Hub" picker. 
   listHub: async (params?: { search?: string }): Promise<Document[]> => {
     const res = await axios.get("/documents/hub", { params });
     return Array.isArray(res.data) ? res.data : res.data.items ?? [];
@@ -69,6 +77,15 @@ const documentsApi = {
     const form = new FormData();
     form.append("application_id", applicationId);
     const res = await axios.post(`/documents/${sourceDocumentId}/reuse`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return res.data;
+  },
+
+  reupload: async (oldDocId: string, file: File): Promise<Document> => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await axios.post(`/documents/${oldDocId}/reupload`, form, {
       headers: { "Content-Type": "multipart/form-data" },
     });
     return res.data;

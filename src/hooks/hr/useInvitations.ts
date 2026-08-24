@@ -7,11 +7,31 @@ import type {
   ValidateTokenResponse,
   InviteByEmailRequest,
   InviteByCodeRequest,
+  AcceptInviteNewUserRequest,
+  AcceptInviteExistingUserRequest,
 } from "../../types/hr/invitation.types";
 
 function extractErrorMessage(e: unknown, fallback: string): string {
   const err = e as { response?: { data?: { detail?: string } }; message?: string };
   return err.response?.data?.detail ?? err.message ?? fallback;
+}
+
+// ── HR: Get my company's domain (for the invite email domain picker) ─────────
+
+export function useEmployerDomain() {
+  const [domain,  setDomain]  = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    invitationApi.getEmployerDomain()
+      .then(res => { if (mounted) setDomain(res.domain); })
+      .catch(() => { if (mounted) setDomain(null); })
+      .finally(() => { if (mounted) setLoading(false); });
+    return () => { mounted = false; };
+  }, []);
+
+  return { domain, loading };
 }
 
 // ── HR: List & manage invitations ─────────────────────────────────────────────
@@ -52,14 +72,6 @@ export function useMyInvitations(statusFilter?: string) {
 }
 
 // ── HR: Send email invite ─────────────────────────────────────────────────────
-//
-// NOTE ON FIX: previously this caught its own error and stored it in state
-// WITHOUT re-throwing. That meant any caller doing
-//   try { await send(...) } catch { showFailureToast() }
-// never saw the failure — send() always resolved cleanly, so the failure
-// branch was dead code and the UI reported "sent successfully" even when
-// the request actually failed. Now the error is re-thrown after being
-// recorded, so both the inline `error` state AND caller-side try/catch work.
 
 export function useSendEmailInvite() {
   const [loading, setLoading] = useState(false);
@@ -76,7 +88,7 @@ export function useSendEmailInvite() {
     } catch (e: unknown) {
       const message = extractErrorMessage(e, "Failed to send invite.");
       setError(message);
-      throw new Error(message);   // ← re-throw so callers can detect the failure
+      throw new Error(message);
     } finally {
       setLoading(false);
     }
@@ -86,7 +98,6 @@ export function useSendEmailInvite() {
 }
 
 // ── HR: Generate company code ─────────────────────────────────────────────────
-// Same fix as useSendEmailInvite — re-throws after recording the error.
 
 export function useGenerateCode() {
   const [loading,     setLoading]     = useState(false);
@@ -103,7 +114,7 @@ export function useGenerateCode() {
     } catch (e: unknown) {
       const message = extractErrorMessage(e, "Failed to generate code.");
       setError(message);
-      throw new Error(message);   // ← re-throw so callers can detect the failure
+      throw new Error(message);
     } finally {
       setLoading(false);
     }
@@ -177,15 +188,7 @@ export function useValidateInvite(
   return { result, loading, error };
 }
 
-// ── Employee: Accept invite ───────────────────────────────────────────────────
-//
-// accept() now takes a THIRD optional argument, passportNumber — required
-// only when ValidateTokenResponse.requires_passport_verification was true
-// for this invite. Also exposes needsPersonalEmail, set from the backend's
-// AcceptInviteResponse.needs_personal_email: true when the account that
-// just accepted has no login path independent of the org's invited email
-// (i.e. they signed up USING that email). The frontend uses this to decide
-// whether to show the "add a personal email" prompt right after acceptance.
+// ── Employee: Accept invite (authenticated — person already has a session) ────
 
 export function useAcceptInvite() {
   const [loading, setLoading] = useState(false);
@@ -224,4 +227,75 @@ export function useAcceptInvite() {
   };
 
   return { accept, loading, error, success, company, needsPersonalEmail };
+}
+
+// ── Employee: Accept invite (public — brand new account) ──────────────────────
+// NEW — creates the account, links it, and logs the person in, in one call.
+
+export function useAcceptInviteNewUser() {
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
+
+  const acceptAsNewUser = async (data: AcceptInviteNewUserRequest) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await invitationApi.acceptInviteNewUser(data);
+      return res;
+    } catch (e: unknown) {
+      setError(extractErrorMessage(e, "Could not create your account. Please check your details and try again."));
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return { acceptAsNewUser, loading, error };
+}
+
+// ── Employee: Accept invite (public — existing account, merge via OTP) ────────
+// NEW — two-step: request a code, then confirm it to merge the invite in.
+
+export function useMergeExistingUser() {
+  const [requestLoading, setRequestLoading] = useState(false);
+  const [confirmLoading, setConfirmLoading] = useState(false);
+  const [error,          setError]          = useState<string | null>(null);
+  const [otpSent,        setOtpSent]        = useState(false);
+
+  const requestOtp = async (inviteToken: string | undefined, inviteCode: string | undefined, loginEmail: string) => {
+    setRequestLoading(true);
+    setError(null);
+    try {
+      await invitationApi.requestMergeOtp({
+        invite_token: inviteToken, invite_code: inviteCode, login_email: loginEmail,
+      });
+      setOtpSent(true);
+      return true;
+    } catch (e: unknown) {
+      setError(extractErrorMessage(e, "Could not send a verification code. Please check the email and try again."));
+      return false;
+    } finally {
+      setRequestLoading(false);
+    }
+  };
+
+  const confirmMerge = async (data: AcceptInviteExistingUserRequest) => {
+    setConfirmLoading(true);
+    setError(null);
+    try {
+      const res = await invitationApi.acceptInviteExistingUser(data);
+      return res;
+    } catch (e: unknown) {
+      setError(extractErrorMessage(e, "Could not verify that code. Please check it and try again."));
+      return null;
+    } finally {
+      setConfirmLoading(false);
+    }
+  };
+
+  return {
+    requestOtp, confirmMerge,
+    requestLoading, confirmLoading, error, otpSent,
+    resetOtpSent: () => setOtpSent(false),
+  };
 }

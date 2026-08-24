@@ -1,3 +1,4 @@
+
 // // src/pages/employee/ProfileSecurity.tsx
 // // Shared for both employee + HR roles.
 // // Role is detected from ui_session cookie — Privacy section adapts accordingly.
@@ -110,7 +111,7 @@
 //   const [language,    setLanguage]    = useState("en-US");
 
 //   const displayName  = (profile?.full_legal_name ?? `${user?.first_name ?? ""} ${user?.last_name ?? ""}`).trim() || "—";
-//   const displayEmail = user?.email ?? "—";
+//   const displayEmail = profile?.email ?? user?.email ?? "—";
 //   const avatarUrl    = getFileUrl(profile?.profile_picture_url) ?? imgUserAvatar;
 
 //   const seedForm = () => {
@@ -292,12 +293,19 @@
 // // SECTION: Authentication
 // // =============================================================================
 
-// const AuthMethodCard = ({ icon, iconBg, title, description, features, buttonLabel, active }: {
+// // ── CHANGED: added `recommended` — a themed variant (border + "Recommended"
+// // badge) so MFASection can reuse this component instead of hand-rolling its
+// // own near-identical card markup. `features` is optional now since MFA's
+// // cards don't use the feature-bullet list.
+// const AuthMethodCard = ({ icon, iconBg, title, description, features, buttonLabel, active, recommended }: {
 //   icon: React.ReactNode; iconBg: string; title: string; description: string;
-//   features: { ok: boolean; text: string }[]; buttonLabel: string; active?: boolean;
+//   features?: { ok: boolean; text: string }[]; buttonLabel: string; active?: boolean; recommended?: boolean;
 // }) => (
-//   <div className={`border rounded-[12px] p-[16px] sm:p-[24px] ${active ? "bg-[#f8fafc]" : ""}`}
-//     style={{ borderColor: active ? "var(--theme-border, #c7d2fe)" : "#e5e7eb" }}>
+//   <div className={`rounded-[12px] p-[16px] sm:p-[24px] ${recommended ? "border-2" : "border"} ${active ? "bg-[#f8fafc]" : recommended ? "" : ""}`}
+//     style={{
+//       borderColor: recommended ? "var(--theme-primary)" : active ? "var(--theme-border, #c7d2fe)" : "#e5e7eb",
+//       backgroundColor: recommended ? "var(--theme-light)" : undefined,
+//     }}>
 //     <div className="flex flex-col sm:flex-row items-start gap-[12px] sm:gap-[16px]">
 //       <div className="flex items-start gap-[12px] flex-1 min-w-0">
 //         <div className="w-[44px] h-[44px] sm:w-[48px] sm:h-[48px] rounded-[12px] flex items-center justify-center flex-shrink-0"
@@ -310,16 +318,23 @@
 //                 <Check size={10} strokeWidth={3} /> Active
 //               </span>
 //             )}
+//             {recommended && (
+//               <span className="text-[11px] font-semibold rounded-full px-[8px] py-[2px]" style={{ color: "var(--theme-dark)", backgroundColor: "var(--theme-light)" }}>
+//                 Recommended
+//               </span>
+//             )}
 //           </div>
 //           <p className="text-[12px] sm:text-[13px] text-[#6b7280] mt-[4px]">{description}</p>
-//           <ul className="mt-[8px] flex flex-wrap gap-[8px]">
-//             {features.map(f => (
-//               <li key={f.text} className="flex items-center gap-[5px] text-[11px] sm:text-[12px] text-[#6b7280]">
-//                 {f.ok ? <Check size={11} className="text-[#10b981]" strokeWidth={3} /> : <X size={11} className="text-[#ef4444]" strokeWidth={3} />}
-//                 {f.text}
-//               </li>
-//             ))}
-//           </ul>
+//           {features && features.length > 0 && (
+//             <ul className="mt-[8px] flex flex-wrap gap-[8px]">
+//               {features.map(f => (
+//                 <li key={f.text} className="flex items-center gap-[5px] text-[11px] sm:text-[12px] text-[#6b7280]">
+//                   {f.ok ? <Check size={11} className="text-[#10b981]" strokeWidth={3} /> : <X size={11} className="text-[#ef4444]" strokeWidth={3} />}
+//                   {f.text}
+//                 </li>
+//               ))}
+//             </ul>
+//           )}
 //         </div>
 //       </div>
 //       <button className={`w-full sm:w-auto flex-shrink-0 h-[38px] px-[14px] text-[12px] sm:text-[13px] font-medium rounded-[10px] transition whitespace-nowrap ${
@@ -360,6 +375,8 @@
 
 // // =============================================================================
 // // SECTION: MFA
+// // ── CHANGED: both cards now reuse AuthMethodCard instead of duplicating its
+// // icon/title/badge/button layout with slightly different one-off styling.
 // // =============================================================================
 
 // const MFASection = () => (
@@ -374,47 +391,30 @@
 //       <p className="text-[13px] sm:text-[14px] text-[#6b7280] mt-[4px]">Add a second verification method for extra security.</p>
 //     </div>
 //     <div className={`${cardPad} flex flex-col gap-[12px] sm:gap-[16px]`}>
-//       <div className="border-2 rounded-[12px] p-[16px] sm:p-[24px]" style={{ borderColor: "var(--theme-primary)", backgroundColor: "var(--theme-light)" }}>
-//         <div className="flex flex-col sm:flex-row items-start gap-[12px] sm:gap-[16px]">
-//           <div className="flex items-start gap-[12px] flex-1 min-w-0">
-//             <div className="w-[44px] h-[44px] rounded-[12px] flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "var(--theme-light)" }}>
-//               <Smartphone size={20} style={{ color: "var(--theme-primary)" }} />
-//             </div>
-//             <div className="min-w-0">
-//               <div className="flex items-center gap-[8px] flex-wrap">
-//                 <h3 className="text-[14px] sm:text-[15px] font-semibold text-[#111827]">Authenticator App</h3>
-//                 <span className="text-[11px] font-semibold rounded-full px-[8px] py-[2px]" style={{ color: "var(--theme-dark)", backgroundColor: "var(--theme-light)" }}>Recommended</span>
-//               </div>
-//               <p className="text-[12px] sm:text-[13px] text-[#6b7280] mt-[4px]">Google Authenticator, Authy, or Microsoft Authenticator</p>
-//             </div>
-//           </div>
-//           <button className="w-full sm:w-auto flex-shrink-0 h-[38px] px-[14px] text-white text-[12px] sm:text-[13px] font-medium rounded-[10px] hover:opacity-90 transition"
-//             style={{ background: "linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)" }}>
-//             Setup Now
-//           </button>
-//         </div>
-//       </div>
-//       <div className="border border-[#e5e7eb] rounded-[12px] p-[16px] sm:p-[24px]">
-//         <div className="flex flex-col sm:flex-row items-start gap-[12px] sm:gap-[16px]">
-//           <div className="w-[44px] h-[44px] rounded-[12px] bg-[#f0fdf4] flex items-center justify-center flex-shrink-0">
-//             <Phone size={20} className="text-[#10b981]" />
-//           </div>
-//           <div className="flex-1 min-w-0">
-//             <h3 className="text-[14px] sm:text-[15px] font-semibold text-[#111827]">SMS Text Message</h3>
-//             <p className="text-[12px] sm:text-[13px] text-[#6b7280] mt-[4px]">Receive codes via text message</p>
-//           </div>
-//           <button className="w-full sm:w-auto flex-shrink-0 h-[38px] px-[14px] text-white text-[12px] sm:text-[13px] font-medium rounded-[10px] hover:opacity-90 transition"
-//             style={{ background: "linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)" }}>
-//             Add Phone
-//           </button>
-//         </div>
-//       </div>
+//       <AuthMethodCard recommended
+//         icon={<Smartphone size={20} style={{ color: "var(--theme-primary)" }} />}
+//         iconBg="var(--theme-light)"
+//         title="Authenticator App"
+//         description="Google Authenticator, Authy, or Microsoft Authenticator"
+//         buttonLabel="Setup Now" />
+//       <AuthMethodCard
+//         icon={<Phone size={20} className="text-[#10b981]" />}
+//         iconBg="#f0fdf4"
+//         title="SMS Text Message"
+//         description="Receive codes via text message"
+//         buttonLabel="Add Phone" />
 //     </div>
 //   </SectionCard>
 // );
 
 // // =============================================================================
 // // SECTION: Login History
+// // ── This is also now the content behind the "devices" route — see the
+// // COMPONENTS map at the bottom. The old ConnectedDevicesPlaceholder showed a
+// // static "Current Device" card with strictly less information than this
+// // section already provides for real (device, browser, OS, location, active
+// // badge), so it added nothing and has been removed rather than left as a
+// // second, lesser copy of the same feature.
 // // =============================================================================
 
 // const LoginHistorySection = () => {
@@ -799,38 +799,6 @@
 // };
 
 // // =============================================================================
-// // SECTION: Connected Devices (placeholder)
-// // =============================================================================
-
-// const ConnectedDevicesPlaceholder = () => (
-//   <SectionCard>
-//     <div className={`${cardPad} border-b border-[#f3f4f6]`}>
-//       <h2 className="text-[17px] sm:text-[20px] font-semibold text-[#111827]">Connected Devices</h2>
-//       <p className="text-[13px] sm:text-[14px] text-[#6b7280] mt-[4px]">Manage devices that have access to your account.</p>
-//     </div>
-//     <div className={`${cardPad} flex flex-col gap-[12px]`}>
-//       <div className="border border-[#e5e7eb] rounded-[12px] p-[16px] sm:p-[20px] flex items-start gap-[14px]">
-//         <div className="w-[44px] h-[44px] rounded-[12px] flex items-center justify-center flex-shrink-0"
-//           style={{ backgroundColor:"var(--theme-light)", color:"var(--theme-primary)" }}>
-//           <Monitor size={20} />
-//         </div>
-//         <div className="flex-1 min-w-0">
-//           <div className="flex items-center gap-[8px]">
-//             <p className="text-[14px] font-semibold text-[#111827]">Current Device</p>
-//             <span className="text-[10px] font-medium px-[7px] py-[2px] rounded-full bg-[#d1fae5] text-[#065f46]">Active Now</span>
-//           </div>
-//           <p className="text-[12px] text-[#6b7280] mt-[4px]">This browser session</p>
-//         </div>
-//       </div>
-//       <div className="bg-[#fffbeb] border border-[#fde68a] rounded-[10px] px-[16px] py-[12px] flex items-center gap-[10px]">
-//         <AlertTriangle size={15} className="text-[#f59e0b] flex-shrink-0" />
-//         <p className="text-[12px] text-[#92400e]">If you see an unrecognised device, change your password immediately.</p>
-//       </div>
-//     </div>
-//   </SectionCard>
-// );
-
-// // =============================================================================
 // // SECTION: Session (placeholder)
 // // =============================================================================
 
@@ -878,7 +846,10 @@
 //   mfa:               { title:"Multi-Factor Authentication",    subtitle:"Add a second verification step for extra security" },
 //   "login-history":   { title:"Login History",                  subtitle:"Review recent access to your account"              },
 //   privacy:           { title:"Privacy Settings",               subtitle:"Control visibility and data sharing"               },
-//   devices:           { title:"Connected Devices",              subtitle:"Manage devices with access to your account"        },
+//   // ── CHANGED: this route now shows the real Login History content (see
+//   // COMPONENTS below) instead of the old static placeholder, so the title
+//   // reflects that rather than promising a separate "devices" feature.
+//   devices:           { title:"Connected Devices & Sessions",   subtitle:"Review recent access and sign out other sessions"  },
 //   session:           { title:"Session Settings",               subtitle:"Configure session timeout and concurrent logins"   },
 //   "security-alerts": { title:"Security Alerts",                subtitle:"Get notified about important security events"      },
 //   notifications:     { title:"Notification Sounds",            subtitle:"Customise sounds for messages and alerts"          },
@@ -909,13 +880,16 @@
 //   const activeSection = getSection();
 //   const { title, subtitle } = SECTION_TITLES[activeSection];
 
+//   // ── CHANGED: "devices" now reuses LoginHistorySection — the old
+//   // ConnectedDevicesPlaceholder was a static duplicate showing less real
+//   // information than this section already provides.
 //   const COMPONENTS: Record<SectionId, React.ReactNode> = {
 //     profile:           <PersonalInfoSection />,
 //     authentication:    <AuthenticationSection />,
 //     mfa:               <MFASection />,
 //     "login-history":   <LoginHistorySection />,
 //     privacy:           <PrivacySection isHR={isHR} />,
-//     devices:           <ConnectedDevicesPlaceholder />,
+//     devices:           <LoginHistorySection />,
 //     session:           <SessionPlaceholder />,
 //     "security-alerts": <SecurityAlertsSection />,
 //     notifications:     <NotificationSoundsSection />,
@@ -932,7 +906,6 @@
 //     </div>
 //   );
 // }
-
 // src/pages/employee/ProfileSecurity.tsx
 // Shared for both employee + HR roles.
 // Role is detected from ui_session cookie — Privacy section adapts accordingly.
@@ -951,6 +924,14 @@ import {
 import { useMyProfile, useLoginHistory,notifyProfileUpdated } from "../../hooks/employee/useProfile";
 import { updateMyProfile, signOutAllDevices, uploadProfilePicture, removeProfilePicture } from "../../api/employee/profile.api";
 import { useAuthStore } from "../../store/authStore";
+import { useCompanyProfile } from "../../hooks/hr/useCompanyProfile";
+import {
+  updateCompanyProfile, uploadCompanyLogo, removeCompanyLogo,
+} from "../../api/hr/companyProfile.api";
+import { useAttorneyProfile } from "../../hooks/lawyer/useAttorneyProfile";
+import {
+  updateAttorneyProfile, uploadAttorneyPhoto, removeAttorneyPhoto,
+} from "../../api/lawyer/attorneyProfile.api";
 import imgUserAvatar from "../../assets/icons/user-avatar.jpg";
 import { getFileUrl } from "../../utils/fileUrl";
 import {  getUiSession } from "../../utils/uiSession";
@@ -1196,6 +1177,565 @@ const PersonalInfoSection = () => {
                 <span className="text-[13px] sm:text-[14px] text-[#111827]">{value}</span>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {editing && (
+        <div className={`${cardPadX} pb-[20px] sm:pb-[28px] pt-[16px] border-t border-[#f3f4f6] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-[12px]`}>
+          <button onClick={() => { setEditing(false); setError(null); }}
+            className="flex items-center justify-center sm:justify-start gap-[6px] text-[#6b7280] text-[13px] hover:text-[#374151] transition">
+            <RotateCcw size={13} /> Undo Changes
+          </button>
+          <div className="flex gap-[8px]">
+            <button onClick={() => { setEditing(false); setError(null); }}
+              className="flex-1 sm:flex-none h-[40px] px-[16px] border border-[#e5e7eb] text-[#374151] text-[13px] font-medium rounded-[10px] hover:bg-[#f9fafb] transition">
+              Cancel
+            </button>
+            <button onClick={handleSave} disabled={saving}
+              className="flex-1 sm:flex-none h-[40px] px-[16px] text-white text-[13px] font-medium rounded-[10px] hover:opacity-90 transition flex items-center justify-center gap-[6px] disabled:opacity-60"
+              style={{ background: "linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)" }}>
+              {saving ? <><Spinner size={14} /> Saving…</> : <><Save size={14} /> Save Changes</>}
+            </button>
+          </div>
+        </div>
+      )}
+    </SectionCard>
+  );
+};
+
+// =============================================================================
+// SECTION: Company Information — HR only (backed by EmployerProfile)
+// =============================================================================
+
+const COMPANY_SIZES = [
+  { value: "1_10",      label: "1–10 employees"    },
+  { value: "11_50",     label: "11–50 employees"   },
+  { value: "51_200",    label: "51–200 employees"  },
+  { value: "201_500",   label: "201–500 employees" },
+  { value: "501_1000",  label: "501–1,000 employees" },
+  { value: "1000_plus", label: "1,000+ employees"  },
+];
+
+const CompanyInfoSection = () => {
+  const { data: company, isLoading, refetch } = useCompanyProfile();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [editing, setEditing] = useState(false);
+  const [saving,  setSaving]  = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [removingLogo,  setRemovingLogo]  = useState(false);
+  const [logoError,     setLogoError]     = useState<string | null>(null);
+
+  const [form, setForm] = useState({
+    company_name: "", company_size: "", industry: "", website: "", domain: "",
+    ein: "", address_line1: "", address_line2: "", city: "", state: "",
+    zip_code: "", country: "US", contact_name: "", contact_email: "", contact_phone: "",
+  });
+
+  const seedForm = () => {
+    if (!company) return;
+    setForm({
+      company_name:  company.company_name  ?? "",
+      company_size:  company.company_size  ?? "",
+      industry:      company.industry      ?? "",
+      website:       company.website       ?? "",
+      domain:        company.domain        ?? "",
+      ein:           company.ein           ?? "",
+      address_line1: company.address_line1 ?? "",
+      address_line2: company.address_line2 ?? "",
+      city:          company.city          ?? "",
+      state:         company.state         ?? "",
+      zip_code:      company.zip_code      ?? "",
+      country:       company.country       ?? "US",
+      contact_name:  company.contact_name  ?? "",
+      contact_email: company.contact_email ?? "",
+      contact_phone: company.contact_phone ?? "",
+    });
+  };
+
+  const setField = (key: keyof typeof form) => (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => setForm(f => ({ ...f, [key]: e.target.value }));
+
+  const handleSave = async () => {
+    setSaving(true); setError(null);
+    try {
+      await updateCompanyProfile(form);
+      await refetch();
+      setEditing(false);
+    } catch { setError("Failed to save company details. Please try again."); }
+    finally { setSaving(false); }
+  };
+
+  const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { setLogoError("File must be under 5 MB."); return; }
+    setLogoUploading(true); setLogoError(null);
+    try {
+      await uploadCompanyLogo(file);
+      await refetch();
+    } catch { setLogoError("Failed to upload logo."); }
+    finally { setLogoUploading(false); e.target.value = ""; }
+  };
+
+  const handleRemoveLogo = async () => {
+    if (!company?.logo_url) return;
+    setRemovingLogo(true); setLogoError(null);
+    try {
+      await removeCompanyLogo();
+      await refetch();
+    } catch { setLogoError("Failed to remove logo."); }
+    finally { setRemovingLogo(false); }
+  };
+
+  if (isLoading) return <SectionCard><div className="flex items-center justify-center py-[64px]"><Spinner size={28} className="text-indigo-600" /></div></SectionCard>;
+
+  return (
+    <SectionCard>
+      <div className={`${cardPad} border-b border-[#f3f4f6] flex items-center justify-between gap-[12px]`}>
+        <div>
+          <h2 className="text-[17px] sm:text-[20px] font-semibold text-[#111827] flex items-center gap-[8px]">
+            Company Information
+            {company?.is_verified ? (
+              <span className="flex items-center gap-[4px] text-[11px] font-medium text-[#10b981] bg-[#d1fae5] px-[8px] py-[2px] rounded-full">
+                <CheckCircle size={10} /> Verified
+              </span>
+            ) : (
+              <span className="flex items-center gap-[4px] text-[11px] font-medium text-[#c2410c] bg-[#fff7ed] px-[8px] py-[2px] rounded-full">
+                <AlertTriangle size={10} /> Not Verified
+              </span>
+            )}
+          </h2>
+          <p className="text-[13px] sm:text-[14px] text-[#6b7280] mt-[4px]">
+            Your company details — used for domain verification and employee invites.
+          </p>
+        </div>
+        {!editing && (
+          <button onClick={() => { seedForm(); setEditing(true); setError(null); }}
+            className="flex items-center gap-[6px] text-[13px] sm:text-[14px] font-medium transition flex-shrink-0"
+            style={{ color: "var(--theme-primary)" }}>
+            <Edit2 size={14} /> Edit
+          </button>
+        )}
+      </div>
+
+      {error && <div className={`${cardPadX} mt-[16px] bg-[#fef2f2] border border-[#fca5a5] text-[#dc2626] rounded-[10px] px-[16px] py-[12px] text-[13px]`}>{error}</div>}
+
+      {/* Logo */}
+      <div className={`${cardPadX} py-[20px] sm:py-[24px] border-b border-[#f3f4f6]`}>
+        <p className="text-[13px] font-medium text-[#374151] mb-[12px]">Company Logo</p>
+        <div className="flex flex-wrap items-center gap-[16px]">
+          <div className="w-[64px] h-[64px] sm:w-[80px] sm:h-[80px] rounded-[12px] bg-[#f3f4f6] border-4 border-[#f3f4f6] flex items-center justify-center overflow-hidden flex-shrink-0">
+            {company?.logo_url
+              ? <img src={company.logo_url} alt="Company logo" className="w-full h-full object-cover" />
+              : <Building size={28} className="text-[#9ca3af]" />}
+          </div>
+          <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml" className="hidden" onChange={handleLogoChange} />
+          <div className="flex flex-col gap-[8px]">
+            <div className="flex flex-wrap gap-[8px]">
+              <button onClick={() => fileInputRef.current?.click()} disabled={logoUploading}
+                className="flex items-center gap-[6px] px-[12px] sm:px-[14px] h-[34px] sm:h-[36px] text-white text-[12px] sm:text-[13px] font-medium rounded-[8px] hover:opacity-90 transition disabled:opacity-60"
+                style={{ background: "linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)" }}>
+                {logoUploading ? <><Spinner size={13} /> Uploading…</> : <><Upload size={13} /> Upload New</>}
+              </button>
+              <button onClick={handleRemoveLogo} disabled={removingLogo || !company?.logo_url}
+                className="flex items-center gap-[6px] px-[12px] sm:px-[14px] h-[34px] sm:h-[36px] border border-[#e5e7eb] text-[#6b7280] text-[12px] sm:text-[13px] font-medium rounded-[8px] hover:bg-[#f9fafb] transition disabled:opacity-60">
+                {removingLogo ? <><Spinner size={13} className="text-[#6b7280]" /> Removing…</> : <><Trash2 size={13} /> Remove</>}
+              </button>
+            </div>
+            {logoError ? <p className="text-[12px] text-[#ef4444]">{logoError}</p>
+              : <p className="text-[12px] text-[#9ca3af]">JPG, PNG, GIF, WebP or SVG. Max 5 MB.</p>}
+          </div>
+        </div>
+      </div>
+
+      {/* Fields */}
+      <div className={`${cardPad} flex flex-col gap-[16px] sm:gap-[20px]`}>
+        {editing ? (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
+              <div className="flex flex-col gap-[6px]">
+                <label className="text-[13px] font-medium text-[#374151]">Company Name</label>
+                <input value={form.company_name} onChange={setField("company_name")}
+                  className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+                  style={{ outlineColor: "var(--theme-primary)" }} />
+              </div>
+              <div className="flex flex-col gap-[6px]">
+                <label className="text-[13px] font-medium text-[#374151]">Company Size</label>
+                <select value={form.company_size} onChange={setField("company_size")}
+                  className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 cursor-pointer"
+                  style={{ outlineColor: "var(--theme-primary)" }}>
+                  <option value="">Select…</option>
+                  {COMPANY_SIZES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
+              <div className="flex flex-col gap-[6px]">
+                <label className="text-[13px] font-medium text-[#374151]">Industry</label>
+                <input value={form.industry} onChange={setField("industry")}
+                  className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+                  style={{ outlineColor: "var(--theme-primary)" }} />
+              </div>
+              <div className="flex flex-col gap-[6px]">
+                <label className="text-[13px] font-medium text-[#374151]">Website</label>
+                <input value={form.website} onChange={setField("website")} placeholder="https://"
+                  className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+                  style={{ outlineColor: "var(--theme-primary)" }} />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
+              <div className="flex flex-col gap-[6px]">
+                <label className="text-[13px] font-medium text-[#374151]">Domain</label>
+                <input value={form.domain} onChange={setField("domain")} placeholder="company.com"
+                  className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+                  style={{ outlineColor: "var(--theme-primary)" }} />
+                <p className="text-[11px] text-[#9ca3af]">Used to verify employee invite emails.</p>
+              </div>
+              <div className="flex flex-col gap-[6px]">
+                <label className="text-[13px] font-medium text-[#374151]">EIN</label>
+                <input value={form.ein} onChange={setField("ein")}
+                  className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+                  style={{ outlineColor: "var(--theme-primary)" }} />
+              </div>
+            </div>
+            <div className="flex flex-col gap-[6px]">
+              <label className="text-[13px] font-medium text-[#374151]">Address Line 1</label>
+              <input value={form.address_line1} onChange={setField("address_line1")}
+                className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+                style={{ outlineColor: "var(--theme-primary)" }} />
+            </div>
+            <div className="flex flex-col gap-[6px]">
+              <label className="text-[13px] font-medium text-[#374151]">Address Line 2</label>
+              <input value={form.address_line2} onChange={setField("address_line2")}
+                className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+                style={{ outlineColor: "var(--theme-primary)" }} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-[16px]">
+              <div className="flex flex-col gap-[6px]">
+                <label className="text-[13px] font-medium text-[#374151]">City</label>
+                <input value={form.city} onChange={setField("city")}
+                  className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+                  style={{ outlineColor: "var(--theme-primary)" }} />
+              </div>
+              <div className="flex flex-col gap-[6px]">
+                <label className="text-[13px] font-medium text-[#374151]">State</label>
+                <input value={form.state} onChange={setField("state")}
+                  className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+                  style={{ outlineColor: "var(--theme-primary)" }} />
+              </div>
+              <div className="flex flex-col gap-[6px]">
+                <label className="text-[13px] font-medium text-[#374151]">ZIP Code</label>
+                <input value={form.zip_code} onChange={setField("zip_code")}
+                  className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+                  style={{ outlineColor: "var(--theme-primary)" }} />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-[16px]">
+              <div className="flex flex-col gap-[6px]">
+                <label className="text-[13px] font-medium text-[#374151]">Contact Name</label>
+                <input value={form.contact_name} onChange={setField("contact_name")}
+                  className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+                  style={{ outlineColor: "var(--theme-primary)" }} />
+              </div>
+              <div className="flex flex-col gap-[6px]">
+                <label className="text-[13px] font-medium text-[#374151]">Contact Email</label>
+                <input value={form.contact_email} onChange={setField("contact_email")}
+                  className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+                  style={{ outlineColor: "var(--theme-primary)" }} />
+              </div>
+              <div className="flex flex-col gap-[6px]">
+                <label className="text-[13px] font-medium text-[#374151]">Contact Phone</label>
+                <input value={form.contact_phone} onChange={setField("contact_phone")}
+                  className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+                  style={{ outlineColor: "var(--theme-primary)" }} />
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
+            {[
+              { label: "Company Name",  value: company?.company_name || "—" },
+              { label: "Company Size",  value: COMPANY_SIZES.find(s => s.value === company?.company_size)?.label ?? "—" },
+              { label: "Industry",      value: company?.industry || "—" },
+              { label: "Website",       value: company?.website || "—" },
+              { label: "Domain",        value: company?.domain || "—" },
+              { label: "EIN",           value: company?.ein || "—" },
+              { label: "Address",       value: [company?.address_line1, company?.address_line2, company?.city, company?.state, company?.zip_code].filter(Boolean).join(", ") || "—" },
+              { label: "Contact",       value: company?.contact_name || "—" },
+              { label: "Contact Email", value: company?.contact_email || "—" },
+              { label: "Contact Phone", value: company?.contact_phone || "—" },
+            ].map(({ label, value }) => (
+              <div key={label} className="flex flex-col gap-[4px]">
+                <span className="text-[12px] text-[#6b7280] font-medium">{label}</span>
+                <span className="text-[13px] sm:text-[14px] text-[#111827]">{value}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {editing && (
+        <div className={`${cardPadX} pb-[20px] sm:pb-[28px] pt-[16px] border-t border-[#f3f4f6] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-[12px]`}>
+          <button onClick={() => { setEditing(false); setError(null); }}
+            className="flex items-center justify-center sm:justify-start gap-[6px] text-[#6b7280] text-[13px] hover:text-[#374151] transition">
+            <RotateCcw size={13} /> Undo Changes
+          </button>
+          <div className="flex gap-[8px]">
+            <button onClick={() => { setEditing(false); setError(null); }}
+              className="flex-1 sm:flex-none h-[40px] px-[16px] border border-[#e5e7eb] text-[#374151] text-[13px] font-medium rounded-[10px] hover:bg-[#f9fafb] transition">
+              Cancel
+            </button>
+            <button onClick={handleSave} disabled={saving}
+              className="flex-1 sm:flex-none h-[40px] px-[16px] text-white text-[13px] font-medium rounded-[10px] hover:opacity-90 transition flex items-center justify-center gap-[6px] disabled:opacity-60"
+              style={{ background: "linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)" }}>
+              {saving ? <><Spinner size={14} /> Saving…</> : <><Save size={14} /> Save Changes</>}
+            </button>
+          </div>
+        </div>
+      )}
+    </SectionCard>
+  );
+};
+
+// =============================================================================
+// SECTION: Professional Information — Attorney only (backed by AttorneyProfile)
+// =============================================================================
+
+const AttorneyInfoSection = () => {
+  const { data: attorney, isLoading, refetch } = useAttorneyProfile();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [editing, setEditing] = useState(false);
+  const [saving,  setSaving]  = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [removingPhoto,  setRemovingPhoto]  = useState(false);
+  const [photoError,     setPhotoError]     = useState<string | null>(null);
+
+  const [form, setForm] = useState({
+    bar_number: "", bar_state: "", years_experience: "", law_firm_name: "",
+    specialisations: "", languages: "", availability_note: "",
+    max_active_cases: "", bio: "",
+  });
+
+  const seedForm = () => {
+    if (!attorney) return;
+    setForm({
+      bar_number:        attorney.bar_number        ?? "",
+      bar_state:         attorney.bar_state         ?? "",
+      years_experience:  attorney.years_experience?.toString() ?? "",
+      law_firm_name:     attorney.law_firm_name     ?? "",
+      specialisations:   attorney.specialisations   ?? "",
+      languages:         attorney.languages         ?? "",
+      availability_note: attorney.availability_note ?? "",
+      max_active_cases:  attorney.max_active_cases?.toString() ?? "",
+      bio:               attorney.bio               ?? "",
+    });
+  };
+
+  const setField = (key: keyof typeof form) => (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => setForm(f => ({ ...f, [key]: e.target.value }));
+
+  const handleSave = async () => {
+    setSaving(true); setError(null);
+    try {
+      await updateAttorneyProfile({
+        bar_number:        form.bar_number || undefined,
+        bar_state:         form.bar_state || undefined,
+        years_experience:  form.years_experience ? Number(form.years_experience) : undefined,
+        law_firm_name:     form.law_firm_name || undefined,
+        specialisations:   form.specialisations || undefined,
+        languages:         form.languages || undefined,
+        availability_note: form.availability_note || undefined,
+        max_active_cases:  form.max_active_cases ? Number(form.max_active_cases) : undefined,
+        bio:               form.bio || undefined,
+      });
+      await refetch();
+      setEditing(false);
+    } catch { setError("Failed to save professional details. Please try again."); }
+    finally { setSaving(false); }
+  };
+
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { setPhotoError("File must be under 5 MB."); return; }
+    setPhotoUploading(true); setPhotoError(null);
+    try {
+      await uploadAttorneyPhoto(file);
+      await refetch();
+    } catch { setPhotoError("Failed to upload photo."); }
+    finally { setPhotoUploading(false); e.target.value = ""; }
+  };
+
+  const handleRemovePhoto = async () => {
+    if (!attorney?.profile_photo_url) return;
+    setRemovingPhoto(true); setPhotoError(null);
+    try {
+      await removeAttorneyPhoto();
+      await refetch();
+    } catch { setPhotoError("Failed to remove photo."); }
+    finally { setRemovingPhoto(false); }
+  };
+
+  if (isLoading) return <SectionCard><div className="flex items-center justify-center py-[64px]"><Spinner size={28} className="text-indigo-600" /></div></SectionCard>;
+
+  return (
+    <SectionCard>
+      <div className={`${cardPad} border-b border-[#f3f4f6] flex items-center justify-between gap-[12px]`}>
+        <div>
+          <h2 className="text-[17px] sm:text-[20px] font-semibold text-[#111827] flex items-center gap-[8px]">
+            Professional Information
+            {attorney?.is_verified ? (
+              <span className="flex items-center gap-[4px] text-[11px] font-medium text-[#10b981] bg-[#d1fae5] px-[8px] py-[2px] rounded-full">
+                <CheckCircle size={10} /> Verified
+              </span>
+            ) : (
+              <span className="flex items-center gap-[4px] text-[11px] font-medium text-[#c2410c] bg-[#fff7ed] px-[8px] py-[2px] rounded-full">
+                <AlertTriangle size={10} /> Not Verified
+              </span>
+            )}
+          </h2>
+          <p className="text-[13px] sm:text-[14px] text-[#6b7280] mt-[4px]">
+            Your bar credentials, firm, and case-load preferences.
+          </p>
+        </div>
+        {!editing && (
+          <button onClick={() => { seedForm(); setEditing(true); setError(null); }}
+            className="flex items-center gap-[6px] text-[13px] sm:text-[14px] font-medium transition flex-shrink-0"
+            style={{ color: "var(--theme-primary)" }}>
+            <Edit2 size={14} /> Edit
+          </button>
+        )}
+      </div>
+
+      {error && <div className={`${cardPadX} mt-[16px] bg-[#fef2f2] border border-[#fca5a5] text-[#dc2626] rounded-[10px] px-[16px] py-[12px] text-[13px]`}>{error}</div>}
+
+      {/* Photo */}
+      <div className={`${cardPadX} py-[20px] sm:py-[24px] border-b border-[#f3f4f6]`}>
+        <p className="text-[13px] font-medium text-[#374151] mb-[12px]">Profile Photo</p>
+        <div className="flex flex-wrap items-center gap-[16px]">
+          <div className="w-[64px] h-[64px] sm:w-[80px] sm:h-[80px] rounded-full bg-[#f3f4f6] border-4 border-[#f3f4f6] flex items-center justify-center overflow-hidden flex-shrink-0">
+            {attorney?.profile_photo_url
+              ? <img src={attorney.profile_photo_url} alt="Profile" className="w-full h-full object-cover" />
+              : <Building size={28} className="text-[#9ca3af]" />}
+          </div>
+          <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={handlePhotoChange} />
+          <div className="flex flex-col gap-[8px]">
+            <div className="flex flex-wrap gap-[8px]">
+              <button onClick={() => fileInputRef.current?.click()} disabled={photoUploading}
+                className="flex items-center gap-[6px] px-[12px] sm:px-[14px] h-[34px] sm:h-[36px] text-white text-[12px] sm:text-[13px] font-medium rounded-[8px] hover:opacity-90 transition disabled:opacity-60"
+                style={{ background: "linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)" }}>
+                {photoUploading ? <><Spinner size={13} /> Uploading…</> : <><Upload size={13} /> Upload New</>}
+              </button>
+              <button onClick={handleRemovePhoto} disabled={removingPhoto || !attorney?.profile_photo_url}
+                className="flex items-center gap-[6px] px-[12px] sm:px-[14px] h-[34px] sm:h-[36px] border border-[#e5e7eb] text-[#6b7280] text-[12px] sm:text-[13px] font-medium rounded-[8px] hover:bg-[#f9fafb] transition disabled:opacity-60">
+                {removingPhoto ? <><Spinner size={13} className="text-[#6b7280]" /> Removing…</> : <><Trash2 size={13} /> Remove</>}
+              </button>
+            </div>
+            {photoError ? <p className="text-[12px] text-[#ef4444]">{photoError}</p>
+              : <p className="text-[12px] text-[#9ca3af]">JPG, PNG, GIF or WebP. Max 5 MB.</p>}
+          </div>
+        </div>
+      </div>
+
+      {/* Fields */}
+      <div className={`${cardPad} flex flex-col gap-[16px] sm:gap-[20px]`}>
+        {editing ? (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
+              <div className="flex flex-col gap-[6px]">
+                <label className="text-[13px] font-medium text-[#374151]">Bar Number</label>
+                <input value={form.bar_number} onChange={setField("bar_number")}
+                  className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+                  style={{ outlineColor: "var(--theme-primary)" }} />
+              </div>
+              <div className="flex flex-col gap-[6px]">
+                <label className="text-[13px] font-medium text-[#374151]">Bar State</label>
+                <input value={form.bar_state} onChange={setField("bar_state")}
+                  className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+                  style={{ outlineColor: "var(--theme-primary)" }} />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
+              <div className="flex flex-col gap-[6px]">
+                <label className="text-[13px] font-medium text-[#374151]">Law Firm Name</label>
+                <input value={form.law_firm_name} onChange={setField("law_firm_name")}
+                  className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+                  style={{ outlineColor: "var(--theme-primary)" }} />
+              </div>
+              <div className="flex flex-col gap-[6px]">
+                <label className="text-[13px] font-medium text-[#374151]">Years of Experience</label>
+                <input type="number" min={0} value={form.years_experience} onChange={setField("years_experience")}
+                  className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+                  style={{ outlineColor: "var(--theme-primary)" }} />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
+              <div className="flex flex-col gap-[6px]">
+                <label className="text-[13px] font-medium text-[#374151]">Specialisations</label>
+                <input value={form.specialisations} onChange={setField("specialisations")} placeholder="H-1B, L-1, PERM"
+                  className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+                  style={{ outlineColor: "var(--theme-primary)" }} />
+                <p className="text-[11px] text-[#9ca3af]">Comma-separated.</p>
+              </div>
+              <div className="flex flex-col gap-[6px]">
+                <label className="text-[13px] font-medium text-[#374151]">Languages</label>
+                <input value={form.languages} onChange={setField("languages")} placeholder="English, Spanish"
+                  className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+                  style={{ outlineColor: "var(--theme-primary)" }} />
+                <p className="text-[11px] text-[#9ca3af]">Comma-separated.</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
+              <div className="flex flex-col gap-[6px]">
+                <label className="text-[13px] font-medium text-[#374151]">Max Active Cases</label>
+                <input type="number" min={0} value={form.max_active_cases} onChange={setField("max_active_cases")}
+                  className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+                  style={{ outlineColor: "var(--theme-primary)" }} />
+              </div>
+              <div className="flex flex-col gap-[6px]">
+                <label className="text-[13px] font-medium text-[#374151]">Availability Note</label>
+                <input value={form.availability_note} onChange={setField("availability_note")} placeholder="e.g. Accepting new H-1B cases"
+                  className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+                  style={{ outlineColor: "var(--theme-primary)" }} />
+              </div>
+            </div>
+            <div className="flex flex-col gap-[6px]">
+              <label className="text-[13px] font-medium text-[#374151]">Bio</label>
+              <textarea value={form.bio} onChange={setField("bio")} rows={4}
+                className="w-full rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] py-[10px] focus:outline-none focus:ring-2 transition resize-none"
+                style={{ outlineColor: "var(--theme-primary)" }} />
+            </div>
+          </>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
+            {[
+              { label: "Bar Number",         value: attorney?.bar_number || "—" },
+              { label: "Bar State",          value: attorney?.bar_state || "—" },
+              { label: "Law Firm",           value: attorney?.law_firm_name || "—" },
+              { label: "Years of Experience",value: attorney?.years_experience?.toString() || "—" },
+              { label: "Specialisations",    value: attorney?.specialisations || "—" },
+              { label: "Languages",          value: attorney?.languages || "—" },
+              { label: "Max Active Cases",   value: attorney?.max_active_cases?.toString() || "—" },
+              { label: "Availability",       value: attorney?.availability_note || "—" },
+            ].map(({ label, value }) => (
+              <div key={label} className="flex flex-col gap-[4px]">
+                <span className="text-[12px] text-[#6b7280] font-medium">{label}</span>
+                <span className="text-[13px] sm:text-[14px] text-[#111827]">{value}</span>
+              </div>
+            ))}
+            {attorney?.bio && (
+              <div className="flex flex-col gap-[4px] sm:col-span-2">
+                <span className="text-[12px] text-[#6b7280] font-medium">Bio</span>
+                <span className="text-[13px] sm:text-[14px] text-[#111827] leading-[20px]">{attorney.bio}</span>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1794,9 +2334,10 @@ const SECTION_TITLES: Record<SectionId, { title: string; subtitle: string }> = {
 // =============================================================================
 
 export default function ProfileSecurity() {
-  const location = useLocation();
-  const session  = getUiSession();
-  const isHR     = session?.roles?.includes("hr") ?? false;
+  const location   = useLocation();
+  const session    = getUiSession();
+  const isHR       = session?.roles?.includes("hr") ?? false;
+  const isAttorney = session?.roles?.includes("attorney") ?? false;
 
   const getSection = (): SectionId => {
     const p = location.pathname;
@@ -1818,7 +2359,13 @@ export default function ProfileSecurity() {
   // ConnectedDevicesPlaceholder was a static duplicate showing less real
   // information than this section already provides.
   const COMPONENTS: Record<SectionId, React.ReactNode> = {
-    profile:           <PersonalInfoSection />,
+    profile: (
+      <div className="flex flex-col gap-[24px]">
+        <PersonalInfoSection />
+        {isHR && <CompanyInfoSection />}
+        {isAttorney && <AttorneyInfoSection />}
+      </div>
+    ),
     authentication:    <AuthenticationSection />,
     mfa:               <MFASection />,
     "login-history":   <LoginHistorySection />,

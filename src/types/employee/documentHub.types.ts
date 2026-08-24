@@ -1,7 +1,20 @@
 // src/types/documentHub.types.ts
 
+// FIXED: added "superseded" — set on a document's old version once it's
+// been replaced via reupload_expired_document(), whether the replacement
+// happened before or after actual expiry.
+export type DocStatus =
+  | "verified"
+  | "pending_review"
+  | "uploaded"
+  | "rejected"
+  | "required"
+  | "missing"
+  | "expired"
+  | "pending_hr_release"
+  | "superseded";
+
 export type DocFileType = "pdf" | "docx" | "img" | "other";
-export type DocStatus   = "verified" | "pending_review" | "uploaded" | "rejected" | "required" | "missing";
 
 export interface HubDocument {
   id:                string;
@@ -15,7 +28,18 @@ export interface HubDocument {
   file_size_bytes:   number;
   uploaded_at:       string;
   verified_at?:      string;
-  in_use?:           boolean;   // ← ADD — true if reused elsewhere or confirmed on a completed task
+  in_use?:           boolean;
+  // NEW — set on a replacement document while its predecessor is still
+  // valid; the daily activate_pending_document_replacements() job clears
+  // this and hands off to the new document once the old one's expiry
+  // arrives. Non-null means "this is the newer version, not yet officially
+  // current — the old one is still your active document until this date."
+  activates_on?:     string;
+  // NEW — already returned by the backend's DocumentResponse (version: int)
+  // but never surfaced here. Lets the Hub show "v1"/"v2" directly on each
+  // card, and lets the "Older Version" label say exactly what it's an
+  // older version OF, instead of a bare, contextless badge.
+  version?:          number;
 }
 
 export interface RequirementItem {
@@ -59,4 +83,4 @@ export interface DocumentHubData {
   storage:         StorageInfo;
   total:           number;
   applicationTabs: ApplicationTab[];
-}
+} 

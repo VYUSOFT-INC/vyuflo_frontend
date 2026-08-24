@@ -33,4 +33,4 @@ export interface Document {
 export interface DocumentListResponse {
   items: Document[];
   total: number;
-}
+} 

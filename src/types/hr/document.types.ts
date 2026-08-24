@@ -9,9 +9,10 @@
 //   POST   /api/v1/hr/cases/:applicationId/documents/upload → upload a doc on behalf of employee
 //   GET    /api/v1/hr/documents/:documentId                 → get single doc
 //   GET    /api/v1/hr/documents/:documentId/view            → stream file for preview
-//   PATCH  /api/v1/hr/documents/:documentId/verify         → verify a doc
-//   PATCH  /api/v1/hr/documents/:documentId/reject         → reject a doc
-//   DELETE /api/v1/hr/documents/:documentId                → delete a doc
+//   PATCH  /api/v1/hr/documents/:documentId/verify          → verify a doc
+//   PATCH  /api/v1/hr/documents/:documentId/reject          → reject a doc
+//   PATCH  /api/v1/hr/documents/:documentId/confirm-current → confirm an existing upload is still current (NEW — verify endpoint name with backend)
+//   DELETE /api/v1/hr/documents/:documentId                 → delete a doc
 //   POST   /api/v1/hr/documents/:documentId/request         → request re-upload from employee
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,6 +50,12 @@ export type HROCRStatus =
   | 'review_needed'
   | 'confirmed';
 
+// NEW — matches Mandatory/Conditional/Optional badges in the Figma doc-management spec.
+export type HRDocumentPriority =
+  | 'mandatory'
+  | 'conditional'
+  | 'optional';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CORE RESPONSE  (matches DocumentResponse pydantic schema 1:1)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -78,6 +85,13 @@ export interface HRDocumentResponse {
   total_pages:      number | null;
   ocr_status:       HROCRStatus;
   version:          number;
+
+  // NEW — backend-provided fields (confirmed present on document_types/documents tables)
+  priority:          HRDocumentPriority;   // drives Mandatory/Conditional/Optional badge
+  needs_review:      boolean;              // true → show "needs verification" banner
+  review_note:       string | null;        // custom message shown in the banner
+  ai_verified:       boolean;              // true → show "AI Verified" tag
+  days_since_upload: number | null;        // used in the default review-note copy
 }
 
 export interface HRDocumentListResponse {
@@ -117,10 +131,10 @@ export interface HRDocumentUIEntry extends HRDocumentResponse {
   // Derived fields used by DocumentCard
   file_size_label:  string;        // "2.3 MB"
   uploaded_ago:     string;        // "3 days ago"
-  is_overdue:       boolean;       // status = missing && required
+  is_overdue:       boolean;       // status = missing && priority = mandatory
   can_verify:       boolean;       // status = pending_review || uploaded
   can_reject:       boolean;       // status = pending_review || uploaded
-  can_delete:       boolean;       // !required
+  can_delete:       boolean;       // priority !== mandatory
   can_request:      boolean;       // status = missing
   preview_url:      string;        // /api/v1/hr/documents/:id/view
 }

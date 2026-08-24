@@ -10,6 +10,7 @@ import type {
   HRDocumentResponse,
   HRDocumentUIEntry,
   HRDocumentStats,
+  HRDocumentStatus,
   HRVerifyDocumentRequest,
   HRRejectDocumentRequest,
   HRRequestDocumentRequest,
@@ -39,24 +40,25 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-const REQUIRED_TYPES = new Set([
-  'passport', 'form_i129', 'lca', 'degree', 'employment_letter',
-  'resume', 'i94', 'pay_stubs', 'i983',
-]);
-
 /**
  * Enrich a raw API response with UI-computed fields.
+ *
+ * FIXED: previously guessed "is this document required" from a hardcoded
+ * list of document_type name slugs (REQUIRED_TYPES). That duplicated —
+ * and diverged from — the backend's own `priority` field, and disagreed
+ * with how HRDocumentManagement.tsx splits Required vs Additional (by
+ * `category`). Now uses `priority` directly, since it's authoritative.
  */
 function toUIEntry(doc: HRDocumentResponse): HRDocumentUIEntry {
-  const isRequired = REQUIRED_TYPES.has(doc.document_type?.toLowerCase().replace(/[\s-]/g, '_') ?? '');
+  const isMandatory = doc.priority === 'mandatory';
   return {
     ...doc,
     file_size_label: formatBytes(doc.file_size_bytes),
     uploaded_ago:    timeAgo(doc.uploaded_at),
-    is_overdue:      doc.status === 'missing' && isRequired,
+    is_overdue:      doc.status === 'missing' && isMandatory,
     can_verify:      doc.status === 'pending_review' || doc.status === 'uploaded',
     can_reject:      doc.status === 'pending_review' || doc.status === 'uploaded',
-    can_delete:      !isRequired,
+    can_delete:      !isMandatory,
     can_request:     doc.status === 'missing',
     preview_url:     hrDocumentApi.getPreviewUrl(doc.id),
   };
@@ -94,6 +96,7 @@ interface UseHRDocumentsReturn {
   upload:         (file: File, meta: HRUploadDocumentRequest) => Promise<void>;
   verify:         (documentId: string, payload?: HRVerifyDocumentRequest) => Promise<void>;
   reject:         (documentId: string, payload: HRRejectDocumentRequest) => Promise<void>;
+  confirmCurrent: (documentId: string) => Promise<void>;
   requestDoc:     (documentId: string, payload?: HRRequestDocumentRequest) => Promise<void>;
   requestMissing: (applicationId: string, message?: string) => Promise<number>;
   deleteDoc:      (documentId: string) => Promise<void>;
@@ -134,7 +137,7 @@ export function useHRDocuments(): UseHRDocumentsReturn {
   // ── Verify (optimistic) ────────────────────────────────────────────────────
 
   const verify = useCallback(async (documentId: string, payload: HRVerifyDocumentRequest = {}) => {
-    // Optimistic update: set status to 'verified' immediately
+    const prevStatus = rawDocs.find(d => d.id === documentId)?.status;
     setRawDocs(prev => prev.map(d =>
       d.id === documentId
         ? { ...d, status: 'verified' as const, verified_at: new Date().toISOString() }
@@ -142,21 +145,21 @@ export function useHRDocuments(): UseHRDocumentsReturn {
     ));
     try {
       const updated = await hrDocumentApi.verify(documentId, payload);
-      // Replace with server truth
       setRawDocs(prev => prev.map(d => d.id === documentId ? updated : d));
     } catch (err: unknown) {
-      // Rollback
+      // Rollback to whatever it actually was before, not a hardcoded guess
+      const fallback: HRDocumentStatus = prevStatus ?? 'pending_review';
       setRawDocs(prev => prev.map(d =>
-        d.id === documentId ? { ...d, status: 'pending_review' as const, verified_at: null } : d
+        d.id === documentId ? { ...d, status: fallback, verified_at: null } : d
       ));
       throw err;
     }
-  }, []);
+  }, [rawDocs]);
 
   // ── Reject (optimistic) ────────────────────────────────────────────────────
 
   const reject = useCallback(async (documentId: string, payload: HRRejectDocumentRequest) => {
-    const prev_status = rawDocs.find(d => d.id === documentId)?.status;
+    const prevStatus = rawDocs.find(d => d.id === documentId)?.status;
     setRawDocs(prev => prev.map(d =>
       d.id === documentId
         ? { ...d, status: 'rejected' as const, rejection_reason: payload.rejection_reason }
@@ -166,13 +169,31 @@ export function useHRDocuments(): UseHRDocumentsReturn {
       const updated = await hrDocumentApi.reject(documentId, payload);
       setRawDocs(prev => prev.map(d => d.id === documentId ? updated : d));
     } catch (err: unknown) {
-      // Rollback
+      // FIXED: typed rollback instead of `as any`
+      const fallback: HRDocumentStatus = prevStatus ?? 'pending_review';
       setRawDocs(prev => prev.map(d =>
-        d.id === documentId ? { ...d, status: (prev_status ?? 'pending_review') as any, rejection_reason: null } : d
+        d.id === documentId ? { ...d, status: fallback, rejection_reason: null } : d
       ));
       throw err;
     }
   }, [rawDocs]);
+
+  // ── Confirm current version (optimistic) — NEW ─────────────────────────────
+
+  const confirmCurrent = useCallback(async (documentId: string) => {
+    setRawDocs(prev => prev.map(d =>
+      d.id === documentId ? { ...d, needs_review: false } : d
+    ));
+    try {
+      const updated = await hrDocumentApi.confirmCurrent(documentId);
+      setRawDocs(prev => prev.map(d => d.id === documentId ? updated : d));
+    } catch (err: unknown) {
+      setRawDocs(prev => prev.map(d =>
+        d.id === documentId ? { ...d, needs_review: true } : d
+      ));
+      throw err;
+    }
+  }, []);
 
   // ── Request document ───────────────────────────────────────────────────────
 
@@ -196,7 +217,6 @@ export function useHRDocuments(): UseHRDocumentsReturn {
     try {
       await hrDocumentApi.delete(documentId);
     } catch (err: unknown) {
-      // Rollback
       if (backup) setRawDocs(prev => [backup, ...prev]);
       throw err;
     }
@@ -211,6 +231,7 @@ export function useHRDocuments(): UseHRDocumentsReturn {
     upload,
     verify,
     reject,
+    confirmCurrent,
     requestDoc,
     requestMissing,
     deleteDoc,
