@@ -359,11 +359,6 @@ import AttorneyDetail        from './pages/employee/AttorneyDetail';
 import BookConsultation      from './pages/employee/BookConsultation';
 import MyBookingsPage        from './pages/employee/MyBookingsPage';
 import EmployeeIntakePage    from './pages/employee/EmployeeIntakePage';
-import MyFormsPage           from './pages/employee/MyFormsPage';
-import I9FormPage            from './pages/employee/I9FormPage';
-import I9SplitEditorPage     from './pages/employee/I9SplitEditorPage';
-import I983FormPage          from './pages/employee/I983FormPage';
-import I983SplitEditorPage   from './pages/employee/I983SplitEditorPage';
 import ConnectEmployer       from './pages/employee/ConnectEmployer';
 
 // ── hr pages ──────────────────────────────────────────────────────────────────
@@ -374,9 +369,6 @@ import HREmployeeDetail      from './pages/hr/HREmployeeDetail';
 import HRCreateCase          from './pages/hr/HRCreateCase';
 import HRCasesList           from './pages/hr/HRCasesList';
 import HRCaseDetail          from './pages/hr/HRCaseDetail';
-import HRVisaFormsPage       from './pages/hr/HRVisaFormsPage';
-import HRI9SplitEditorPage   from './pages/hr/HRI9SplitEditorPage';
-import HRI983SplitEditorPage from './pages/hr/HRI983SplitEditorPage';
 import HRMessages            from './pages/hr/HRMessages';
 import HRDeadlines           from './pages/hr/HRDeadlines';
 import HRApprovalQueue       from './pages/hr/HRApprovalQueue';
@@ -533,11 +525,6 @@ export default function App() {
               <Route path="/consultations/attorney/:attorneyId" element={<AttorneyDetail />} />
               <Route path="/consultations/book/:attorneyId"     element={<BookConsultation />} />
               <Route path="/my-intake/:sessionId"               element={<EmployeeIntakePage />} />
-              <Route path="/my-forms"                           element={<MyFormsPage />} />
-              <Route path="/employee/forms/i9/:applicationId"         element={<I9FormPage />} />
-              <Route path="/employee/forms/i9/:applicationId/pdf"     element={<I9SplitEditorPage />} />
-              <Route path="/employee/forms/i983/:applicationId"       element={<I983FormPage />} />
-              <Route path="/employee/forms/i983/:applicationId/pdf"   element={<I983SplitEditorPage />} />
               <Route path="/profile"                          element={<ProfileSecurity />} />
               <Route path="/profile/authentication"           element={<ProfileSecurity />} />
               <Route path="/profile/mfa"                      element={<ProfileSecurity />} />
@@ -561,9 +548,6 @@ export default function App() {
               <Route path="/employer/cases"                        element={<HRCasesList />} />
               <Route path="/employer/cases/new"                    element={<HRCreateCase />} />
               <Route path="/employer/cases/:applicationId"         element={<HRCaseDetail />} />
-              <Route path="/employer/visa-forms"                   element={<HRVisaFormsPage />} />
-              <Route path="/employer/visa-forms/i9/:applicationId/pdf"   element={<HRI9SplitEditorPage />} />
-              <Route path="/employer/visa-forms/i983/:applicationId/pdf" element={<HRI983SplitEditorPage />} />
               <Route path="/employer/messages"                     element={<HRMessages />} />
               <Route path="/employer/deadlines"                    element={<HRDeadlines />} />
               <Route path="/employer/approvals"                    element={<HRApprovalQueue />} />

@@ -75,14 +75,6 @@ export interface IntakeSession {
   last_saved_at:      string | null;
   is_submitted:       boolean;
   submitted_at:       string | null;
-  // Attorney review — populated after the attorney clicks Accept /
-  // Request Corrections. `is_submitted=true` alone does NOT mean
-  // accepted; the attorney must explicitly accept.
-  review_status?:     'pending_review' | 'changes_requested' | 'accepted' | null;
-  review_note?:       string | null;
-  reviewed_at?:       string | null;
-  revision_count?:    number;
-  intake_accepted_at?: string | null;
   created_at:         string;
   updated_at:         string;
   intake_data:        IntakeData | null;

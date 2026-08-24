@@ -127,17 +127,9 @@ export default function SubscriptionPricing() {
   };
   const submitCoupon = () => {
     const f = couponForm;
-    // Backend expects `discount_value` as an integer:
-    //   percentage  → whole percent (e.g. 20 = 20%)
-    //   fixed_amount → CENTS (e.g. 1000 = $10.00, 1 = $0.01)
-    // See CouponCreate.discount_value in app/schemas/admin/subscription.py.
-    const raw = Number(f.discount_value || 0);
-    const discountInt = f.discount_type === "fixed_amount"
-      ? Math.round(raw * 100)   // dollars → cents
-      : Math.round(raw);        // percentage — must be integer
     couponMut.mutate({
       code: f.code, name: f.name || f.code, description: f.description,
-      discount_type: f.discount_type, discount_value: discountInt,
+      discount_type: f.discount_type, discount_value: Number(f.discount_value || 0),
       valid_from: new Date().toISOString(),
       valid_until: f.valid_until ? new Date(f.valid_until).toISOString() : null,
       max_uses: f.max_uses === "" ? null : Number(f.max_uses),
@@ -307,12 +299,7 @@ export default function SubscriptionPricing() {
             {(coupons?.items ?? []).map((c: any) => {
               const status = c.is_expired ? "expired" : (c.is_active === false ? "inactive" : "active");
               const sBg = status === "active" ? "#dcfce7" : "#fee2e2", sColor = status === "active" ? "#15803d" : "#b91c1c";
-              // Backend stores fixed-amount discounts in CENTS — convert to
-              // dollars for display. Percentage is a whole int already.
-              const isPct = c.discount_type === "percentage" || c.discount_type === "percent";
-              const disc = c.discount_display || (isPct
-                ? `${c.discount_value}%`
-                : `$${(Number(c.discount_value ?? 0) / 100).toFixed(2)}`);
+              const disc = c.discount_display || ((c.discount_type === "percentage" || c.discount_type === "percent") ? `${c.discount_value}%` : `$${c.discount_value}`);
               return (
                 <div key={c.id ?? c.code} style={{ border: "1px solid #f3f4f6", borderRadius: 10, padding: 26 }}>
                   <span style={{ fontSize: 12, fontWeight: 600, background: sBg, color: sColor, padding: "3.5px 13px", borderRadius: 9999, letterSpacing: "0.6px" }}>{status.toUpperCase()}</span>
@@ -417,18 +404,7 @@ export default function SubscriptionPricing() {
           <Field label="Description"><input style={inputStyle} value={couponForm.description} onChange={e => setCouponForm({ ...couponForm, description: e.target.value })} /></Field>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <Field label="Discount Type"><select style={inputStyle} value={couponForm.discount_type} onChange={e => setCouponForm({ ...couponForm, discount_type: e.target.value })}><option value="percentage">Percentage (%)</option><option value="fixed_amount">Fixed Amount ($)</option></select></Field>
-            <Field label={couponForm.discount_type === "fixed_amount" ? "Discount Value ($)" : "Discount Value (%)"}>
-              <input
-                type="number"
-                min={couponForm.discount_type === "fixed_amount" ? "0.01" : "1"}
-                max={couponForm.discount_type === "percentage" ? "100" : undefined}
-                step={couponForm.discount_type === "fixed_amount" ? "0.01" : "1"}
-                placeholder={couponForm.discount_type === "fixed_amount" ? "e.g. 10.00" : "e.g. 20"}
-                style={inputStyle}
-                value={couponForm.discount_value}
-                onChange={e => setCouponForm({ ...couponForm, discount_value: e.target.value })}
-              />
-            </Field>
+            <Field label="Discount Value"><input type="number" min="0" step="0.01" style={inputStyle} value={couponForm.discount_value} onChange={e => setCouponForm({ ...couponForm, discount_value: e.target.value })} /></Field>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <Field label="Max Uses"><input type="number" style={inputStyle} placeholder="∞" value={couponForm.max_uses} onChange={e => setCouponForm({ ...couponForm, max_uses: e.target.value })} /></Field>

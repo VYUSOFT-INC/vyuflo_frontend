@@ -609,16 +609,11 @@ function Step5Review({
   // HR metadata (name/email on the users row) doesn't count.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sess = data.session as any;
-  // Attorney has actually clicked Accept — either backend confirmed
-  // review_status === 'accepted' OR intake_accepted_at is set.
-  const isAccepted =
-    (sess?.review_status === 'accepted') ||
-    Boolean(sess?.intake_accepted_at);
-  // Accept button is available once the employee has SUBMITTED (not
-  // just started) and disclosures + case type are filled — and only
-  // while the intake hasn't already been accepted.
-  const canAccept =
-    disclosuresVerified && caseTypeSet && data.session.is_submitted && !isAccepted;
+  const employeeHasStarted = Boolean(
+    sess?.step_1_completed || sess?.submitted_at || (sess?.revision_count ?? 0) > 0,
+  );
+  const hasEmployeeData = employeeHasStarted;
+  const canAccept = disclosuresVerified && caseTypeSet && hasEmployeeData && !data.session.is_submitted;
 
   /** Treat 404/405/501/network as "endpoint not deployed yet" and mock. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -670,7 +665,7 @@ function Step5Review({
       case_reference: app?.case_reference ?? app?.case_number ?? `#${(data.session.application_id ?? '').slice(0, 8).toUpperCase()}`,
       attorney_name:  'Your attorney',
       note,
-      is_correction:  data.session.is_submitted,
+      is_correction:  hasEmployeeData,
       requested_at:   new Date().toISOString(),
       completed:      false,
     };
@@ -679,11 +674,10 @@ function Step5Review({
       const { appendIntakeRequest } = await import('../../../lib/intakeRequests');
       appendIntakeRequest(seed);
 
-      if (data.session.is_submitted) {
+      if (hasEmployeeData) {
         // ── Submitted intake → send BACK for corrections ─────────
         // Backend: /request-changes inserts a Notification with the
         // correction_note as body + resets step_*_completed flags.
-        // (Backend 409s if is_submitted=false, so gate strictly.)
         await intakeApi.requestIntakeChanges(sessionId, note);
       } else {
         // ── Empty intake → generate/rotate the client token so a
@@ -699,7 +693,7 @@ function Step5Review({
       setShowReq(false);
       setRequestNote('');
       setBanner(
-        data.session.is_submitted
+        hasEmployeeData
           ? '📩 Correction request sent. Employee will see it in Notifications tab + Action Items.'
           : '📩 Intake request queued. Employee\'s dashboard will show it as an Action Item. (⚠ Notification tab entry needs backend hook — see BACKEND doc.)',
       );
@@ -780,16 +774,14 @@ function Step5Review({
       </ReviewSection>
 
       {/* Action area */}
-      {isAccepted ? (
+      {data.session.is_submitted ? (
         <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
           <p className="text-sm font-semibold text-emerald-900">✓ Intake accepted</p>
           <p className="mt-1 text-xs text-emerald-700">
             Accepted on{' '}
-            {(data.session as { intake_accepted_at?: string | null; reviewed_at?: string | null }).intake_accepted_at
-              ? new Date((data.session as { intake_accepted_at: string }).intake_accepted_at).toLocaleString()
-              : (data.session as { reviewed_at?: string | null }).reviewed_at
-                ? new Date((data.session as { reviewed_at: string }).reviewed_at).toLocaleString()
-                : 'recently'}. The case is now active.
+            {data.session.submitted_at
+              ? new Date(data.session.submitted_at).toLocaleString()
+              : 'recently'}. The case is now active.
           </p>
         </div>
       ) : (
@@ -800,24 +792,17 @@ function Step5Review({
             </div>
           )}
 
-          {/* Submitted-but-not-yet-reviewed banner */}
-          {data.session.is_submitted && !isAccepted && (
-            <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-              📨 Employee has submitted their intake. Review the details above, then <b>Accept</b> to activate the case or <b>Request Corrections</b> to send it back.
-            </div>
-          )}
-
           {/* Contextual hint */}
           <div className="space-y-1 text-xs">
-            {!data.session.is_submitted && (
+            {!hasEmployeeData && (
               <p className="text-amber-700">
                 ⚠ Employee hasn't filled the intake yet. Click <b>Request Intake</b> to send them the editable form.
               </p>
             )}
-            {data.session.is_submitted && !disclosuresVerified && (
+            {hasEmployeeData && !disclosuresVerified && (
               <p className="text-amber-700">⚠ Verify disclosures in Step 3 to enable Accept.</p>
             )}
-            {data.session.is_submitted && !caseTypeSet && (
+            {hasEmployeeData && !caseTypeSet && (
               <p className="text-amber-700">⚠ Select a case type in Step 4 to enable Accept.</p>
             )}
           </div>
@@ -829,9 +814,9 @@ function Step5Review({
               disabled={busy !== null}
               className="rounded-lg border border-amber-300 bg-amber-50 px-5 py-2.5 text-sm font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50 cursor-pointer"
             >
-              {data.session.is_submitted ? '📝 Request Corrections' : '📩 Request Intake'}
+              {hasEmployeeData ? '📝 Request Corrections' : '📩 Request Intake'}
             </button>
-            {data.session.is_submitted && (
+            {hasEmployeeData && (
               <button
                 onClick={handleAccept}
                 disabled={!canAccept || busy !== null}
@@ -850,10 +835,10 @@ function Step5Review({
           <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
             <div className="border-b border-gray-100 px-5 py-4">
               <h3 className="text-base font-bold text-gray-900">
-                {data.session.is_submitted ? 'Request corrections' : 'Request intake details'}
+                {hasEmployeeData ? 'Request corrections' : 'Request intake details'}
               </h3>
               <p className="mt-0.5 text-xs text-gray-500">
-                {data.session.is_submitted
+                {hasEmployeeData
                   ? 'Tell the employee what to fix. They\'ll see this note when they reopen the intake form.'
                   : 'The employee will get an email + in-app notification with a link to fill their intake.'}
               </p>
@@ -861,13 +846,13 @@ function Step5Review({
 
             <div className="p-5">
               <label className="block text-xs font-semibold text-gray-700 mb-1">
-                Note for the employee {data.session.is_submitted && <span className="text-red-500">*</span>}
+                Note for the employee {hasEmployeeData && <span className="text-red-500">*</span>}
               </label>
               <textarea
                 value={requestNote}
                 onChange={(e) => setRequestNote(e.target.value)}
                 rows={4}
-                placeholder={data.session.is_submitted
+                placeholder={hasEmployeeData
                   ? 'e.g. Please add your DOB, passport number, and upload the employment letter.'
                   : 'Optional — add any specific instructions for the employee.'}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 resize-none"
@@ -887,7 +872,7 @@ function Step5Review({
               </button>
               <button
                 onClick={handleRequest}
-                disabled={busy === 'request' || (data.session.is_submitted && !requestNote.trim())}
+                disabled={busy === 'request' || (hasEmployeeData && !requestNote.trim())}
                 className="rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2 text-sm font-bold text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
                 {busy === 'request' ? 'Sending…' : '📩 Send request'}

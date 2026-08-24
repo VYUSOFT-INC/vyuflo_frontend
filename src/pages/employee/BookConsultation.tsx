@@ -91,7 +91,6 @@ export default function BookConsultation() {
       appendLocalBooking({
         id:                  res.id,
         confirmation_no:     res.confirmation_no,
-        attorney_user_id:    attorney.user?.id ?? attorney.user_id ?? null,
         attorney_name:       attorneyName,
         attorney_email:      attorney.user?.email ?? null,
         attorney_photo_url:  attorney.profile_photo_url ?? null,

@@ -38,7 +38,7 @@ import AdminBackButton from '../../components/admin/AdminBackButton';
 /* ── Period options ─────────────────────────────────────────────────── */
 
 const PERIODS: { key: AuditPeriod; label: string }[] = [
-  { key: '24hours', label: 'Last 24 Hours' },
+  { key: '24h',     label: 'Last 24 Hours' },
   { key: '7days',   label: 'Last 7 Days'   },
   { key: '30days',  label: 'Last 30 Days'  },
   { key: '90days',  label: 'Last 90 Days'  },
@@ -63,9 +63,6 @@ export default function SystemAuditLogs() {
   const [logsPage, setLogsPage]       = useState(1);
   const [logs, setLogs]               = useState<AuditLogsListSection | null>(null);
   const [logsLoading, setLogsLoading] = useState(true);
-
-  // Advanced Filters modal — currently just period selection
-  const [showFilters, setShowFilters] = useState(false);
 
   const loadDashboard = useCallback(async (p: AuditPeriod) => {
     setLoading(true);
@@ -109,6 +106,8 @@ export default function SystemAuditLogs() {
   useEffect(() => { loadDashboard(period); }, [period, loadDashboard]);
   useEffect(() => { loadLogs(period, logsPage); }, [period, logsPage, loadLogs]);
 
+  const handlePeriodChange = (p: AuditPeriod) => { setLogsPage(1); setPeriod(p); };
+
   const handleExport = async () => {
     setExporting(true);
     try {
@@ -140,16 +139,13 @@ export default function SystemAuditLogs() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <PeriodToggle value={period} onChange={handlePeriodChange} />
             <button
               type="button"
-              onClick={() => setShowFilters(true)}
               className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
             >
               <img src={iconFilter} alt="" className="h-4 w-4" />
               <span className="hidden sm:inline">Advanced</span> Filters
-              <span className="ml-1 rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-semibold text-gray-600">
-                {PERIODS.find(p => p.key === period)?.label ?? ''}
-              </span>
             </button>
             <button
               onClick={handleExport}
@@ -214,78 +210,24 @@ export default function SystemAuditLogs() {
           </p>
         )}
       </main>
-
-      {showFilters && (
-        <AdvancedFiltersModal
-          period={period}
-          onClose={() => setShowFilters(false)}
-          onApply={(p) => {
-            setPeriod(p);
-            setLogsPage(1);
-            setShowFilters(false);
-          }}
-        />
-      )}
     </div>
   );
 }
 
-/* ── Advanced Filters modal ─────────────────────────────────────────── */
-
-function AdvancedFiltersModal({
-  period, onClose, onApply,
-}: {
-  period:   AuditPeriod;
-  onClose:  () => void;
-  onApply:  (p: AuditPeriod) => void;
-}) {
-  const [localPeriod, setLocalPeriod] = useState<AuditPeriod>(period);
-
+function PeriodToggle({ value, onChange }: { value: AuditPeriod; onChange: (v: AuditPeriod) => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
-         onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl bg-white shadow-2xl"
-           onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-          <h3 className="text-base font-bold text-gray-900">Advanced Filters</h3>
-          <button type="button" onClick={onClose}
-            className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
-            ✕
-          </button>
-        </div>
-
-        <div className="px-5 py-5">
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500">
-            Time Period
-          </label>
-          <select
-            value={localPeriod}
-            onChange={(e) => setLocalPeriod(e.target.value as AuditPeriod)}
-            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-          >
-            {PERIODS.map((p) => (
-              <option key={p.key} value={p.key}>{p.label}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex items-center justify-end gap-2 border-t border-gray-100 px-5 py-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => onApply(localPeriod)}
-            className="rounded-lg bg-gradient-to-r from-[#667eea] to-[#764ba2] px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/30 hover:scale-[1.02] transition-transform"
-          >
-            Apply Filters
-          </button>
-        </div>
-      </div>
+    <div className="flex flex-wrap items-center gap-1 rounded-lg border border-gray-200 bg-white p-1 shadow-sm">
+      {PERIODS.map((opt) => (
+        <button
+          key={opt.key}
+          onClick={() => onChange(opt.key)}
+          className={`rounded-md px-2.5 py-1.5 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
+            value === opt.key ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
     </div>
   );
 }

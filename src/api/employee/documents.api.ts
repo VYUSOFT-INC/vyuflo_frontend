@@ -63,8 +63,8 @@ const documentsApi = {
   },
 
   // GET /documents/hub — all of the current user's documents across every
-  // case (scoped server-side to their own user_id), optionally filtered by
-  // a search term. Used by the "From Hub" picker.
+  // case (scoped server-side to their own user_id), optionally filtered by 
+  // a search term. Used by the "From Hub" picker. 
   listHub: async (params?: { search?: string }): Promise<Document[]> => {
     const res = await axios.get("/documents/hub", { params });
     return Array.isArray(res.data) ? res.data : res.data.items ?? [];

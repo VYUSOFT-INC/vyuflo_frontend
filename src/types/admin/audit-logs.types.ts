@@ -4,10 +4,7 @@
 
 /* ───── Shared ──────────────────────────────────────────────────────── */
 
-// Must match backend TimelinePeriod Literal in
-// app/schemas/admin/system_audit.py — "24hours" (not "24h") and "90days"
-// require backend deploy of the same enum. See BACKEND_AUDIT_PERIOD_GAP.md.
-export type AuditPeriod = '24hours' | '7days' | '30days' | '90days';
+export type AuditPeriod = '24h' | '7days' | '30days' | '90days';
 
 /* ───── KPI section ─────────────────────────────────────────────────── */
 
