@@ -120,11 +120,48 @@ export const EMPTY_I9: I9FormData = {
 
 /** Persistence envelope. Backend stores JSON; frontend uses same shape
  *  in localStorage while drafting. */
+/** Backend `status` enum on I-9 form records — one field, six values.
+ *
+ *  | value               | meaning                                                    |
+ *  |---------------------|------------------------------------------------------------|
+ *  | draft               | still being filled                                         |
+ *  | submitted           | employee has submitted Section 1 (HR still to fill)         |
+ *  | hr_approved         | HR submitted Section 2 (attorney to review)                 |
+ *  | needs_corrections   | attorney sent back                                          |
+ *  | approved            | attorney signed off                                         |
+ *  | completed           | case closed post-approval                                   |
+ *
+ *  Per-role labels live in `<FormStatusBadge role="…" />` — same status
+ *  renders as "In Review" for HR but "Waiting on HR" for the attorney. */
+export type FormReviewStatus =
+  | 'draft'
+  | 'submitted'
+  | 'hr_approved'
+  | 'needs_corrections'
+  | 'approved'
+  | 'completed';
+
+/** One open correction request from the attorney, targeted at either party. */
+export interface FormCorrection {
+  id:            string;
+  target:        'employee' | 'hr';
+  fields:        string[];       // e.g. ['last_name', 's2_list_a_title']
+  note:          string;
+  requested_by:  string;         // attorney user id
+  requested_by_name?: string;
+  created_at:    string;
+  resolved_at?:  string | null;
+}
+
 export interface I9FormRecord {
   id:              string;    // server UUID (or "draft-<sessionId>" for local)
   application_id:  string;    // which case this form belongs to
   employee_id:     string;
   status:          'draft' | 'submitted';
+  /** Lawyer decision — independent of the fill status. Defaults to 'draft'. */
+  review_status?:  FormReviewStatus;
+  /** Open (unresolved) correction requests from the attorney. */
+  open_corrections?: FormCorrection[];
   data:            I9FormData;
   created_at:      string;
   updated_at:      string;

@@ -33,8 +33,9 @@ function mapTask(raw: unknown): Task {
   return {
     id:             t.id             as string,
     application_id: t.application_id as string,
-    name:           (t.task_name ?? t.name) as string,   // backend sends task_name
+    task_name:      (t.task_name ?? t.name) as string,   // backend sends task_name
     description:    t.description    as string | undefined,
+    is_required:    (t.is_required   as boolean) ?? true,
     sort_order:     (t.sort_order    as number) ?? 0,
     is_completed:   t.is_completed   as boolean,
     completed_at:   t.completed_at   as string | undefined,

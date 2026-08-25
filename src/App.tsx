@@ -416,6 +416,8 @@ import LawyerSettingsPage         from './pages/lawyer/settings/LawyerSettingsPa
 import CaseListPage               from './pages/lawyer/cases/CaseListPage';
 import CaseDetailPage             from './pages/lawyer/cases/CaseDetailPage';
 import LawyerDashboardPage        from './pages/lawyer/dashboard/LawyerDashboardPage';
+import LawyerVisaFormsPage        from './pages/lawyer/LawyerVisaFormsPage';
+import LawyerFormReviewPage       from './pages/lawyer/LawyerFormReviewPage';
 
 // ── public — personal email verification ──────────────────────────────────────
 import VerifyPersonalEmailPage from './pages/public/VerifyPersonalEmailPage';
@@ -594,6 +596,9 @@ export default function App() {
               <Route path="/lawyer/intake"                        element={<IntakeLanding />} />
               <Route path="/lawyer/cases"                         element={<CaseListPage />} />
               <Route path="/lawyer/cases/:caseId"                 element={<CaseDetailPage />} />
+              <Route path="/lawyer/visa-forms"                                    element={<LawyerVisaFormsPage />} />
+              <Route path="/lawyer/visa-forms/i9/:applicationId"                  element={<LawyerFormReviewPage formType="i9" />} />
+              <Route path="/lawyer/visa-forms/i983/:applicationId"                element={<LawyerFormReviewPage formType="i983" />} />
               <Route path="/lawyer/documents"                     element={<Navigate to="/lawyer/documents/queue" replace />} />
               <Route path="/lawyer/documents/queue"               element={<DocumentQueue />} />
               <Route path="/lawyer/documents/:documentId/review"  element={<DocumentReviewPage />} />

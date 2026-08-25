@@ -25,9 +25,11 @@ import {
   EMPTY_I983, isI983EmployerReadyToSubmit,
 } from '../../types/employee/i983.types';
 import {
-  loadOrCreateI983, saveI983Draft, submitI983,
+  loadOrCreateI983, saveI983Draft, submitI983, saveLocalDraft,
 } from '../../api/employee/i983Form.api';
+import { listFormCorrections } from '../../api/lawyer/forms.api';
 import { buildPdfFieldValues } from '../employee/i983PdfFieldMap';
+import FormStatusBadge from '../../components/forms/FormStatusBadge';
 
 const I983_PDF_PATH = '/i983.pdf';
 
@@ -64,7 +66,8 @@ export default function HRI983SplitEditorPage() {
         const rec = await loadOrCreateI983(applicationId || 'no-app');
         if (cancelled) return;
         const safeData = { ...EMPTY_I983, ...(rec.data ?? {}) };
-        setRecord({ ...rec, data: safeData });
+        const corrections = await listFormCorrections('i983', rec.id).catch(() => []);
+        setRecord({ ...rec, data: safeData, open_corrections: corrections });
         setForm(safeData);
 
         const res = await fetch(I983_PDF_PATH);
@@ -215,7 +218,9 @@ export default function HRI983SplitEditorPage() {
           form.section6_employer_date || new Date().toISOString().slice(0, 10),
       };
       const u = await submitI983(record, finalForm);
-      setRecord(u); setForm(finalForm);
+      const withReview = { ...u, review_status: 'hr_approved' as const };
+      saveLocalDraft(withReview);
+      setRecord(withReview); setForm(finalForm);
       await regenerate(finalForm);
     } catch (e) { setError(e instanceof Error ? e.message : 'Submit failed.'); }
     finally { setSubmitting(false); }
@@ -231,7 +236,14 @@ export default function HRI983SplitEditorPage() {
     a.click();
   };
 
-  const isLocked = record?.status === 'submitted';
+  // HR editor locks Section 3/5/6 once HR submits. Unlocks again if the
+  // lawyer requests corrections targeting HR.
+  const hasHrCorrection = (record?.open_corrections ?? []).some((c) => c.target === 'hr');
+  const isLocked =
+    !hasHrCorrection &&
+    (record?.review_status === 'hr_approved' ||
+     record?.review_status === 'approved' ||
+     record?.review_status === 'completed');
   const previewLoaded = !!pdfUrl;
 
   if (loading) return <div className="p-10 text-center text-sm text-gray-500">Loading Form I-983…</div>;
@@ -252,7 +264,8 @@ export default function HRI983SplitEditorPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <StatusBadge status={record?.status ?? 'draft'} savedAt={savedAt} saving={saving} />
+          <FormStatusBadge role="hr" status={record?.review_status ?? (record?.status === 'submitted' ? 'submitted' : 'draft')} compact />
+          <span className="text-[11px] text-gray-500">{saving ? '💾 Saving…' : savedAt ? `Saved ${savedAt}` : ''}</span>
           <button onClick={handleSync} disabled={syncing}
             title="Update the PDF preview with values from the right pane"
             className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50">
@@ -266,10 +279,17 @@ export default function HRI983SplitEditorPage() {
             className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50">
             {saving ? 'Saving…' : '💾 Save'}
           </button>
-          {!isLocked && (
-            <button onClick={handleSubmit} disabled={submitting || !isI983EmployerReadyToSubmit(form)}
-              className="rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50">
-              {submitting ? 'Submitting…' : '✓ Submit I-983'}
+          {isLocked ? (
+            <span
+              className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-1.5 text-xs font-bold text-emerald-700"
+              title="Employer sections submitted. HR can edit again only if the attorney requests corrections.">
+              ✓ Submitted
+            </span>
+          ) : (
+            <button onClick={handleSubmit} disabled={submitting}
+              title={hasHrCorrection ? 'Re-submit after fixing flagged fields' : (!isI983EmployerReadyToSubmit(form) ? 'Complete every required employer field first' : 'Submit Form I-983')}
+              className="rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+              {submitting ? 'Submitting…' : hasHrCorrection ? '↻ Re-submit I-983' : '✓ Submit I-983'}
             </button>
           )}
         </div>
@@ -318,6 +338,20 @@ export default function HRI983SplitEditorPage() {
           {isLocked && (
             <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
               ✓ Form submitted. Fields are locked. Use Download to save the filled PDF.
+            </div>
+          )}
+
+          {(record?.open_corrections?.length ?? 0) > 0 && (
+            <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+              <p className="font-bold">⚠ Corrections requested by attorney</p>
+              <ul className="mt-1.5 space-y-1.5">
+                {record!.open_corrections!.filter((c) => c.target === 'hr').map((c) => (
+                  <li key={c.id} className="rounded bg-white/60 p-2">
+                    <p>{c.note}</p>
+                    {c.fields.length > 0 && <p className="mt-0.5 text-[10px] text-amber-800">Fields: {c.fields.join(', ')}</p>}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
@@ -543,8 +577,4 @@ function RO({ label, value }: { label: string; value: string }) {
       <dd className="truncate text-[11px] font-medium text-indigo-900">{value || '—'}</dd>
     </>
   );
-}
-function StatusBadge({ status, savedAt, saving }: { status: 'draft' | 'submitted'; savedAt: string | null; saving: boolean }) {
-  if (status === 'submitted') return <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">✓ Submitted</span>;
-  return <span className="text-[11px] text-gray-500">{saving ? '💾 Saving…' : savedAt ? `Saved ${savedAt}` : 'Draft'}</span>;
 }

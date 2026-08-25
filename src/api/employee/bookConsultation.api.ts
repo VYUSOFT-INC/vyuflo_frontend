@@ -110,7 +110,7 @@ export const createConsultationBooking = async (
       id:                   `mock-booking-${Date.now()}`,
       status:               "confirmed",
       confirmation_no:      randomConfirmationNo(),
-      scheduled_start_iso:  body.scheduled_start_iso,
+      scheduled_start_iso:  body.scheduled_start_iso ?? new Date().toISOString(),
       duration_minutes:     type.duration_minutes,
       zoho_meeting_id:      fakeKey,
       zoho_join_url:        `https://meeting.zoho.com/join?key=${fakeKey}`,

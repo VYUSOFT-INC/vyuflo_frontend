@@ -95,6 +95,7 @@ const attorneyNav: NavItem[] = [
   { to: '/lawyer/dashboard',     label: 'Dashboard',      icon: { kind: 'lucide', Icon: LayoutDashboard } },
   { to: '/lawyer/intake',        label: 'Client Intake',  icon: { kind: 'lucide', Icon: ClipboardList  } },
   { to: '/lawyer/cases',         label: 'Cases',          icon: { kind: 'lucide', Icon: Briefcase      } },
+  { to: '/lawyer/visa-forms',    label: 'Visa Forms',     icon: { kind: 'lucide', Icon: FileCheck2     } },
   { to: '/lawyer/documents',     label: 'Documents',      icon: { kind: 'lucide', Icon: FolderKanban   } },
   { to: '/lawyer/templates',     label: 'Templates',      icon: { kind: 'lucide', Icon: BookOpen       } },
   { to: '/lawyer/messages',      label: 'Messages',       icon: { kind: 'lucide', Icon: MessageSquare  } },
