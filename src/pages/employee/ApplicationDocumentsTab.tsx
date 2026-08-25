@@ -152,8 +152,8 @@ function DocCard({ task, onView, onEdit, onUpload, onReuse, onDelete, onReupload
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-[8px]">
               <div className="min-w-0">
-                <h4 className="text-[14px] font-semibold text-[#0f172a] truncate">{task.name}</h4>
-                <span className="text-[10px] text-[#94a3b8] capitalize">{categoryFor(task.name)}</span>
+                <h4 className="text-[14px] font-semibold text-[#0f172a] truncate">{task.task_name}</h4>
+                <span className="text-[10px] text-[#94a3b8] capitalize">{categoryFor(task.task_name)}</span>
               </div>
               <span className="inline-flex items-center gap-[4px] px-[8px] py-[3px] rounded-full text-[11px] font-semibold shrink-0"
                     style={{ backgroundColor: tok.bg, color: tok.text }}>
@@ -264,13 +264,13 @@ export function ApplicationDocumentsTab({
 
   const filtered = tasksArr.filter(t => {
     const q = search.toLowerCase();
-    const matchSearch = !search || t.name.toLowerCase().includes(q) || (t.document_name ?? '').toLowerCase().includes(q);
+    const matchSearch = !search || t.task_name.toLowerCase().includes(q) || (t.document_name ?? '').toLowerCase().includes(q);
     const matchStatus = statusFilter === 'all' || effectiveStatus(t) === statusFilter;
     return matchSearch && matchStatus;
   });
 
-  const requiredDocs   = filtered.filter(t => REQUIRED_CATS.has(categoryFor(t.name)));
-  const additionalDocs = filtered.filter(t => !REQUIRED_CATS.has(categoryFor(t.name)));
+  const requiredDocs   = filtered.filter(t => REQUIRED_CATS.has(categoryFor(t.task_name)));
+  const additionalDocs = filtered.filter(t => !REQUIRED_CATS.has(categoryFor(t.task_name)));
 
   const cardProps = (task: Task) => ({ task, onView, onEdit, onUpload, onReuse, onDelete, onReupload });
 
