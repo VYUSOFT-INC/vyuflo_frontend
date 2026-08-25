@@ -39,10 +39,21 @@ export const I9_PDF_FIELDS = {
   cb_4:                 'CB_4',   // An alien authorized to work
 
   // ── Section 2 — Employer Review and Verification ───────────────────
+  // Field names verified against actual AcroForm widget positions in the
+  // USCIS I-9 PDF (edition 08/01/23). Previous mapping had List A rows
+  // swapped with Supplement B fields (both use the "Document Number N"
+  // family), causing values to appear on the wrong page. Do not "clean up"
+  // the odd names below — the "(if any)" and "1." variants are USCIS's
+  // own naming; they mark the primary List A row 1 slots.
+  // Trailing period is present on the raw widget name but pypdf's
+  // get_fields() drops it — pdf-lib matches the un-suffixed name. Keep
+  // the alias below for defensive double-write in case the PDF template
+  // version differs.
   s2_list_a_title:              'Document Title 1',
+  s2_list_a_title_alt:          'Document Title 1.',
   s2_list_a_issuing_authority:  'Issuing Authority 1',
-  s2_list_a_document_number:    'Document Number 0',
-  s2_list_a_expiration:         'Document Number 0 (if any)',   // exp date is the (if any) sibling in PDF
+  s2_list_a_document_number:    'Document Number 0 (if any)',            // this IS the List A row 1 doc # (misnamed by USCIS)
+  s2_list_a_expiration:         'Expiration Date if any',                // List A row 1 expiration
 
   s2_list_b_title:              'List B Document 1 Title',
   s2_list_b_issuing_authority:  'List B Issuing Authority 1',
@@ -55,9 +66,10 @@ export const I9_PDF_FIELDS = {
   s2_list_c_expiration:         'List C Expiration Date 1',
 
   s2_additional_information:    'Additional Information',
-  s2_first_day_of_employment:   'Document Title 2',                          // TODO — verify real PDF name
+  s2_first_day_of_employment:   'FirstDayEmployed mmddyyyy',              // was wrongly 'Document Title 2' (Supplement B row 3)
   s2_employer_signature:        'Signature of Employer or AR',
   s2_employer_signature_name:   'Last Name First Name and Title of Employer or Authorized Representative',
+  s2_employer_signature_date:   'S2 Todays Date mmddyyyy',
   s2_employer_business_name:    'Employers Business or Org Name',
   s2_employer_business_address: 'Employers Business or Org Address',
 } as const;
@@ -133,6 +145,7 @@ export function buildPdfFieldValues(f: I9FormData): PdfFieldValues {
   // ── Section 2 (employer) — HR-side editor pushes these onto the same PDF
   texts.push(
     { name: F.s2_list_a_title,              value: f.s2_list_a_title },
+    { name: F.s2_list_a_title_alt,          value: f.s2_list_a_title },   // defensive — same value under the "." variant
     { name: F.s2_list_a_issuing_authority,  value: f.s2_list_a_issuing_authority },
     { name: F.s2_list_a_document_number,    value: f.s2_list_a_document_number },
     { name: F.s2_list_a_expiration,         value: toPdfDate(f.s2_list_a_expiration) },
@@ -148,6 +161,7 @@ export function buildPdfFieldValues(f: I9FormData): PdfFieldValues {
     { name: F.s2_first_day_of_employment,   value: toPdfDate(f.s2_first_day_of_employment) },
     { name: F.s2_employer_signature,        value: f.s2_employer_signature_name },
     { name: F.s2_employer_signature_name,   value: f.s2_employer_signature_name },
+    { name: F.s2_employer_signature_date,   value: toPdfDate(f.s2_employer_signature_date) },
     { name: F.s2_employer_business_name,    value: f.s2_employer_business_name },
     { name: F.s2_employer_business_address, value: f.s2_employer_business_address },
   );

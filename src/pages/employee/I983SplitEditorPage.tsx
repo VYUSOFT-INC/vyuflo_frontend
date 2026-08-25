@@ -28,8 +28,10 @@ import type {
 import {
   EMPTY_I983, DEGREE_LEVELS, isI983ReadyToSubmit,
 } from '../../types/employee/i983.types';
-import { loadOrCreateI983, saveI983Draft, submitI983 } from '../../api/employee/i983Form.api';
+import { loadOrCreateI983, saveI983Draft, submitI983, saveLocalDraft } from '../../api/employee/i983Form.api';
+import { listFormCorrections } from '../../api/lawyer/forms.api';
 import { buildPdfFieldValues } from './i983PdfFieldMap';
+import FormStatusBadge from '../../components/forms/FormStatusBadge';
 
 /** Path (public folder) to the master I-983 PDF. */
 const I983_PDF_PATH = '/i983.pdf';
@@ -71,7 +73,8 @@ export default function I983SplitEditorPage() {
         // Merge with EMPTY_I983 so newly-added fields on older drafts
         // never crash the validation helpers.
         const safeData = { ...EMPTY_I983, ...(rec.data ?? {}) };
-        setRecord({ ...rec, data: safeData });
+        const corrections = await listFormCorrections('i983', rec.id).catch(() => []);
+        setRecord({ ...rec, data: safeData, open_corrections: corrections });
         setForm(safeData);
 
         const res = await fetch(I983_PDF_PATH);
@@ -229,7 +232,9 @@ export default function I983SplitEditorPage() {
         student_signature_date: form.student_signature_date || new Date().toISOString().slice(0, 10),
       };
       const u = await submitI983(record, finalForm);
-      setRecord(u); setForm(finalForm);
+      const withReview = { ...u, review_status: 'submitted' as const };
+      saveLocalDraft(withReview);
+      setRecord(withReview); setForm(finalForm);
       await regenerate(finalForm);
     } catch (e) { setError(e instanceof Error ? e.message : 'Submit failed.'); }
     finally { setSubmitting(false); }
@@ -245,7 +250,16 @@ export default function I983SplitEditorPage() {
     a.click();
   };
 
-  const isLocked = record?.status === 'submitted';
+  // Locked once student has submitted Sections 1-2. Unlocks if lawyer
+  // requests corrections targeting the student.
+  const hasEmployeeCorrection = (record?.open_corrections ?? []).some((c) => c.target === 'employee');
+  const isLocked =
+    !hasEmployeeCorrection &&
+    (record?.review_status === 'submitted' ||
+     record?.review_status === 'hr_approved' ||
+     record?.review_status === 'approved' ||
+     record?.review_status === 'completed' ||
+     (record?.status === 'submitted' && !record?.review_status));
   const previewLoaded = !!pdfUrl;
 
   if (loading) return <div className="p-10 text-center text-sm text-gray-500">Loading Form I-983…</div>;
@@ -264,7 +278,8 @@ export default function I983SplitEditorPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <StatusBadge status={record?.status ?? 'draft'} savedAt={savedAt} saving={saving} />
+          <FormStatusBadge role="employee" status={record?.review_status ?? (record?.status === 'submitted' ? 'submitted' : 'draft')} compact />
+          <span className="text-[11px] text-gray-500">{saving ? '💾 Saving…' : savedAt ? `Saved ${savedAt}` : ''}</span>
           <button onClick={handleSync} disabled={syncing}
             title="Update the PDF preview with values from the right pane"
             className="rounded-lg border border-purple-300 bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700 hover:bg-purple-100 disabled:opacity-50">
@@ -278,10 +293,17 @@ export default function I983SplitEditorPage() {
             className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50">
             {saving ? 'Saving…' : '💾 Save'}
           </button>
-          {!isLocked && (
-            <button onClick={handleSubmit} disabled={submitting || !isI983ReadyToSubmit(form)}
-              className="rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50">
-              {submitting ? 'Submitting…' : '✓ Submit I-983'}
+          {isLocked ? (
+            <span
+              className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-1.5 text-xs font-bold text-emerald-700"
+              title="Sections 1-2 submitted. Student can edit again only if the attorney requests corrections.">
+              ✓ Submitted
+            </span>
+          ) : (
+            <button onClick={handleSubmit} disabled={submitting}
+              title={hasEmployeeCorrection ? 'Re-submit after fixing flagged fields' : (!isI983ReadyToSubmit(form) ? 'Complete every required field first' : 'Submit Form I-983')}
+              className="rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+              {submitting ? 'Submitting…' : hasEmployeeCorrection ? '↻ Re-submit I-983' : '✓ Submit I-983'}
             </button>
           )}
         </div>
@@ -330,6 +352,20 @@ export default function I983SplitEditorPage() {
           {isLocked && (
             <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
               ✓ Form submitted. Fields are locked. Use Download to save the filled PDF.
+            </div>
+          )}
+
+          {(record?.open_corrections?.length ?? 0) > 0 && (
+            <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+              <p className="font-bold">⚠ Corrections requested by your attorney</p>
+              <ul className="mt-1.5 space-y-1.5">
+                {record!.open_corrections!.filter((c) => c.target === 'employee').map((c) => (
+                  <li key={c.id} className="rounded bg-white/60 p-2">
+                    <p>{c.note}</p>
+                    {c.fields.length > 0 && <p className="mt-0.5 text-[10px] text-amber-800">Fields: {c.fields.join(', ')}</p>}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
@@ -487,8 +523,4 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
 }
 function Row2({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-2 gap-2">{children}</div>;
-}
-function StatusBadge({ status, savedAt, saving }: { status: 'draft' | 'submitted'; savedAt: string | null; saving: boolean }) {
-  if (status === 'submitted') return <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">✓ Submitted</span>;
-  return <span className="text-[11px] text-gray-500">{saving ? '💾 Saving…' : savedAt ? `Saved ${savedAt}` : 'Draft'}</span>;
 }

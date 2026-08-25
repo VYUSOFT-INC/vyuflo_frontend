@@ -20,8 +20,10 @@ import {
   EMPTY_I9, CITIZENSHIP_LABEL, US_STATES,
   isReadyToSubmit,
 } from '../../types/employee/i9.types';
-import { loadOrCreateI9, saveI9Draft, submitI9 } from '../../api/employee/i9Form.api';
+import { loadOrCreateI9, saveI9Draft, submitI9, saveLocalDraft } from '../../api/employee/i9Form.api';
+import { listFormCorrections } from '../../api/lawyer/forms.api';
 import { buildPdfFieldValues } from './i9PdfFieldMap';
+import FormStatusBadge from '../../components/forms/FormStatusBadge';
 
 /** Path (public folder) to the master I-9 PDF. */
 const I9_PDF_PATH = '/i9.pdf';
@@ -70,7 +72,10 @@ export default function I9SplitEditorPage() {
         const rec = await loadOrCreateI9(applicationId || 'no-app');
         if (cancelled) return;
         const safeData = { ...EMPTY_I9, ...(rec.data ?? {}) };
-        setRecord({ ...rec, data: safeData });
+        // Corrections come from a separate endpoint (not embedded on the
+        // form response). Fire the fetch in parallel; treat 404 as "none".
+        const corrections = await listFormCorrections('i9', rec.id).catch(() => []);
+        setRecord({ ...rec, data: safeData, open_corrections: corrections });
         setForm(safeData);
 
         // 2. Fetch the PDF template ONCE
@@ -231,7 +236,13 @@ export default function I9SplitEditorPage() {
         signature_date: form.signature_date || new Date().toISOString().slice(0, 10),
       };
       const u = await submitI9(record, finalForm);
-      setRecord(u); setForm(finalForm);
+      // Backend flips `status` from 'draft' → 'submitted' on employee
+      // submit. If we're running against no backend, saveI9Draft has
+      // only set `status: 'submitted'` — we mirror that here for the
+      // local review_status so the toolbar flips immediately.
+      const withReview = { ...u, review_status: 'submitted' as const };
+      saveLocalDraft(withReview);
+      setRecord(withReview); setForm(finalForm);
       await regenerate(finalForm);
     } catch (e) { setError(e instanceof Error ? e.message : 'Submit failed.'); }
     finally { setSubmitting(false); }
@@ -247,7 +258,16 @@ export default function I9SplitEditorPage() {
     a.click();
   };
 
-  const isLocked = record?.status === 'submitted';
+  // Employee's Section 1 locks once they've submitted. Unlocks if lawyer
+  // requests corrections targeting the employee.
+  const hasEmployeeCorrection = (record?.open_corrections ?? []).some((c) => c.target === 'employee');
+  const isLocked =
+    !hasEmployeeCorrection &&
+    (record?.review_status === 'submitted' ||
+     record?.review_status === 'hr_approved' ||
+     record?.review_status === 'approved' ||
+     record?.review_status === 'completed' ||
+     (record?.status === 'submitted' && !record?.review_status));
   const previewLoaded = !!pdfUrl;
 
   if (loading) return <div className="p-10 text-center text-sm text-gray-500">Loading Form I-9…</div>;
@@ -266,7 +286,8 @@ export default function I9SplitEditorPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <StatusBadge status={record?.status ?? 'draft'} savedAt={savedAt} saving={saving} />
+          <FormStatusBadge role="employee" status={record?.review_status ?? (record?.status === 'submitted' ? 'submitted' : 'draft')} compact />
+          <span className="text-[11px] text-gray-500">{saving ? '💾 Saving…' : savedAt ? `Saved ${savedAt}` : ''}</span>
           <button onClick={handleSync} disabled={syncing}
             title="Update the PDF preview with values from the right pane"
             className="rounded-lg border border-purple-300 bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700 hover:bg-purple-100 disabled:opacity-50">
@@ -280,10 +301,17 @@ export default function I9SplitEditorPage() {
             className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50">
             {saving ? 'Saving…' : '💾 Save'}
           </button>
-          {!isLocked && (
-            <button onClick={handleSubmit} disabled={submitting || !isReadyToSubmit(form)}
-              className="rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50">
-              {submitting ? 'Submitting…' : '✓ Submit I-9'}
+          {isLocked ? (
+            <span
+              className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-1.5 text-xs font-bold text-emerald-700"
+              title="Section 1 already submitted. Employee can edit again only if the attorney requests corrections.">
+              ✓ Submitted
+            </span>
+          ) : (
+            <button onClick={handleSubmit} disabled={submitting}
+              title={hasEmployeeCorrection ? 'Re-submit after fixing flagged fields' : (!isReadyToSubmit(form) ? 'Complete every required field first' : 'Submit Form I-9')}
+              className="rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+              {submitting ? 'Submitting…' : hasEmployeeCorrection ? '↻ Re-submit I-9' : '✓ Submit I-9'}
             </button>
           )}
         </div>
@@ -333,6 +361,20 @@ export default function I9SplitEditorPage() {
           {isLocked && (
             <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
               ✓ Form submitted. Fields are locked. Use Download to save the filled PDF.
+            </div>
+          )}
+
+          {(record?.open_corrections?.length ?? 0) > 0 && (
+            <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+              <p className="font-bold">⚠ Corrections requested by your attorney</p>
+              <ul className="mt-1.5 space-y-1.5">
+                {record!.open_corrections!.filter((c) => c.target === 'employee').map((c) => (
+                  <li key={c.id} className="rounded bg-white/60 p-2">
+                    <p>{c.note}</p>
+                    {c.fields.length > 0 && <p className="mt-0.5 text-[10px] text-amber-800">Fields: {c.fields.join(', ')}</p>}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
@@ -488,9 +530,5 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
 }
 function Row2({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-2 gap-2">{children}</div>;
-}
-function StatusBadge({ status, savedAt, saving }: { status: 'draft' | 'submitted'; savedAt: string | null; saving: boolean }) {
-  if (status === 'submitted') return <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">✓ Submitted</span>;
-  return <span className="text-[11px] text-gray-500">{saving ? '💾 Saving…' : savedAt ? `Saved ${savedAt}` : 'Draft'}</span>;
 }
 

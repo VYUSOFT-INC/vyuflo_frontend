@@ -61,7 +61,8 @@ export function listLocalDrafts(): I983FormRecord[] {
 // ── helpers ──────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const isMissing = (e: any) => !e?.response || [404, 405, 501].includes(e.response.status);
+const isMissing = (e: any) =>
+  !e?.response || [401, 403, 404, 405, 409, 422, 500, 501, 502, 503, 504].includes(e.response.status);
 
 /** True only if the backend gave us back a real record (has string id). */
 function isValidBackendRecord(x: unknown): x is I983FormRecord {

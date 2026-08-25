@@ -1660,6 +1660,7 @@ import 'react-resizable/css/styles.css';
 import { PageHeader, PageContent } from '../../components/layout/Pageheader';
 import { useHRDashboard } from '../../hooks/hr/useDashboard';
 import { DashboardTour } from '../../components/tour/DashboardTour';
+import HRActionItemsCard from './HRActionItemsCard';
 import type {
   HRDashboardData, ExpiringVisa, ExpiryUrgency, RenewalStatus,
   ActivityItem, ActivityType, VisaDistribution, DepartmentCompliance, DocumentCompletion,
@@ -2241,6 +2242,9 @@ export default function HRDashboard() {
               <QuickAction        icon={<FileDown size={15} />}           label="Export Report"    disabled onClick={() => {}} />
               <QuickAction        icon={<Megaphone size={15} />}          label="Bulk Notify"      disabled onClick={() => {}} />
             </div>
+
+            {/* ═══ ACTION ITEMS (form corrections requested by attorney) ═══ */}
+            <HRActionItemsCard />
 
             {/* ═══ WIDGET GRID ═══ */}
             {data && activeWidgets.length > 0 && (

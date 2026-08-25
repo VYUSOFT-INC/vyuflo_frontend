@@ -18,8 +18,10 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { PDFDocument } from 'pdf-lib';
 import type { I9FormData, I9FormRecord } from '../../types/employee/i9.types';
 import { EMPTY_I9 } from '../../types/employee/i9.types';
-import { loadOrCreateI9, saveI9Draft } from '../../api/employee/i9Form.api';
+import { loadOrCreateI9, saveI9Draft, submitI9, saveLocalDraft } from '../../api/employee/i9Form.api';
+import { listFormCorrections } from '../../api/lawyer/forms.api';
 import { buildPdfFieldValues } from '../employee/i9PdfFieldMap';
+import FormStatusBadge from '../../components/forms/FormStatusBadge';
 
 const I9_PDF_PATH = '/i9.pdf';
 
@@ -59,7 +61,8 @@ export default function HRI9SplitEditorPage() {
         const rec = await loadOrCreateI9(applicationId || 'no-app');
         if (cancelled) return;
         const safeData = { ...EMPTY_I9, ...(rec.data ?? {}) };
-        setRecord({ ...rec, data: safeData });
+        const corrections = await listFormCorrections('i9', rec.id).catch(() => []);
+        setRecord({ ...rec, data: safeData, open_corrections: corrections });
         setForm(safeData);
 
         const res = await fetch(I9_PDF_PATH);
@@ -195,6 +198,37 @@ export default function HRI9SplitEditorPage() {
     catch (e) { setError(e instanceof Error ? e.message : 'Save failed.'); } finally { setSaving(false); }
   };
 
+  // HR submits Section 2 — flips the record status to 'submitted' and
+  // clears the review_status so the attorney sees it in their queue.
+  const [submitting, setSubmitting] = useState(false);
+  const isSection2Ready = () =>
+    Boolean(
+      ((form.s2_list_a_title ?? '') + (form.s2_list_b_title ?? '')).trim() &&
+      (form.s2_first_day_of_employment ?? '').trim() &&
+      (form.s2_employer_signature_name ?? '').trim() &&
+      (form.s2_employer_business_name ?? '').trim(),
+    );
+  const handleSubmit = async () => {
+    if (!record) return;
+    if (!isSection2Ready()) {
+      setError('Fill List A (or B+C) documents, first day of employment, employer signature, and business name before submitting.');
+      return;
+    }
+    setSubmitting(true); setError(null);
+    try {
+      const u = await submitI9(record, form);
+      // HR submit flips backend `status` to 'hr_approved'. Mirror locally
+      // so the toolbar switches "Submit" → "✓ Submitted" and Section 2
+      // fields lock immediately.
+      const withReview = { ...u, review_status: 'hr_approved' as const };
+      saveLocalDraft(withReview);
+      setRecord(withReview);
+      await regenerate(form);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Submit failed.');
+    } finally { setSubmitting(false); }
+  };
+
   const handleDownload = async () => {
     // Ensure the PDF reflects the current form before downloading
     await regenerate(form);
@@ -210,6 +244,14 @@ export default function HRI9SplitEditorPage() {
   if (loading) return <div className="p-10 text-center text-sm text-gray-500">Loading Form I-9…</div>;
 
   const employeeSubmitted = record?.status === 'submitted';
+  // HR side is "locked" once HR has submitted their section, but if
+  // lawyer requests corrections targeting HR, we re-open the fields.
+  const hasHrCorrection = (record?.open_corrections ?? []).some((c) => c.target === 'hr');
+  const hrLocked =
+    !hasHrCorrection &&
+    (record?.review_status === 'hr_approved' ||
+     record?.review_status === 'approved' ||
+     record?.review_status === 'completed');
 
   return (
     <div className="flex h-[calc(100vh-56px)] flex-col bg-slate-100">
@@ -224,6 +266,7 @@ export default function HRI9SplitEditorPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <FormStatusBadge role="hr" status={record?.review_status ?? (record?.status === 'submitted' ? 'submitted' : 'draft')} compact />
           <span className="text-[11px] text-gray-500">{saving ? '💾 Saving…' : savedAt ? `Saved ${savedAt}` : 'Draft'}</span>
           <button onClick={handleSync} disabled={syncing}
             title="Update the PDF preview with the values on the right"
@@ -234,10 +277,23 @@ export default function HRI9SplitEditorPage() {
             className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50">
             📥 Download PDF
           </button>
-          <button onClick={handleSave} disabled={saving}
-            className="rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm disabled:opacity-50">
+          <button onClick={handleSave} disabled={saving || hrLocked}
+            className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50">
             {saving ? 'Saving…' : '💾 Save'}
           </button>
+          {hrLocked ? (
+            <span
+              className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-1.5 text-xs font-bold text-emerald-700"
+              title="Section 2 submitted. HR can edit again only if the attorney requests corrections.">
+              ✓ Submitted
+            </span>
+          ) : (
+            <button onClick={handleSubmit} disabled={submitting}
+              title={hasHrCorrection ? 'Re-submit after fixing flagged fields' : (!isSection2Ready() ? 'Fill List A (or B+C), first day, employer signature, business name' : 'Submit Section 2')}
+              className="rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+              {submitting ? 'Submitting…' : hasHrCorrection ? '↻ Re-submit I-9' : '✓ Submit I-9'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -273,6 +329,19 @@ export default function HRI9SplitEditorPage() {
 
         {/* RIGHT — employer fields */}
         <aside className="w-full flex-none overflow-y-auto bg-white p-4 md:w-[460px] md:p-5 lg:w-[500px]">
+          {(record?.open_corrections?.length ?? 0) > 0 && (
+            <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+              <p className="font-bold">⚠ Corrections requested by attorney</p>
+              <ul className="mt-1.5 space-y-1.5">
+                {record!.open_corrections!.filter((c) => c.target === 'hr').map((c) => (
+                  <li key={c.id} className="rounded bg-white/60 p-2">
+                    <p>{c.note}</p>
+                    {c.fields.length > 0 && <p className="mt-0.5 text-[10px] text-amber-800">Fields: {c.fields.join(', ')}</p>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {/* Employee submission summary (read-only) */}
           <section className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50/40 p-3">
             <div className="flex items-center justify-between">

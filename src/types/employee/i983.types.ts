@@ -109,11 +109,33 @@ export const EMPTY_I983: I983FormData = {
   section6_employer_name_title: '', section6_employer_date: '',
 };
 
+/** Backend `status` enum — same shape as I-9 (see i9.types.ts). */
+export type FormReviewStatus =
+  | 'draft'
+  | 'submitted'
+  | 'hr_approved'
+  | 'needs_corrections'
+  | 'approved'
+  | 'completed';
+
+export interface FormCorrection {
+  id:            string;
+  target:        'employee' | 'hr';
+  fields:        string[];
+  note:          string;
+  requested_by:  string;
+  requested_by_name?: string;
+  created_at:    string;
+  resolved_at?:  string | null;
+}
+
 export interface I983FormRecord {
   id:              string;
   application_id:  string;
   employee_id:     string;
   status:          'draft' | 'submitted';
+  review_status?:  FormReviewStatus;
+  open_corrections?: FormCorrection[];
   data:            I983FormData;
   created_at:      string;
   updated_at:      string;

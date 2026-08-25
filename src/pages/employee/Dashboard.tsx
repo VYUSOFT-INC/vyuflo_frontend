@@ -13,6 +13,10 @@ import { useCurrentUser } from '../../hooks/auth/useAuth';
 import { useDashboard } from '../../hooks/employee/useDashboard';
 import { DashboardTour } from '../../components/tour/DashboardTour';
 import { ComingSoonModal } from '../../components/common/ComingSoonModal';
+import { listLocalDrafts as listLocalI9Drafts }   from '../../api/employee/i9Form.api';
+import { listLocalDrafts as listLocalI983Drafts } from '../../api/employee/i983Form.api';
+import type { I9FormRecord }   from '../../types/employee/i9.types';
+import type { I983FormRecord } from '../../types/employee/i983.types';
 import type {
   CaseStageStatus, ActionItem, ActionPriority, ActionCategory,
   DocumentSummaryItem, DocStatus, Deadline, DeadlineUrgency,
@@ -539,12 +543,58 @@ export default function Dashboard() {
     return items;
   }, [user?.email, data]);
 
+  // Lawyer → employee FORM corrections (I-9 / I-983). Same priority
+  // order as intakeRequestActions: backend action_items wins; local
+  // fallback reads the open_corrections stored on each form draft.
+  const formCorrectionActions = useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    type ActionShape = any;
+    const items: ActionShape[] = [];
+
+    // Backend already surfaced these? Skip locals with the same form id.
+    const backendFormIds = new Set<string>();
+    for (const it of data?.action_items ?? []) {
+      const m = /\/forms\/(?:i9|i983)\/([^/?#]+)/.exec(it.route ?? '');
+      if (m) backendFormIds.add(m[1]);
+    }
+
+    try {
+      const i9   = listLocalI9Drafts();
+      const i983 = listLocalI983Drafts();
+      const push = (
+        formType: 'i9' | 'i983',
+        rec: I9FormRecord | I983FormRecord,
+      ) => {
+        const opens = (rec.open_corrections ?? []).filter(c => c.target === 'employee' && !c.resolved_at);
+        if (opens.length === 0) return;
+        if (backendFormIds.has(rec.id)) return;
+        for (const c of opens) {
+          items.push({
+            id:          `form-corr-${formType}-${c.id}`,
+            title:       `📝 Corrections needed on your Form ${formType === 'i9' ? 'I-9' : 'I-983'}`,
+            description: c.note + (c.fields?.length ? `  ·  Fields: ${c.fields.join(', ')}` : ''),
+            category:    'form',
+            priority:    'urgent',
+            due_date:    c.created_at ?? new Date().toISOString(),
+            route:       `/employee/forms/${formType}/${rec.application_id}/pdf`,
+            completed:   false,
+          });
+        }
+      };
+      i9.forEach((r)   => push('i9', r));
+      i983.forEach((r) => push('i983', r));
+    } catch { /* ignore */ }
+
+    return items;
+  }, [data]);
+
   const pendingActions = useMemo(
     () => [
       ...intakeRequestActions,
+      ...formCorrectionActions,
       ...((data?.action_items ?? []).filter(a => !a.completed)),
     ],
-    [data, intakeRequestActions],
+    [data, intakeRequestActions, formCorrectionActions],
   );
   const completedActions = useMemo(
     () => (data?.action_items ?? []).filter(a => a.completed), [data],
