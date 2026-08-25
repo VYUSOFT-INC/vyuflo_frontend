@@ -53,7 +53,7 @@ import { UserAvatar } from '../../components/ui/UserAvatar';
 const PRIMARY_GRADIENT = 'linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)';
 const PRIMARY = 'var(--theme-primary)';
 
-const DOCUMENT_CATEGORY_MAP: Record<string, string> = {
+export const DOCUMENT_CATEGORY_MAP: Record<string, string> = {
   "Passport Copy": "identity", "Birth Certificate": "identity",
   "Two Passport Photos": "identity", "Copy of Current Visa": "identity",
   "Current Immigration Status Evidence": "identity",
