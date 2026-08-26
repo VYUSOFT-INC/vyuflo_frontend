@@ -360,6 +360,9 @@ import BookConsultation      from './pages/employee/BookConsultation';
 import MyBookingsPage        from './pages/employee/MyBookingsPage';
 import EmployeeIntakePage    from './pages/employee/EmployeeIntakePage';
 import ConnectEmployer       from './pages/employee/ConnectEmployer';
+import MyFormsPage           from './pages/employee/MyFormsPage';
+import I9SplitEditorPage     from './pages/employee/I9SplitEditorPage';
+import I983SplitEditorPage   from './pages/employee/I983SplitEditorPage';
 
 // ── hr pages ──────────────────────────────────────────────────────────────────
 import HRDashboard           from './pages/hr/HRDashboard';
@@ -375,6 +378,9 @@ import HRApprovalQueue       from './pages/hr/HRApprovalQueue';
 import HRDocumentManagement  from './pages/hr/HRDocumentManagement';
 import HRNotificationsCenter from './pages/hr/HRNotificationsCenter';
 import HRDocumentsOverview    from './pages/hr/HRDocumentsOverview';
+import HRVisaFormsPage       from './pages/hr/HRVisaFormsPage';
+import HRI9SplitEditorPage   from './pages/hr/HRI9SplitEditorPage';
+import HRI983SplitEditorPage from './pages/hr/HRI983SplitEditorPage';
 
 // ── admin pages ──────────────────────────────────────────────────────────────
 import AdminDashboard         from './pages/admin/AdminDashboard';
@@ -527,6 +533,9 @@ export default function App() {
               <Route path="/consultations/attorney/:attorneyId" element={<AttorneyDetail />} />
               <Route path="/consultations/book/:attorneyId"     element={<BookConsultation />} />
               <Route path="/my-intake/:sessionId"               element={<EmployeeIntakePage />} />
+              <Route path="/my-forms"                                 element={<MyFormsPage />} />
+              <Route path="/employee/forms/i9/:applicationId/pdf"     element={<I9SplitEditorPage />} />
+              <Route path="/employee/forms/i983/:applicationId/pdf"   element={<I983SplitEditorPage />} />
               <Route path="/profile"                          element={<ProfileSecurity />} />
               <Route path="/profile/authentication"           element={<ProfileSecurity />} />
               <Route path="/profile/mfa"                      element={<ProfileSecurity />} />
@@ -555,6 +564,9 @@ export default function App() {
               <Route path="/employer/approvals"                    element={<HRApprovalQueue />} />
               <Route path="/employer/documents"                    element={<HRDocumentsOverview />} />
               <Route path="/employer/documents/:applicationId"     element={<HRDocumentManagement />} />
+              <Route path="/employer/visa-forms"                                    element={<HRVisaFormsPage />} />
+              <Route path="/employer/visa-forms/i9/:applicationId/pdf"              element={<HRI9SplitEditorPage />} />
+              <Route path="/employer/visa-forms/i983/:applicationId/pdf"            element={<HRI983SplitEditorPage />} />
               <Route path="/employer/notifications"                element={<HRNotificationsCenter />} />
               <Route path="/employer/profile"                      element={<ProfileSecurity />} />
               <Route path="/employer/profile/authentication"       element={<ProfileSecurity />} />
