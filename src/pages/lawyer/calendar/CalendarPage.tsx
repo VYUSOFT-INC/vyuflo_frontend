@@ -39,6 +39,7 @@ import type {
   CreateEventPayload,
 } from '../../../types/lawyer/calendar.types';
 import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
+import WorkingHoursCard from './WorkingHoursCard';
 
 /* ── MOCK FALLBACK DATA (used when backend returns empty) ───────────── */
 const MOCK_AGENDA: AgendaItem[] = [
@@ -235,8 +236,9 @@ export default function CalendarPage() {
             )}
           </section>
 
-          {/* RIGHT sidebar — Agenda + Deadlines */}
+          {/* RIGHT sidebar — Working Hours + Agenda + Deadlines */}
           <aside className="w-full shrink-0 space-y-4 lg:w-[300px]">
+            <WorkingHoursCard />
             <AgendaPanel items={agenda} onSelect={openEvent} loading={loading} />
             <DeadlinesPanel items={deadlines} loading={loading} />
           </aside>
