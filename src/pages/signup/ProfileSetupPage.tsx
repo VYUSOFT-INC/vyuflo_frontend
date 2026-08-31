@@ -652,7 +652,10 @@ import imgPrivacyIcon   from "../../assets/icons/privacy-logo-icon.svg";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const GENDERS   = ["Male", "Female", "Non-binary", "Prefer not to say"];
+// XL sheet row 11: "REMOVE NON-BINARY". Kept the other three options
+// intact ("Male", "Female", "Prefer not to say") so users who don't
+// want to disclose still have an opt-out.
+const GENDERS   = ["Male", "Female", "Prefer not to say"];
 const COUNTRIES = [
   "United States","India","China","Canada","United Kingdom","Germany","France",
   "Australia","Brazil","Mexico","Japan","South Korea","Nigeria","Pakistan","Bangladesh","Philippines",
@@ -792,6 +795,26 @@ function Field({ label, required, error, children }: {
   );
 }
 
+// ── DOB validation helper ────────────────────────────────────────────────────
+// Accepts a "YYYY-MM-DD" string, returns true only if it parses to a real
+// calendar date that is:
+//   • at least Jan 1 of the year 1900 (nothing older is realistic)
+//   • not in the future
+//   • not more than 120 years ago
+// Used by the Personal section to show an inline error under the DOB field.
+function isValidDob(s: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const [y, m, d] = s.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) return false;
+  const now = new Date();
+  if (dt > now) return false;
+  const ageMs = now.getTime() - dt.getTime();
+  const ageYears = ageMs / (365.25 * 24 * 60 * 60 * 1000);
+  if (ageYears > 120) return false;
+  return y >= 1900;
+}
+
 // ── Personal fields ───────────────────────────────────────────────────────────
 
 interface PersonalFields {
@@ -824,8 +847,30 @@ function PersonalSection({ f, setF, nameError, nationalityError }: {
             onChange={e => set("last_name")(e.target.value)} className={inputH} />
         </Field>
         <Field label="Date of Birth">
-          <input type="text" placeholder="YYYY-MM-DD" value={f.date_of_birth}
-            onChange={e => set("date_of_birth")(e.target.value)} className={inputH} />
+          {/* DOB field — XL sheet row 10 (revised: use native calendar).
+              Original bug was that a plain text input accepted letters
+              and unlimited characters. Best UX is the browser's own
+              calendar picker: user clicks the field, gets a real
+              date picker, no typing required (and typing is still
+              restricted to a date-shaped value by the browser).
+                • type="date"      → native calendar dropdown
+                • min = 1900-01-01 → nobody is older than that
+                • max = today      → future dates blocked at pick time
+                • value/onChange   → still ISO YYYY-MM-DD (what the
+                                     backend expects, unchanged).
+              Extra sanity-check via isValidDob() catches any edge
+              case the browser doesn't (e.g. typed 1899-12-31). */}
+          <input
+            type="date"
+            value={f.date_of_birth}
+            min="1900-01-01"
+            max={new Date().toISOString().slice(0, 10)}
+            onChange={e => set("date_of_birth")(e.target.value)}
+            className={inputH}
+          />
+          {f.date_of_birth.length === 10 && !isValidDob(f.date_of_birth) && (
+            <p className="mt-1 text-xs text-red-600">Please enter a valid date of birth.</p>
+          )}
         </Field>
       </div>
       {/* Row 2 — 3 cols on xl */}
