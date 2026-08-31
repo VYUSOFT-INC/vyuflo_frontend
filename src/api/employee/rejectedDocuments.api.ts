@@ -19,14 +19,8 @@ import type {
  * ─────────────────────────────────────────────────────────────────── */
 export async function getMyRejected(): Promise<MyRejectedDocumentsResponse> {
   try {
-    // Backend mounts `document_extra_router` at `/api/v1/attorney`
-    // (main.py:256), so this employee-facing endpoint really lives at
-    // `/attorney/documents/my-rejected`. Calling the bare path resolves
-    // to `/api/v1/documents/my-rejected` which doesn't exist → we were
-    // silently returning [] and the client's Action Items looked empty
-    // even after the attorney rejected a document.
     const res = await axios.get<MyRejectedDocumentsResponse>(
-      '/attorney/documents/my-rejected',
+      '/documents/my-rejected',
       // Don't let axios throw for any status — we handle it ourselves below.
       { validateStatus: () => true },
     );

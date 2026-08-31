@@ -43,11 +43,8 @@ export interface Application {
   action_required_note?: string;
   assigned_attorney_id?: string;
   assigned_hr_id?:       string;
-  // NOTE: backend does NOT currently return these two — the fields exist
-  // only on hydrated FE flows that stitch them in via a second call.
-  // Kept optional so any UI that reads them just gets undefined.
-  attorney_name?:        string;
-  hr_name?:              string;
+  attorney_name?:        string;   // ← ADD — now populated by the backend fix above
+  hr_name?:              string;   // ← ADD
   notes?:               string;
   created_at:           string;
   updated_at:           string;
@@ -120,17 +117,11 @@ export interface StatusHistoryCreate {
 // "expired" — see the document_status_enum migration) and show the Re-upload
 // UI instead of View/Delete. Without this field, TaskRow was reading it via
 // an `as any` cast as a stopgap; that cast can now be removed.
-// NOTE: field names mirror the backend TaskResponse / TaskCreate schemas
-// exactly (schemas/employee/application.py). Backend uses `task_name`,
-// not `name`, and includes `is_required`. `document_status` is NOT
-// returned by TaskResponse — kept optional here for legacy FE reads
-// only (always undefined until backend adds it).
 export interface Task {
   id:                    string;
   application_id:        string;
-  task_name:             string;
+  name:                  string;
   description?:          string;
-  is_required:           boolean;
   sort_order:            number;
   is_completed:          boolean;
   completed_at?:         string;
@@ -140,22 +131,20 @@ export interface Task {
   document_name?:        string;   // "passport_scan_2023.pdf"
   document_size_bytes?:  number;   // raw bytes → formatted to "2.4 MB"
   document_uploaded_at?: string;   // ISO datetime
-  document_status?:      string;   // FE-only legacy field — backend TaskResponse does not include this
+  document_status?:      string;   // mirrors backend Document.status — "uploaded" | "pending_review" | "verified" | "rejected" | "missing" | "pending_hr_release" | "expired"
   created_at:            string;
   updated_at:            string;
 }
 
 export interface TaskCreate {
-  task_name:    string;
+  name:         string;
   description?: string;
-  is_required?: boolean;
   sort_order?:  number;
 }
 
 export interface TaskUpdate {
-  task_name?:   string;
+  name?:        string;
   description?: string;
-  is_required?: boolean;
   sort_order?:  number;
 }
 

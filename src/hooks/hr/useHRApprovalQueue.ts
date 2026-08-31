@@ -50,7 +50,7 @@ interface UseHRApprovalQueueReturn {
   clearFilters:  () => void;
 }
 
-export function useHRApprovalQueue(): UseHRApprovalQueueReturn {
+export function useHRApprovalQueue(applicationId?: string): UseHRApprovalQueueReturn {
   const [rawItems,  setRawItems]  = useState<HRApprovalItem[]>([]);
   const [stats,     setStats]     = useState<HRApprovalStats>({ pending: 0, approved_today: 0, edits_requested: 0, avg_response_hours: 0 });
   const [isLoading, setLoading]   = useState(false);
@@ -97,7 +97,7 @@ export function useHRApprovalQueue(): UseHRApprovalQueueReturn {
     setLoading(true);
     setError(null);
     try {
-      const res = await hrApprovalApi.list();
+      const res = await hrApprovalApi.list(applicationId ? { application_id: applicationId } : undefined);
       setRawItems(res.items);
       setStats(res.stats);
     } catch (err: unknown) {
@@ -105,7 +105,7 @@ export function useHRApprovalQueue(): UseHRApprovalQueueReturn {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applicationId]);
 
   // ── Approve (optimistic) ────────────────────────────────────────────────────
 
