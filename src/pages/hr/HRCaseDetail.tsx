@@ -24,6 +24,8 @@ import {
 import { PageContent } from '../../components/layout/Pageheader';
 import { createCaseApi } from '../../api/hr/createCase.api';
 import HRDocumentManagement from './HRDocumentManagement';
+import MissingChecklistTab  from './case-detail/MissingChecklistTab';
+import GeneratedLettersTab  from './case-detail/GeneratedLettersTab';
 import type {
   HRCaseResponse, HRCaseStatus, HRCaseStage,
   HRCaseHistoryItem, HRApprovalStatus,
@@ -1053,7 +1055,16 @@ export default function HRCaseDetail() {
                   ]}
                 />
               )}
-              {['checklist', 'letters', 'lca', 'deadlines', 'access'].includes(activeTab) && (
+              {activeTab === 'checklist' && (
+                <MissingChecklistTab applicationId={applicationId ?? ''} />
+              )}
+              {activeTab === 'letters' && (
+                <GeneratedLettersTab applicationId={applicationId ?? ''} />
+              )}
+              {activeTab === 'deadlines' && (
+                <DeadlinesTabRedirect />
+              )}
+              {['lca', 'access'].includes(activeTab) && (
                 <div className="bg-white border border-[#f1f5f9] rounded-[14px] p-[40px] text-center shadow-[0px_1px_1px_rgba(0,0,0,0.04)]">
                   <p className="text-[14px] font-semibold text-[#0f172a] mb-[4px]">
                     {TABS.find(t => t.id === activeTab)?.label}
@@ -1075,6 +1086,23 @@ export default function HRCaseDetail() {
 
       <ChangeStatusModal open={showStatusModal} current={c.status} onClose={() => setStatusModal(false)} onSave={handleChangeStatus} />
       <ApprovalModal open={showApprovalModal} current={c.hr_approval_status} onClose={() => setApprovalModal(false)} onSave={handleApproval} />
+    </div>
+  );
+}
+
+// ── Deadlines tab — redirects to the sidebar /employer/deadlines page
+//    scoped to this case. HRDeadlines already handles the ?case= filter,
+//    so we hand off there instead of re-implementing per-case deadlines
+//    inline (avoids two competing sources of truth). ────────────────────
+function DeadlinesTabRedirect() {
+  const navigate = useNavigate();
+  const { applicationId } = useParams<{ applicationId: string }>();
+  useEffect(() => {
+    if (applicationId) navigate(`/employer/deadlines?case=${applicationId}`, { replace: true });
+  }, [applicationId, navigate]);
+  return (
+    <div className="bg-white border border-[#f1f5f9] rounded-[14px] p-[40px] text-center shadow-[0px_1px_1px_rgba(0,0,0,0.04)]">
+      <p className="text-[13px] text-[#64748b]">Opening Deadlines…</p>
     </div>
   );
 }
