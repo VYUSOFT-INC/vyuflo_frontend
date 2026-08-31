@@ -46,12 +46,11 @@ export interface IntakeData {
   has_overstay:         boolean;
   previous_visas:       PreviousVisa[];
 
-  // NOTE — the fields below are NOT currently returned by the backend's
-  // IntakeDataResponse (schemas/attorney/intake.py). Kept optional so
-  // legacy UI reads get `undefined` safely. Backend needs to add them
-  // if we want them populated (see BACKEND_AUDIT_AUG25.md §2).
+  // Step 3 — Overstay details (Phase 2 — backend just added)
   overstay_days?:       number | null;
   overstay_period?:     string | null;
+
+  // Step 3 — Disclosure audit trail (Phase 2 — backend just added)
   disclosures_acknowledged_at?:         string | null;
   disclosures_verified_by_attorney_id?: string | null;
   disclosures_verified_at?:             string | null;
@@ -76,15 +75,6 @@ export interface IntakeSession {
   last_saved_at:      string | null;
   is_submitted:       boolean;
   submitted_at:       string | null;
-  // Attorney review — populated after the attorney clicks Accept /
-  // Request Corrections. `is_submitted=true` alone does NOT mean
-  // accepted; the attorney must explicitly accept. Matches backend
-  // Literal in schemas/attorney/intake.py:126 (includes 'not_submitted').
-  review_status?:     'not_submitted' | 'pending_review' | 'changes_requested' | 'accepted' | null;
-  review_note?:       string | null;
-  reviewed_at?:       string | null;
-  revision_count?:    number;
-  intake_accepted_at?: string | null;
   created_at:         string;
   updated_at:         string;
   intake_data:        IntakeData | null;
@@ -135,9 +125,6 @@ export type IntakeStatus = 'pending_intake' | 'intake_in_progress' | 'intake_com
 
 export interface AssignedApplication {
   application_id:    string;
-  // Backend returns only `user_id`; `client_id` is a legacy alias no
-  // handler populates. Kept optional so callers reading it just get
-  // undefined instead of crashing.
   client_id?:        string;
   user_id?:          string;
   client_name:       string;

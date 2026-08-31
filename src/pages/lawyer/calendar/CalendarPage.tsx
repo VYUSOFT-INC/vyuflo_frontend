@@ -18,7 +18,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { calendarApi } from '../../../api/lawyer/calendar.api';
-import { intakeApi } from '../../../api/lawyer/intake.api';
 import {
   addLocalReminder,
   removeLocalReminder,
@@ -40,7 +39,6 @@ import type {
   CreateEventPayload,
 } from '../../../types/lawyer/calendar.types';
 import LawyerBackButton from '../../../components/lawyer/LawyerBackButton';
-import WorkingHoursCard from './WorkingHoursCard';
 
 /* ── MOCK FALLBACK DATA (used when backend returns empty) ───────────── */
 const MOCK_AGENDA: AgendaItem[] = [
@@ -237,9 +235,8 @@ export default function CalendarPage() {
             )}
           </section>
 
-          {/* RIGHT sidebar — Working Hours + Agenda + Deadlines */}
+          {/* RIGHT sidebar — Agenda + Deadlines */}
           <aside className="w-full shrink-0 space-y-4 lg:w-[300px]">
-            <WorkingHoursCard />
             <AgendaPanel items={agenda} onSelect={openEvent} loading={loading} />
             <DeadlinesPanel items={deadlines} loading={loading} />
           </aside>
@@ -928,98 +925,18 @@ function LinkedCaseSearch({
   const [results, setResults] = useState<LinkedCaseSearchItem[]>([]);
   const [open, setOpen] = useState(false);
   const timerRef = useRef<number | null>(null);
-  /* rootRef declared here (BEFORE any conditional return) so the
-     Rules-of-Hooks call order never changes when `value` flips from
-     null → set. Previously this useRef sat after the `if (value)`
-     early return, which crashed the whole page (white screen) the
-     moment the user picked a case. */
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  /* ── Preload the attorney's assigned applications once so we always
-   *    have something to show even if /calendar/cases/search is empty
-   *    or errors (backend gap). Same pattern used by Messages →
-   *    "New Conversation" for the attorney role.
-   * ────────────────────────────────────────────────────────────────── */
-  const [assignedCases, setAssignedCases] = useState<LinkedCaseSearchItem[]>([]);
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const list = await intakeApi.listAssignedApplications();
-        if (!alive) return;
-        const mapped: LinkedCaseSearchItem[] = (list || []).map((a) => ({
-          application_id:     a.application_id,
-          // Backend often exposes application_number as null on the
-          // /lawyer/applications feed. Fall back to a short-id slug so
-          // the row still renders informatively.
-          application_number: (a as unknown as { application_number?: string })
-                                .application_number
-                              || `VF-${a.application_id.slice(0, 8).toUpperCase()}`,
-          client_name:        a.client_name || a.client_email || 'Unnamed client',
-          visa_type:          a.visa_type_label || a.visa_type || null,
-        }));
-        setAssignedCases(mapped);
-      } catch {
-        /* silent */
-      }
-    })();
-    return () => { alive = false; };
-  }, []);
 
   useEffect(() => {
     if (timerRef.current) window.clearTimeout(timerRef.current);
-    const q = query.trim();
-
-    // Empty query → show all assigned cases (up to 10) so the
-    // dropdown works as a "default cases" picker with no typing.
-    if (q.length < 2) {
-      setResults(assignedCases.slice(0, 10));
-      return;
-    }
-
-    // Local pre-fill from the attorney's cached case list so the
-    // dropdown reacts instantly and never looks empty.
-    const localHits = filterLocalCases(assignedCases, q);
-    if (localHits.length > 0) { setResults(localHits); setOpen(true); }
-
+    if (query.trim().length < 2) { setResults([]); return; }
     timerRef.current = window.setTimeout(async () => {
       try {
-        const res = await calendarApi.searchLinkedCases(q, 10);
-        const remote = res.items ?? [];
-        // Prefer real backend hits; if it's empty, keep the local ones.
-        if (remote.length > 0) {
-          setResults(dedupeCases([...remote, ...localHits]));
-          setOpen(true);
-        } else if (localHits.length === 0) {
-          // No backend and no local match → show *all* assigned cases
-          // (up to 10) so the attorney can pick manually.
-          const fallback = assignedCases.slice(0, 10);
-          setResults(fallback);
-          setOpen(fallback.length > 0);
-        }
-      } catch {
-        // Backend errored — keep whatever local hits we already show.
-        if (localHits.length === 0) {
-          const fallback = assignedCases.slice(0, 10);
-          setResults(fallback);
-          setOpen(fallback.length > 0);
-        }
-      }
+        const res = await calendarApi.searchLinkedCases(query.trim(), 10);
+        setResults(res.items ?? []);
+        setOpen(true);
+      } catch { /* silent */ }
     }, 350);
-  }, [query, assignedCases]);
-
-  /* Close-on-outside-click — kept above the early return so hook
-     order stays stable across the value=null / value=set branches. */
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    window.addEventListener('mousedown', handler);
-    return () => window.removeEventListener('mousedown', handler);
-  }, [open]);
+  }, [query]);
 
   if (value) {
     return (
@@ -1033,66 +950,26 @@ function LinkedCaseSearch({
     );
   }
 
-  const showDefaults = query.trim().length < 2;
-  const emptyReason =
-    assignedCases.length === 0
-      ? 'No cases assigned to you yet.'
-      : showDefaults
-        ? 'Start typing or click a case below.'
-        : 'No cases match your search.';
-
   return (
-    <div className="relative" ref={rootRef}>
-      <div className="relative">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)}
-          placeholder="Search client name or case ID — or click ▾ for all"
-          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 pr-9 text-sm placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-        />
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          aria-label={open ? 'Close case list' : 'Open case list'}
-          className="absolute inset-y-0 right-0 flex w-8 items-center justify-center text-gray-500 hover:text-indigo-600"
-        >
-          <span className={`text-xs transition-transform ${open ? 'rotate-180' : ''}`}>▾</span>
-        </button>
-      </div>
-
-      {open && (
-        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
-          {showDefaults && assignedCases.length > 0 && (
-            <p className="border-b border-gray-100 bg-gray-50 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
-              Your cases
-            </p>
-          )}
-          {results.length === 0 ? (
-            <p className="px-3 py-3 text-xs text-gray-500">{emptyReason}</p>
-          ) : (
-            results.map((r) => (
-              <button
-                key={r.application_id}
-                type="button"
-                /* Use onMouseDown + preventDefault so this fires
-                   BEFORE the input's blur — the earlier onClick
-                   variant was being cancelled by the container closing
-                   on blur before the click could register. */
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  onChange(r);
-                  setQuery('');
-                  setOpen(false);
-                }}
-                className="block w-full border-b border-gray-50 px-3 py-2 text-left text-xs hover:bg-indigo-50/40"
-              >
-                <p className="font-semibold text-gray-900">{r.client_name}</p>
-                <p className="text-gray-500">{r.application_number} · {r.visa_type || '—'}</p>
-              </button>
-            ))
-          )}
+    <div className="relative">
+      <input
+        type="text" value={query} onChange={(e) => setQuery(e.target.value)}
+        onFocus={() => results.length > 0 && setOpen(true)}
+        onBlur={() => window.setTimeout(() => setOpen(false), 150)}
+        placeholder="Search client name or case ID (min 2 chars)"
+        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+      />
+      {open && results.length > 0 && (
+        <div className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+          {results.map((r) => (
+            <button key={r.application_id} type="button"
+              onClick={() => { onChange(r); setQuery(''); setOpen(false); }}
+              className="block w-full border-b border-gray-50 px-3 py-2 text-left text-xs hover:bg-indigo-50/40"
+            >
+              <p className="font-semibold text-gray-900">{r.client_name}</p>
+              <p className="text-gray-500">{r.application_number} · {r.visa_type || '—'}</p>
+            </button>
+          ))}
         </div>
       )}
     </div>
@@ -1185,29 +1062,6 @@ function groupEventsByDate(events: CalendarEvent[]): Record<string, CalendarEven
   }
   return map;
 }
-/* ── Local filter/dedupe for the LinkedCaseSearch fallback ─────────── */
-function filterLocalCases(items: LinkedCaseSearchItem[], q: string): LinkedCaseSearchItem[] {
-  const needle = q.toLowerCase();
-  return items
-    .filter((it) =>
-      (it.client_name || '').toLowerCase().includes(needle) ||
-      (it.application_number || '').toLowerCase().includes(needle) ||
-      (it.visa_type || '').toLowerCase().includes(needle),
-    )
-    .slice(0, 10);
-}
-function dedupeCases(items: LinkedCaseSearchItem[]): LinkedCaseSearchItem[] {
-  const seen = new Set<string>();
-  const out: LinkedCaseSearchItem[] = [];
-  for (const it of items) {
-    if (seen.has(it.application_id)) continue;
-    seen.add(it.application_id);
-    out.push(it);
-    if (out.length >= 10) break;
-  }
-  return out;
-}
-
 function formatHeadline(focus: Date, view: CalendarView): string {
   if (view === 'day') return focus.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   if (view === 'week') {

@@ -17,7 +17,11 @@ export const personalEmailApi = {
     const res = await axios.post(`${BASE}/add-personal-email`, data);
     return res.data;
   },
-
+  // personalEmail.api.ts — add:
+  checkPersonalEmail: async (email: string): Promise<{ available: boolean; reason?: string }> => {
+    const res = await axios.get(`${BASE}/check-personal-email`, { params: { email } });
+    return res.data;
+  },
   verifyPersonalEmail: async (
     data: VerifyPersonalEmailRequest
   ): Promise<MessageResponse> => {
@@ -25,3 +29,4 @@ export const personalEmailApi = {
     return res.data;
   },
 };
+

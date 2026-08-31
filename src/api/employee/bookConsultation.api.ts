@@ -87,33 +87,10 @@ export const getBookConsultationData = async (
   }
 };
 
-/** True when the id looks like a real backend UUID.
- *  Synthesised local ids (e.g. "consultation" or "2026-08-29-3") fail this. */
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const isRealUuid = (v?: string | null): boolean => !!v && UUID_RE.test(v);
-
 /** POST /consultations/bookings — real endpoint; falls back to mock success. */
 export const createConsultationBooking = async (
   body: CreateConsultationBookingRequest,
 ): Promise<CreateConsultationBookingResponse> => {
-  // Short-circuit: if either id is a locally-synthesised string (e.g. the
-  // mocked appointment_type "consultation" or a fake slot id "2026-08-29-3"),
-  // never hit the backend — it would 422. Return a mock booking directly.
-  if (!isRealUuid(body.appointment_type_id) || !isRealUuid(body.slot_id)) {
-    const fakeKey = Math.random().toString(36).replace(/[^a-z0-9]/g, "").slice(0, 12);
-    return {
-      id:                   `mock-booking-${Date.now()}`,
-      status:               "confirmed",
-      confirmation_no:      randomConfirmationNo(),
-      scheduled_start_iso:  body.scheduled_start_iso ?? new Date().toISOString(),
-      duration_minutes:     30,
-      zoho_meeting_id:      fakeKey,
-      zoho_join_url:        `https://meeting.zoho.com/join?key=${fakeKey}`,
-      message:              "Booking confirmed (local demo — attorney has no real availability yet).",
-      is_mock:              true,
-    };
-  }
-
   try {
     const res = await axios.post<CreateConsultationBookingResponse>(
       "/consultations/bookings",
@@ -123,9 +100,7 @@ export const createConsultationBooking = async (
   } catch (e: unknown) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const status = (e as any)?.response?.status;
-    // Fall back to mock on missing/broken backend (404/405/501) and on
-    // validation/server errors (422/500/etc) so the demo keeps working.
-    if (status && ![404, 405, 422, 500, 501, 502, 503, 504].includes(status)) throw e;
+    if (status && status !== 404 && status !== 501) throw e;
 
     // Backend not implemented yet → generate a mock success so the
     // employee flow completes. Backend team replaces this.
@@ -135,7 +110,7 @@ export const createConsultationBooking = async (
       id:                   `mock-booking-${Date.now()}`,
       status:               "confirmed",
       confirmation_no:      randomConfirmationNo(),
-      scheduled_start_iso:  body.scheduled_start_iso ?? new Date().toISOString(),
+      scheduled_start_iso:  body.scheduled_start_iso,
       duration_minutes:     type.duration_minutes,
       zoho_meeting_id:      fakeKey,
       zoho_join_url:        `https://meeting.zoho.com/join?key=${fakeKey}`,

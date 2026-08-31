@@ -2,14 +2,15 @@
 // Route: /employer/approvals   Figma: node 0:5573
 
 import { useEffect, useState, useCallback, type ReactNode, type ChangeEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Filter, Download, CheckSquare, Clock, CheckCircle2,
   FileText, AlertCircle, ArrowRight, X, Info, XCircle,
-  AlertTriangle, ChevronDown, Eye, History, 
+  AlertTriangle, ChevronDown, Eye, History, ChevronLeft as BackIcon,
   Star, Zap, ChevronLeft, ChevronRight, Check,
 } from 'lucide-react';
 import { PageContent } from '../../components/layout/Pageheader';
 import { useHRApprovalQueue } from '../../hooks/hr/useHRApprovalQueue';
+import { createCaseApi } from '../../api/hr/createCase.api';
 import type {
   HRApprovalItem, ApprovalItemPriority, ApprovalItemDocType,
 } from '../../types/hr/approval.types';
@@ -314,8 +315,10 @@ function ApprovalCard({ item, isChecked, onCheck, onApprove, onRequestEdits, onT
 
 export default function HRApprovalQueue() {
   const navigate = useNavigate();
+  const { applicationId } = useParams<{ applicationId: string }>();
   const [toasts,     setToasts]    = useState<Toast[]>([]);
   const [editsModal, setEditsModal] = useState<{ open: boolean; item: HRApprovalItem | null }>({ open: false, item: null });
+  const [caseHeader, setCaseHeader] = useState<{ case_name: string; employee_name: string } | null>(null);
 
   const {
     items, stats, isLoading, error,
@@ -325,9 +328,30 @@ export default function HRApprovalQueue() {
     typeFilter, setTypeFilter, dateFilter, setDateFilter,
     clearFilters,
     //  search, setSearch,
-  } = useHRApprovalQueue();
+  } = useHRApprovalQueue(applicationId);
 
   useEffect(() => { void load(); }, [load]);
+
+  // When scoped to a single case (came from the HRApprovalsOverview case
+  // picker), fetch a bit of case context for the header/back-link.
+  useEffect(() => {
+    if (!applicationId) { setCaseHeader(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const c = await createCaseApi.getCase(applicationId);
+        if (!cancelled) {
+          setCaseHeader({
+            case_name: c.case_name,
+            employee_name: c.employee?.full_name ?? 'Unknown Employee',
+          });
+        }
+      } catch {
+        // Non-fatal — header just falls back to the generic title.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [applicationId]);
 
   const pushToast = useCallback((tone: ToastTone, title: string, message?: string) => {
     const id = `${Date.now()}-${Math.random()}`;
@@ -440,8 +464,20 @@ export default function HRApprovalQueue() {
             {/* Header */}
             <div className="flex items-start justify-between gap-[16px]">
               <div>
-                <h1 className="text-[26px] font-bold text-[#0f172a] tracking-[-0.5px]">Approval Queue</h1>
-                <p className="text-[14px] text-[#64748b] mt-[4px]">Review and approve documents and letters awaiting your action</p>
+                {applicationId && (
+                  <button onClick={() => navigate('/employer/approvals')}
+                    className="flex items-center gap-[4px] text-[13px] font-medium text-indigo-600 hover:underline mb-[8px]">
+                    <BackIcon size={14}/> Back to cases
+                  </button>
+                )}
+                <h1 className="text-[26px] font-bold text-[#0f172a] tracking-[-0.5px]">
+                  {applicationId && caseHeader ? `${caseHeader.case_name} — Approvals` : 'Approval Queue'}
+                </h1>
+                <p className="text-[14px] text-[#64748b] mt-[4px]">
+                  {applicationId && caseHeader
+                    ? `${caseHeader.employee_name} · Review and approve documents and letters awaiting your action`
+                    : 'Review and approve documents and letters awaiting your action'}
+                </p>
               </div>
               <div className="flex items-center gap-[8px] shrink-0">
                 <button onClick={() => pushToast('info', 'Filter options')}

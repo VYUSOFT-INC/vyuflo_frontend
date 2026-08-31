@@ -11,6 +11,8 @@ import {
   Bell,
   Flag,
   Wrench,
+  Mail,
+  FileText,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { ProfileAvatar } from '../ui/ProfileAvatar';
@@ -59,6 +61,8 @@ const settingsNavItems = [
   { hash: '#integrations',  Icon: Plug,     label: 'Integrations'      },
   { hash: '#notifications', Icon: Bell,     label: 'Notifications'     },
   { hash: '#feature-flags', Icon: Flag,     label: 'Feature Flags'     },
+  { hash: '#invitations',   Icon: Mail,     label: 'Invitations'       },
+  { hash: '#documents',     Icon: FileText,  label: 'Documents'         },
   { hash: '#maintenance',   Icon: Wrench,   label: 'Maintenance'       },
 ];
 
