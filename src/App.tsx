@@ -333,6 +333,8 @@ import { DashboardLayout } from './components/layout/DashboardLayout';
 import Login            from './pages/public/Login';
 import ForgotPassword   from './pages/public/ForgotPassword';
 import Signup           from './pages/public/Signup';
+import TermsOfService   from './pages/public/TermsOfService';
+import PrivacyPolicy    from './pages/public/PrivacyPolicy';
 import ResetPasswordOTP from './pages/public/Resetpasswordotp';
 import ResetPasswordNew from './pages/public/ResetPasswordNew';
 import LinkedInCallback from './pages/public/LinkedInCallback';
@@ -489,6 +491,12 @@ export default function App() {
 
           {/* ── Signup (no auth required) ───────────────────────────────────── */}
           <Route path="/signup" element={<Signup />} />
+
+          {/* ── Public legal pages — must be reachable BEFORE any auth
+                guard so the signup consent links don't fall back to
+                Home (XL sheet row 5 bug). ─────────────────────────── */}
+          <Route path="/terms"   element={<TermsOfService />} />
+          <Route path="/privacy" element={<PrivacyPolicy  />} />
 
           {/* ── Onboarding (guard disabled for testing — re-enable before deploy) ── */}
           <Route path="/signup/verify-email"  element={<VerifyEmailPage />} />

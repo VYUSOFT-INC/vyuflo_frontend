@@ -5,7 +5,12 @@ import { useGoogleLogin } from "@react-oauth/google";
 import { useMsal } from "@azure/msal-react";
 import { authApi } from "../../api/auth/auth.api";
 import { callSSOEndpoint } from "../../lib/sso";
-import imgLogo         from "../../assets/icons/logo-icon.svg";
+// Row 7 in the XL sheet: "Logo not yet replaced in the signup page."
+// Switched from the placeholder logo-icon.svg to the real Vyuflo brand
+// assets (same ones the sidebar uses post-login) so pre-login and
+// post-login the user sees consistent branding.
+import imgVyufloIcon   from "../../assets/vyuflo_icon.svg";
+import imgVyufloName   from "../../assets/vyuflo_logotype.svg";
 import imgSecurityIcon from "../../assets/icons/signup-security.svg";
 import imgTimeIcon     from "../../assets/icons/signup-time.svg";
 import imgSupportIcon  from "../../assets/icons/signup-support.svg";
@@ -157,10 +162,36 @@ export default function Signup() {
   const [searchParams] = useSearchParams();
   const { instance: msalInstance } = useMsal();
 
-  const [form, setForm] = useState<FormData>({
-    role: "employee", first_name: "", last_name: "", email: "", phone: "",
-    password: "", confirmPassword: "", referral_source: "", dialCode: "+1",
-    terms_accepted: false, marketing_opt_in: false, newsletter_opt_in: false,
+  /* ── Persist form fields across in-app navigation ───────────────
+     When the user clicks the Terms/Privacy link mid-signup, the
+     Signup component unmounts (SPA route change). Without help,
+     React state is thrown away and the user comes back to a blank
+     form — every field they filled is gone.
+     Fix: hydrate initial state from sessionStorage (survives route
+     changes, wiped on tab close), and mirror every keystroke back
+     to storage. Password fields are excluded so we never persist
+     secrets across navigations. */
+  const FORM_STORAGE_KEY = 'vyuflo.signupDraft.v1';
+  const [form, setForm] = useState<FormData>(() => {
+    const defaults: FormData = {
+      role: "employee", first_name: "", last_name: "", email: "", phone: "",
+      password: "", confirmPassword: "", referral_source: "", dialCode: "+1",
+      terms_accepted: false, marketing_opt_in: false, newsletter_opt_in: false,
+    };
+    try {
+      const raw = window.sessionStorage.getItem(FORM_STORAGE_KEY);
+      if (!raw) return defaults;
+      const saved = JSON.parse(raw) as Partial<FormData>;
+      // Never restore the two password fields from storage.
+      return {
+        ...defaults,
+        ...saved,
+        password: "",
+        confirmPassword: "",
+      };
+    } catch {
+      return defaults;
+    }
   });
   const [showPw,     setShowPw]     = useState(false);
   const [showCpw,    setShowCpw]    = useState(false);
@@ -169,6 +200,31 @@ export default function Signup() {
   const [errors,     setErrors]     = useState<FieldErrors>({});
   const [ssoLoading, setSsoLoading] = useState<string | null>(null);
   const [ssoError,   setSsoError]   = useState<string | null>(null);
+
+  /* Mirror every field change back to sessionStorage (minus passwords)
+     so navigating away and coming back preserves the draft. Also
+     remember the scroll position for the same reason. */
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password, confirmPassword, ...safe } = form;
+      window.sessionStorage.setItem(FORM_STORAGE_KEY, JSON.stringify(safe));
+    } catch { /* quota / disabled */ }
+  }, [form]);
+
+  /* Save scroll on unmount, restore on mount so returning from the
+     Terms/Privacy page lands the user exactly where they left off. */
+  const SCROLL_KEY = 'vyuflo.signupDraft.scroll.v1';
+  useEffect(() => {
+    const saved = window.sessionStorage.getItem(SCROLL_KEY);
+    if (saved) {
+      const y = parseInt(saved, 10);
+      if (!isNaN(y)) window.scrollTo(0, y);
+    }
+    return () => {
+      try { window.sessionStorage.setItem(SCROLL_KEY, String(window.scrollY)); } catch { /* noop */ }
+    };
+  }, []);
 
   const pw = form.password;
   const strength = {
@@ -182,6 +238,20 @@ export default function Signup() {
     setErrors(p => ({ ...p, [k]: undefined }));
     setApiError(null);
   }
+
+  /* Live-computed "form is complete" flag — mirrors the checks in
+     validate() but doesn't set errors. Used to disable the Continue
+     button until every required field is satisfied (XL sheet row 6). */
+  const isFormComplete =
+    !!form.role &&
+    !!form.first_name.trim() &&
+    !!form.last_name.trim() &&
+    /\S+@\S+\.\S+/.test(form.email) &&
+    /^\d{10}$/.test(form.phone) &&
+    !!pw &&
+    strength.len && strength.upper && strength.special &&
+    form.confirmPassword === pw &&
+    form.terms_accepted;
 
   function validate(): boolean {
     const e: FieldErrors = {};
@@ -231,6 +301,12 @@ export default function Signup() {
       if (redirectParam && redirectParam.startsWith('/') && !redirectParam.startsWith('//')) {
         sessionStorage.setItem('post_onboarding_redirect', redirectParam);
       }
+      // Signup succeeded — flush the draft so a future visit to /signup
+      // (e.g. logged out then hits the page again) starts on a blank form.
+      try {
+        sessionStorage.removeItem(FORM_STORAGE_KEY);
+        sessionStorage.removeItem(SCROLL_KEY);
+      } catch { /* noop */ }
       navigate('/signup/verify-email');
     } catch (e: unknown) {
       setApiError(e instanceof Error ? e.message : 'Something went wrong.');
@@ -313,10 +389,8 @@ export default function Signup() {
       <header className="bg-white border-b border-[#e5e7eb] h-[60px] sm:h-[72px] flex items-center sticky top-0 z-20">
         <div className="w-full px-6 sm:px-10 lg:px-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2 sm:gap-3">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white rounded-xl flex items-center justify-center border border-[#e5e7eb]">
-              <img src={imgLogo} alt="" className="w-4 h-5 sm:w-[18px] sm:h-7 object-contain" />
-            </div>
-            <span className="text-lg sm:text-2xl font-bold text-[#111827] tracking-[-0.5px]">Vyuflo</span>
+            <img src={imgVyufloIcon} alt="Vyuflo" className="w-8 h-8 sm:w-10 sm:h-10 object-contain" />
+            <img src={imgVyufloName} alt="Vyuflo" className="h-5 sm:h-6 w-auto object-contain" />
           </Link>
           <div className="flex items-center gap-1.5 text-xs sm:text-sm tracking-[-0.5px]">
             <span className="text-[#6b7280]">Already have an account?</span>
@@ -621,6 +695,12 @@ export default function Signup() {
                             className="mt-0.5 w-4 h-4 border border-black rounded-sm shrink-0" />
                           <span className="text-xs sm:text-sm text-[#374151] tracking-[-0.5px] leading-5">
                             <span className="text-[#ef4444]">*</span> I agree to the{" "}
+                            {/* Same-tab navigation. The ToS/Privacy pages
+                                each render a "← Back to signup" link in
+                                their header, so the user can return
+                                without using the browser back button.
+                                (Earlier fix opened these in a new tab —
+                                changed back per user request.) */}
                             <Link to="/terms" className="text-[#2563eb] font-semibold hover:underline">Terms of Service</Link>
                             {" "}and{" "}
                             <Link to="/privacy" className="text-[#2563eb] font-semibold hover:underline">Privacy Policy</Link>
@@ -653,8 +733,13 @@ export default function Signup() {
                           className="border border-[#d1d5db] rounded-lg h-[44px] sm:h-[50px] px-4 sm:px-6 flex items-center justify-center text-[#374151] text-sm sm:text-base font-semibold tracking-[-0.5px] hover:bg-[#f9fafb] transition">
                           Cancel
                         </Link>
-                        <button type="button" onClick={handleSubmit} disabled={loading}
-                          className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-lg h-[44px] sm:h-[50px] px-6 sm:px-8 flex items-center justify-center gap-1.5 text-sm sm:text-base font-semibold tracking-[-0.5px] shadow-[0px_4px_3px_rgba(0,0,0,0.1)] transition disabled:opacity-60">
+                        {/* Continue stays disabled until every required
+                            field is valid — role, name, email, 10-digit
+                            phone, strong password, matching confirm, and
+                            the Terms checkbox. Prevents Vyuflo API calls
+                            firing on half-filled forms (XL row 6). */}
+                        <button type="button" onClick={handleSubmit} disabled={loading || !isFormComplete}
+                          className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white rounded-lg h-[44px] sm:h-[50px] px-6 sm:px-8 flex items-center justify-center gap-1.5 text-sm sm:text-base font-semibold tracking-[-0.5px] shadow-[0px_4px_3px_rgba(0,0,0,0.1)] transition disabled:opacity-60 disabled:cursor-not-allowed">
                           {loading
                             ? <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
