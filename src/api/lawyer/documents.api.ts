@@ -51,7 +51,10 @@ export async function filterDocuments(
   if (filters.document_type) params.document_type = filters.document_type;
   if (filters.category)      params.category      = filters.category;
   if (filters.search)        params.search        = filters.search;
-  const res = await axios.get<DocumentListResponse>('/documents/filter', { params });
+  // Backend mounts the attorney document router at prefix "/api/v1/attorney"
+  // (main.py line 256). Calling bare "/documents/filter" collides with the
+  // employee "/documents/{document_id}" route → 422 "filter is not a UUID".
+  const res = await axios.get<DocumentListResponse>('/attorney/documents/filter', { params });
   return res.data;
 }
 

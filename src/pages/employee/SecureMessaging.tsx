@@ -313,8 +313,8 @@ function EmojiPicker({ onPick, onClose }: { onPick: (e: string) => void; onClose
 // the avatar. Added userId to the shape and pass it straight to <Avatar>.
 type StaffUser = { id: string; name: string; role?: string; avatar_url?: string };
 
-function NewConvModal({ onClose, onCreate, isHR }: {
-  onClose: () => void; onCreate: (userId: string) => void; isHR: boolean;
+function NewConvModal({ onClose, onCreate, isHR, isAttorney }: {
+  onClose: () => void; onCreate: (userId: string) => void; isHR: boolean; isAttorney: boolean;
 }) {
   const [users,    setUsers]    = useState<StaffUser[]>([]);
   const [loading,  setLoading]  = useState(true);
@@ -333,6 +333,27 @@ function NewConvModal({ onClose, onCreate, isHR }: {
         }))))
         .catch(() => setUsers([]))
         .finally(() => setLoading(false));
+    } else if (isAttorney) {
+      // Attorney → list every client with a case assigned to me. Sourced from
+      // the same worklist the Client Intake page renders. Dedup by user_id
+      // in case the same client has multiple applications.
+      import("../../api/lawyer/intake.api")
+        .then(({ listAssignedApplications }) => listAssignedApplications())
+        .then(list => {
+          const byUser = new Map<string, StaffUser>();
+          for (const a of list ?? []) {
+            const uid = a.user_id || a.client_id;
+            if (!uid || byUser.has(uid)) continue;
+            byUser.set(uid, {
+              id:   uid,
+              name: a.client_name || a.client_email || 'Client',
+              role: a.visa_type_label || a.visa_type || 'Client',
+            });
+          }
+          setUsers(Array.from(byUser.values()));
+        })
+        .catch(() => setUsers([]))
+        .finally(() => setLoading(false));
     } else {
       messageApi.listStaff()
         .then(items => setUsers(items.map(s => ({
@@ -346,7 +367,7 @@ function NewConvModal({ onClose, onCreate, isHR }: {
         .catch(() => setUsers([]))
         .finally(() => setLoading(false));
     }
-  }, [isHR]);
+  }, [isHR, isAttorney]);
 
   const filtered = users.filter(u =>
     u.name.toLowerCase().includes(search.toLowerCase())
@@ -365,7 +386,7 @@ function NewConvModal({ onClose, onCreate, isHR }: {
           <div className="relative">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input autoFocus type="text"
-              placeholder={isHR ? "Search employees…" : "Search staff…"}
+              placeholder={isHR ? "Search employees…" : isAttorney ? "Search clients…" : "Search staff…"}
               value={search} onChange={e => setSearch(e.target.value)}
               className="w-full h-9 bg-slate-50 border border-slate-100 rounded-xl pl-8 pr-3 text-[13px] outline-none focus:ring-2 focus:ring-[var(--theme-light)] focus:border-[var(--theme-primary)] transition" />
           </div>
@@ -416,7 +437,8 @@ function NewConvModal({ onClose, onCreate, isHR }: {
 // =============================================================================
 const SecureMessaging: React.FC = () => {
   const session = getUiSession();
-  const isHR    = session?.roles?.includes("hr") ?? false;
+  const isHR       = session?.roles?.includes("hr") ?? false;
+  const isAttorney = session?.roles?.includes("attorney") ?? false;
   const { data: profile } = useMyProfile(); // ← ADDED: resolves current user's avatar live (not stored in ui_session)
 
   const currentUserId = useMemo((): string => {
@@ -999,7 +1021,7 @@ const SecureMessaging: React.FC = () => {
 
       {/* New conversation modal */}
       {showNewConv && (
-        <NewConvModal isHR={isHR} onClose={() => setShowNewConv(false)} onCreate={handleCreateConv} />
+        <NewConvModal isHR={isHR} isAttorney={isAttorney} onClose={() => setShowNewConv(false)} onCreate={handleCreateConv} />
       )}
     </div>
   );

@@ -19,8 +19,12 @@ import type {
  * ─────────────────────────────────────────────────────────────────── */
 export async function getMyRequested(): Promise<MyRequestedDocumentsResponse> {
   try {
+    // Backend mounts `document_extra_router` at `/api/v1/attorney`
+    // (main.py:256), so this employee-facing endpoint really lives at
+    // `/attorney/documents/requests/my-pending`. Same URL-prefix
+    // collision as `/documents/my-rejected`.
     const res = await axios.get<MyRequestedDocumentsResponse>(
-      '/documents/requests/my-pending',
+      '/attorney/documents/requests/my-pending',
       { validateStatus: () => true },
     );
     if (
