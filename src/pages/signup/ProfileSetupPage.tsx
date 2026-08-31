@@ -639,7 +639,13 @@ import { useAuthStore } from "../../store/authStore";
 import { onboardingApi } from "../../api/onboarding.api";
 import { StepBar } from "../public/Signup";
 
-import imgLogoIcon      from "../../assets/icons/logo-icon.svg";
+// XL sheet row 7 follow-up: profile-setup page was still showing the
+// old gradient-square placeholder + text logo. Swap to the real Vyuflo
+// brand assets so signup / profile-setup / dashboard all match.
+import imgVyufloIcon    from "../../assets/vyuflo_icon.svg";
+import imgVyufloName    from "../../assets/vyuflo_logotype.svg";
+// (old placeholder logo import removed — now unused after the header
+// swap to the real Vyuflo brand lockup above.)
 import imgChevronSvg    from "../../assets/icons/chevron.svg";
 import imgArrowRight    from "../../assets/icons/arrow-right.svg";
 import imgDashIcon      from "../../assets/icons/dash-icon.svg";
@@ -1270,11 +1276,12 @@ export default function ProfileSetupPage() {
       {/* ── Sticky top ── */}
       <div className="sticky top-0 z-20 bg-white shadow-sm">
         <header className="border-b border-[#e5e7eb] h-[56px] flex items-center px-5 sm:px-8">
+          {/* Real Vyuflo lockup (icon + wordmark) — matches signup and
+              the post-login sidebar. Old gradient-square + "Vyuflo"
+              text was the placeholder flagged in the XL sheet. */}
           <div className="flex gap-2 items-center">
-            <div className="bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] flex items-center justify-center rounded-[8px] w-7 h-7">
-              <img alt="logo" src={imgLogoIcon} style={{ width: 15, height: 11 }} />
-            </div>
-            <span className="font-bold text-[#111827] text-[18px] tracking-[-0.5px]">Vyuflo</span>
+            <img src={imgVyufloIcon} alt="Vyuflo" className="w-8 h-8 object-contain" />
+            <img src={imgVyufloName} alt="Vyuflo" className="h-5 w-auto object-contain" />
           </div>
         </header>
         <StepBar current={3} />
