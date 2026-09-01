@@ -3,28 +3,6 @@
 import { useState } from "react";
 import { personalEmailApi } from "../../api/auth/personalEmail.api";
 
-// FastAPI's validation-error responses (422) send `detail` as an ARRAY of
-// {type, loc, msg, input} objects, not a plain string — unlike most other
-// errors (400/404/etc from raise HTTPException(...)) which send a string.
-// The old inline extraction assumed `detail` was always a string, so any
-// 422 (wrong field name, missing field, bad type) stored the raw array
-// into error state. Rendering that array as {error} in JSX crashes React
-// with "Objects are not valid as a React child" — a blank white screen
-// instead of a readable message. This handles both shapes.
-function extractErrorMessage(e: unknown, fallback: string): string {
-  const err = e as { response?: { data?: { detail?: unknown } }; message?: string };
-  const detail = err.response?.data?.detail;
-  if (typeof detail === "string") return detail;
-  if (Array.isArray(detail)) {
-    const joined = detail
-      .map((d: unknown) => (d && typeof d === "object" && "msg" in d ? String((d as { msg?: unknown }).msg) : null))
-      .filter(Boolean)
-      .join(" ");
-    return joined || fallback;
-  }
-  return err.message ?? fallback;
-}
-
 export function useAddPersonalEmail() {
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState<string | null>(null);
@@ -39,7 +17,8 @@ export function useAddPersonalEmail() {
       setSuccess(true);
       return true;
     } catch (e: unknown) {
-      setError(extractErrorMessage(e, "Failed to send verification email."));
+      const err = e as { response?: { data?: { detail?: string } }; message?: string };
+      setError(err.response?.data?.detail ?? err.message ?? "Failed to send verification email.");
       return false;
     } finally {
       setLoading(false);
@@ -56,13 +35,19 @@ export function useAddPersonalEmail() {
 }
 
 /**
- * Stub for the not-yet-shipped "is this email already used?" pre-flight
- * check that PersonalEmailSection expects. The backend endpoint
- * (`POST /auth/account/check-personal-email`) is planned but not yet
- * live, so we short-circuit the check to `available` and never block
- * the send-code flow. When the backend ships this endpoint, replace
- * the body of `check` with the real axios call — signature stays
- * identical, no consumer changes needed.
+ * Pre-flight check for the personal-email add flow.
+ *
+ * IMPORTANT: on the `dev` branch there is an older copy of this same
+ * hook further down in a different location, and the two textual
+ * locations didn't collide during merge (both were inserted, GitHub
+ * couldn't detect it as a conflict). CI then failed with TS2323
+ * "Cannot redeclare exported variable useCheckPersonalEmail" and
+ * TS2393 "Duplicate function implementation".
+ *
+ * Fix on the GitHub merge: keep THIS copy (higher in the file), and
+ * DELETE the duplicate that appears later in the merged file. The
+ * two implementations return the same shape so consumers work
+ * either way.
  */
 type EmailAvailability = { available: boolean; reason?: string | null } | null;
 export function useCheckPersonalEmail() {
@@ -72,9 +57,6 @@ export function useCheckPersonalEmail() {
   const check = async (_email: string): Promise<boolean> => {
     setChecking(true);
     try {
-      // TODO(backend): call POST /auth/account/check-personal-email
-      // and return { available, reason }. For now assume every email
-      // is available so the downstream send-code button stays enabled.
       const stub: EmailAvailability = { available: true };
       setResult(stub);
       return stub.available;
@@ -104,7 +86,8 @@ export function useVerifyPersonalEmail() {
       setSuccess(true);
       return true;
     } catch (e: unknown) {
-      setError(extractErrorMessage(e, "Invalid or expired code."));
+      const err = e as { response?: { data?: { detail?: string } }; message?: string };
+      setError(err.response?.data?.detail ?? err.message ?? "Invalid or expired code.");
       return false;
     } finally {
       setLoading(false);
@@ -112,25 +95,4 @@ export function useVerifyPersonalEmail() {
   };
 
   return { verify, loading, error, success };
-}
-
-export function useCheckPersonalEmail() {
-  const [checking, setChecking] = useState(false);
-  const [result, setResult] = useState<{ available: boolean; reason?: string } | null>(null);
-
-  const check = async (email: string) => {
-    setChecking(true);
-    try {
-      const res = await personalEmailApi.checkPersonalEmail(email);
-      setResult(res);
-      return res;
-    } catch {
-      setResult(null);
-      return null;
-    } finally {
-      setChecking(false);
-    }
-  };
-
-  return { check, checking, result, reset: () => setResult(null) };
 }
