@@ -40,6 +40,8 @@ export interface HRApprovalExtractedField {
 
 export interface HRApprovalItem {
   id:            string;           // document UUID
+  application_id: string;          // case this document belongs to — used for
+                                    // "back to case" navigation and scoping
   title:         string;           // document name
   priority:      ApprovalItemPriority;
   doc_type:      ApprovalItemDocType;

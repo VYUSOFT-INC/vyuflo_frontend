@@ -16,7 +16,7 @@ import AdminBackButton from '../../components/admin/AdminBackButton';
 // ── Section meta: maps URL hash → setting_group + page title ───────
 type NavKey =
   | "general" | "security" | "integrations"
-  | "notifications" | "features" | "maintenance";
+  | "notifications" | "features" | "maintenance" |"invitations" | "documents";
 
 const HASH_TO_KEY: Record<string, NavKey> = {
   "#general":       "general",
@@ -25,6 +25,8 @@ const HASH_TO_KEY: Record<string, NavKey> = {
   "#notifications": "notifications",
   "#feature-flags": "features",
   "#maintenance":   "maintenance",
+  "#invitations":   "invitations",
+  "#documents":     "documents",
 };
 
 const KEY_TO_GROUPS: Record<NavKey, string[]> = {
@@ -34,6 +36,8 @@ const KEY_TO_GROUPS: Record<NavKey, string[]> = {
   notifications: ["notifications"],
   features:      ["features"],
   maintenance:   ["maintenance"],
+  invitations:   ["invitations"],
+  documents:     ["documents"],
 };
 
 const SECTION_META: Record<NavKey, { title: string; subtitle: string }> = {
@@ -43,6 +47,8 @@ const SECTION_META: Record<NavKey, { title: string; subtitle: string }> = {
   notifications: { title: "Notifications",     subtitle: "Manage how and when notifications are sent to users." },
   features:      { title: "Feature Flags",     subtitle: "Enable or disable platform features. Changes are immediate." },
   maintenance:   { title: "Maintenance",       subtitle: "Toggle maintenance mode and the banner message shown to users." },
+  invitations:   { title: "Invitations",       subtitle: "Control how employee invitation links behave." },
+  documents:  { title: "Documents", subtitle: "Control expiry reminders and document-related alerts." },
 };
 
 // ── Field components ──────────────────────────────────────────────

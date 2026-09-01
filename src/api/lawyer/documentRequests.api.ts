@@ -71,7 +71,7 @@ export async function cancelDocumentRequest(
 ): Promise<CreateDocumentRequestResponse | null> {
   try {
     const res = await axios.patch<CreateDocumentRequestResponse>(
-      `${BASE}/documents/requests/${requestId}/cancel`,
+      `/documents/requests/${requestId}/cancel`,
     );
     return res.data;
   } catch {

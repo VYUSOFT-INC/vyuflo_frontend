@@ -29,22 +29,13 @@ export interface BookConsultationData {
 }
 
 /* ── Booking ─────────────────────────────────────────────────────── */
-// Field names mirror backend CreateConsultationBookingRequest
-// (schemas/employee/consultation_schemas.py:157). Backend has
-// `extra="ignore"`, so any FE-only extras (like the ISO we compute for
-// local display) are silently dropped on the wire.
 export interface CreateConsultationBookingRequest {
   attorney_id:          string;
   appointment_type_id:  string;
   consultation_format:  ConsultationFormat;
   slot_id:              string;
-  application_id?:      string;   // backend-supported: link to an existing case
-  employee_notes?:      string;   // backend-supported: free-text note to the attorney
-
-  // FE-only helpers (dropped by backend, used locally for the mock
-  // response + optimistic "My Bookings" cache):
-  scheduled_start_iso?: string;
-  client_timezone?:     string;
+  scheduled_start_iso:  string;                        // ISO datetime UTC
+  client_timezone:      string;                        // IANA
 }
 
 export interface CreateConsultationBookingResponse {
