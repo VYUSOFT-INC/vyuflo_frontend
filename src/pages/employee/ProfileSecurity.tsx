@@ -1,4 +1,5 @@
 
+
 // // src/pages/employee/ProfileSecurity.tsx
 // // Shared for both employee + HR roles.
 // // Role is detected from ui_session cookie — Privacy section adapts accordingly.
@@ -17,6 +18,14 @@
 // import { useMyProfile, useLoginHistory,notifyProfileUpdated } from "../../hooks/employee/useProfile";
 // import { updateMyProfile, signOutAllDevices, uploadProfilePicture, removeProfilePicture } from "../../api/employee/profile.api";
 // import { useAuthStore } from "../../store/authStore";
+// import { useCompanyProfile } from "../../hooks/hr/useCompanyProfile";
+// import {
+//   updateCompanyProfile, uploadCompanyLogo, removeCompanyLogo,
+// } from "../../api/hr/companyProfile.api";
+// import { useAttorneyProfile } from "../../hooks/lawyer/useAttorneyProfile";
+// import {
+//   updateAttorneyProfile, uploadAttorneyPhoto, removeAttorneyPhoto,
+// } from "../../api/lawyer/attorneyProfile.api";
 // import imgUserAvatar from "../../assets/icons/user-avatar.jpg";
 // import { getFileUrl } from "../../utils/fileUrl";
 // import {  getUiSession } from "../../utils/uiSession";
@@ -262,6 +271,565 @@
 //                 <span className="text-[13px] sm:text-[14px] text-[#111827]">{value}</span>
 //               </div>
 //             ))}
+//           </div>
+//         )}
+//       </div>
+
+//       {editing && (
+//         <div className={`${cardPadX} pb-[20px] sm:pb-[28px] pt-[16px] border-t border-[#f3f4f6] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-[12px]`}>
+//           <button onClick={() => { setEditing(false); setError(null); }}
+//             className="flex items-center justify-center sm:justify-start gap-[6px] text-[#6b7280] text-[13px] hover:text-[#374151] transition">
+//             <RotateCcw size={13} /> Undo Changes
+//           </button>
+//           <div className="flex gap-[8px]">
+//             <button onClick={() => { setEditing(false); setError(null); }}
+//               className="flex-1 sm:flex-none h-[40px] px-[16px] border border-[#e5e7eb] text-[#374151] text-[13px] font-medium rounded-[10px] hover:bg-[#f9fafb] transition">
+//               Cancel
+//             </button>
+//             <button onClick={handleSave} disabled={saving}
+//               className="flex-1 sm:flex-none h-[40px] px-[16px] text-white text-[13px] font-medium rounded-[10px] hover:opacity-90 transition flex items-center justify-center gap-[6px] disabled:opacity-60"
+//               style={{ background: "linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)" }}>
+//               {saving ? <><Spinner size={14} /> Saving…</> : <><Save size={14} /> Save Changes</>}
+//             </button>
+//           </div>
+//         </div>
+//       )}
+//     </SectionCard>
+//   );
+// };
+
+// // =============================================================================
+// // SECTION: Company Information — HR only (backed by EmployerProfile)
+// // =============================================================================
+
+// const COMPANY_SIZES = [
+//   { value: "1_10",      label: "1–10 employees"    },
+//   { value: "11_50",     label: "11–50 employees"   },
+//   { value: "51_200",    label: "51–200 employees"  },
+//   { value: "201_500",   label: "201–500 employees" },
+//   { value: "501_1000",  label: "501–1,000 employees" },
+//   { value: "1000_plus", label: "1,000+ employees"  },
+// ];
+
+// const CompanyInfoSection = () => {
+//   const { data: company, isLoading, refetch } = useCompanyProfile();
+//   const fileInputRef = useRef<HTMLInputElement>(null);
+
+//   const [editing, setEditing] = useState(false);
+//   const [saving,  setSaving]  = useState(false);
+//   const [error,   setError]   = useState<string | null>(null);
+//   const [logoUploading, setLogoUploading] = useState(false);
+//   const [removingLogo,  setRemovingLogo]  = useState(false);
+//   const [logoError,     setLogoError]     = useState<string | null>(null);
+
+//   const [form, setForm] = useState({
+//     company_name: "", company_size: "", industry: "", website: "", domain: "",
+//     ein: "", address_line1: "", address_line2: "", city: "", state: "",
+//     zip_code: "", country: "US", contact_name: "", contact_email: "", contact_phone: "",
+//   });
+
+//   const seedForm = () => {
+//     if (!company) return;
+//     setForm({
+//       company_name:  company.company_name  ?? "",
+//       company_size:  company.company_size  ?? "",
+//       industry:      company.industry      ?? "",
+//       website:       company.website       ?? "",
+//       domain:        company.domain        ?? "",
+//       ein:           company.ein           ?? "",
+//       address_line1: company.address_line1 ?? "",
+//       address_line2: company.address_line2 ?? "",
+//       city:          company.city          ?? "",
+//       state:         company.state         ?? "",
+//       zip_code:      company.zip_code      ?? "",
+//       country:       company.country       ?? "US",
+//       contact_name:  company.contact_name  ?? "",
+//       contact_email: company.contact_email ?? "",
+//       contact_phone: company.contact_phone ?? "",
+//     });
+//   };
+
+//   const setField = (key: keyof typeof form) => (
+//     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+//   ) => setForm(f => ({ ...f, [key]: e.target.value }));
+
+//   const handleSave = async () => {
+//     setSaving(true); setError(null);
+//     try {
+//       await updateCompanyProfile(form);
+//       await refetch();
+//       setEditing(false);
+//     } catch { setError("Failed to save company details. Please try again."); }
+//     finally { setSaving(false); }
+//   };
+
+//   const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+//     const file = e.target.files?.[0];
+//     if (!file) return;
+//     if (file.size > 5 * 1024 * 1024) { setLogoError("File must be under 5 MB."); return; }
+//     setLogoUploading(true); setLogoError(null);
+//     try {
+//       await uploadCompanyLogo(file);
+//       await refetch();
+//     } catch { setLogoError("Failed to upload logo."); }
+//     finally { setLogoUploading(false); e.target.value = ""; }
+//   };
+
+//   const handleRemoveLogo = async () => {
+//     if (!company?.logo_url) return;
+//     setRemovingLogo(true); setLogoError(null);
+//     try {
+//       await removeCompanyLogo();
+//       await refetch();
+//     } catch { setLogoError("Failed to remove logo."); }
+//     finally { setRemovingLogo(false); }
+//   };
+
+//   if (isLoading) return <SectionCard><div className="flex items-center justify-center py-[64px]"><Spinner size={28} className="text-indigo-600" /></div></SectionCard>;
+
+//   return (
+//     <SectionCard>
+//       <div className={`${cardPad} border-b border-[#f3f4f6] flex items-center justify-between gap-[12px]`}>
+//         <div>
+//           <h2 className="text-[17px] sm:text-[20px] font-semibold text-[#111827] flex items-center gap-[8px]">
+//             Company Information
+//             {company?.is_verified ? (
+//               <span className="flex items-center gap-[4px] text-[11px] font-medium text-[#10b981] bg-[#d1fae5] px-[8px] py-[2px] rounded-full">
+//                 <CheckCircle size={10} /> Verified
+//               </span>
+//             ) : (
+//               <span className="flex items-center gap-[4px] text-[11px] font-medium text-[#c2410c] bg-[#fff7ed] px-[8px] py-[2px] rounded-full">
+//                 <AlertTriangle size={10} /> Not Verified
+//               </span>
+//             )}
+//           </h2>
+//           <p className="text-[13px] sm:text-[14px] text-[#6b7280] mt-[4px]">
+//             Your company details — used for domain verification and employee invites.
+//           </p>
+//         </div>
+//         {!editing && (
+//           <button onClick={() => { seedForm(); setEditing(true); setError(null); }}
+//             className="flex items-center gap-[6px] text-[13px] sm:text-[14px] font-medium transition flex-shrink-0"
+//             style={{ color: "var(--theme-primary)" }}>
+//             <Edit2 size={14} /> Edit
+//           </button>
+//         )}
+//       </div>
+
+//       {error && <div className={`${cardPadX} mt-[16px] bg-[#fef2f2] border border-[#fca5a5] text-[#dc2626] rounded-[10px] px-[16px] py-[12px] text-[13px]`}>{error}</div>}
+
+//       {/* Logo */}
+//       <div className={`${cardPadX} py-[20px] sm:py-[24px] border-b border-[#f3f4f6]`}>
+//         <p className="text-[13px] font-medium text-[#374151] mb-[12px]">Company Logo</p>
+//         <div className="flex flex-wrap items-center gap-[16px]">
+//           <div className="w-[64px] h-[64px] sm:w-[80px] sm:h-[80px] rounded-[12px] bg-[#f3f4f6] border-4 border-[#f3f4f6] flex items-center justify-center overflow-hidden flex-shrink-0">
+//             {company?.logo_url
+//               ? <img src={company.logo_url} alt="Company logo" className="w-full h-full object-cover" />
+//               : <Building size={28} className="text-[#9ca3af]" />}
+//           </div>
+//           <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml" className="hidden" onChange={handleLogoChange} />
+//           <div className="flex flex-col gap-[8px]">
+//             <div className="flex flex-wrap gap-[8px]">
+//               <button onClick={() => fileInputRef.current?.click()} disabled={logoUploading}
+//                 className="flex items-center gap-[6px] px-[12px] sm:px-[14px] h-[34px] sm:h-[36px] text-white text-[12px] sm:text-[13px] font-medium rounded-[8px] hover:opacity-90 transition disabled:opacity-60"
+//                 style={{ background: "linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)" }}>
+//                 {logoUploading ? <><Spinner size={13} /> Uploading…</> : <><Upload size={13} /> Upload New</>}
+//               </button>
+//               <button onClick={handleRemoveLogo} disabled={removingLogo || !company?.logo_url}
+//                 className="flex items-center gap-[6px] px-[12px] sm:px-[14px] h-[34px] sm:h-[36px] border border-[#e5e7eb] text-[#6b7280] text-[12px] sm:text-[13px] font-medium rounded-[8px] hover:bg-[#f9fafb] transition disabled:opacity-60">
+//                 {removingLogo ? <><Spinner size={13} className="text-[#6b7280]" /> Removing…</> : <><Trash2 size={13} /> Remove</>}
+//               </button>
+//             </div>
+//             {logoError ? <p className="text-[12px] text-[#ef4444]">{logoError}</p>
+//               : <p className="text-[12px] text-[#9ca3af]">JPG, PNG, GIF, WebP or SVG. Max 5 MB.</p>}
+//           </div>
+//         </div>
+//       </div>
+
+//       {/* Fields */}
+//       <div className={`${cardPad} flex flex-col gap-[16px] sm:gap-[20px]`}>
+//         {editing ? (
+//           <>
+//             <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
+//               <div className="flex flex-col gap-[6px]">
+//                 <label className="text-[13px] font-medium text-[#374151]">Company Name</label>
+//                 <input value={form.company_name} onChange={setField("company_name")}
+//                   className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+//                   style={{ outlineColor: "var(--theme-primary)" }} />
+//               </div>
+//               <div className="flex flex-col gap-[6px]">
+//                 <label className="text-[13px] font-medium text-[#374151]">Company Size</label>
+//                 <select value={form.company_size} onChange={setField("company_size")}
+//                   className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 cursor-pointer"
+//                   style={{ outlineColor: "var(--theme-primary)" }}>
+//                   <option value="">Select…</option>
+//                   {COMPANY_SIZES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+//                 </select>
+//               </div>
+//             </div>
+//             <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
+//               <div className="flex flex-col gap-[6px]">
+//                 <label className="text-[13px] font-medium text-[#374151]">Industry</label>
+//                 <input value={form.industry} onChange={setField("industry")}
+//                   className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+//                   style={{ outlineColor: "var(--theme-primary)" }} />
+//               </div>
+//               <div className="flex flex-col gap-[6px]">
+//                 <label className="text-[13px] font-medium text-[#374151]">Website</label>
+//                 <input value={form.website} onChange={setField("website")} placeholder="https://"
+//                   className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+//                   style={{ outlineColor: "var(--theme-primary)" }} />
+//               </div>
+//             </div>
+//             <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
+//               <div className="flex flex-col gap-[6px]">
+//                 <label className="text-[13px] font-medium text-[#374151]">Domain</label>
+//                 <input value={form.domain} onChange={setField("domain")} placeholder="company.com"
+//                   className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+//                   style={{ outlineColor: "var(--theme-primary)" }} />
+//                 <p className="text-[11px] text-[#9ca3af]">Used to verify employee invite emails.</p>
+//               </div>
+//               <div className="flex flex-col gap-[6px]">
+//                 <label className="text-[13px] font-medium text-[#374151]">EIN</label>
+//                 <input value={form.ein} onChange={setField("ein")}
+//                   className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+//                   style={{ outlineColor: "var(--theme-primary)" }} />
+//               </div>
+//             </div>
+//             <div className="flex flex-col gap-[6px]">
+//               <label className="text-[13px] font-medium text-[#374151]">Address Line 1</label>
+//               <input value={form.address_line1} onChange={setField("address_line1")}
+//                 className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+//                 style={{ outlineColor: "var(--theme-primary)" }} />
+//             </div>
+//             <div className="flex flex-col gap-[6px]">
+//               <label className="text-[13px] font-medium text-[#374151]">Address Line 2</label>
+//               <input value={form.address_line2} onChange={setField("address_line2")}
+//                 className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+//                 style={{ outlineColor: "var(--theme-primary)" }} />
+//             </div>
+//             <div className="grid grid-cols-1 sm:grid-cols-3 gap-[16px]">
+//               <div className="flex flex-col gap-[6px]">
+//                 <label className="text-[13px] font-medium text-[#374151]">City</label>
+//                 <input value={form.city} onChange={setField("city")}
+//                   className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+//                   style={{ outlineColor: "var(--theme-primary)" }} />
+//               </div>
+//               <div className="flex flex-col gap-[6px]">
+//                 <label className="text-[13px] font-medium text-[#374151]">State</label>
+//                 <input value={form.state} onChange={setField("state")}
+//                   className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+//                   style={{ outlineColor: "var(--theme-primary)" }} />
+//               </div>
+//               <div className="flex flex-col gap-[6px]">
+//                 <label className="text-[13px] font-medium text-[#374151]">ZIP Code</label>
+//                 <input value={form.zip_code} onChange={setField("zip_code")}
+//                   className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+//                   style={{ outlineColor: "var(--theme-primary)" }} />
+//               </div>
+//             </div>
+//             <div className="grid grid-cols-1 sm:grid-cols-3 gap-[16px]">
+//               <div className="flex flex-col gap-[6px]">
+//                 <label className="text-[13px] font-medium text-[#374151]">Contact Name</label>
+//                 <input value={form.contact_name} onChange={setField("contact_name")}
+//                   className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+//                   style={{ outlineColor: "var(--theme-primary)" }} />
+//               </div>
+//               <div className="flex flex-col gap-[6px]">
+//                 <label className="text-[13px] font-medium text-[#374151]">Contact Email</label>
+//                 <input value={form.contact_email} onChange={setField("contact_email")}
+//                   className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+//                   style={{ outlineColor: "var(--theme-primary)" }} />
+//               </div>
+//               <div className="flex flex-col gap-[6px]">
+//                 <label className="text-[13px] font-medium text-[#374151]">Contact Phone</label>
+//                 <input value={form.contact_phone} onChange={setField("contact_phone")}
+//                   className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+//                   style={{ outlineColor: "var(--theme-primary)" }} />
+//               </div>
+//             </div>
+//           </>
+//         ) : (
+//           <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
+//             {[
+//               { label: "Company Name",  value: company?.company_name || "—" },
+//               { label: "Company Size",  value: COMPANY_SIZES.find(s => s.value === company?.company_size)?.label ?? "—" },
+//               { label: "Industry",      value: company?.industry || "—" },
+//               { label: "Website",       value: company?.website || "—" },
+//               { label: "Domain",        value: company?.domain || "—" },
+//               { label: "EIN",           value: company?.ein || "—" },
+//               { label: "Address",       value: [company?.address_line1, company?.address_line2, company?.city, company?.state, company?.zip_code].filter(Boolean).join(", ") || "—" },
+//               { label: "Contact",       value: company?.contact_name || "—" },
+//               { label: "Contact Email", value: company?.contact_email || "—" },
+//               { label: "Contact Phone", value: company?.contact_phone || "—" },
+//             ].map(({ label, value }) => (
+//               <div key={label} className="flex flex-col gap-[4px]">
+//                 <span className="text-[12px] text-[#6b7280] font-medium">{label}</span>
+//                 <span className="text-[13px] sm:text-[14px] text-[#111827]">{value}</span>
+//               </div>
+//             ))}
+//           </div>
+//         )}
+//       </div>
+
+//       {editing && (
+//         <div className={`${cardPadX} pb-[20px] sm:pb-[28px] pt-[16px] border-t border-[#f3f4f6] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-[12px]`}>
+//           <button onClick={() => { setEditing(false); setError(null); }}
+//             className="flex items-center justify-center sm:justify-start gap-[6px] text-[#6b7280] text-[13px] hover:text-[#374151] transition">
+//             <RotateCcw size={13} /> Undo Changes
+//           </button>
+//           <div className="flex gap-[8px]">
+//             <button onClick={() => { setEditing(false); setError(null); }}
+//               className="flex-1 sm:flex-none h-[40px] px-[16px] border border-[#e5e7eb] text-[#374151] text-[13px] font-medium rounded-[10px] hover:bg-[#f9fafb] transition">
+//               Cancel
+//             </button>
+//             <button onClick={handleSave} disabled={saving}
+//               className="flex-1 sm:flex-none h-[40px] px-[16px] text-white text-[13px] font-medium rounded-[10px] hover:opacity-90 transition flex items-center justify-center gap-[6px] disabled:opacity-60"
+//               style={{ background: "linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)" }}>
+//               {saving ? <><Spinner size={14} /> Saving…</> : <><Save size={14} /> Save Changes</>}
+//             </button>
+//           </div>
+//         </div>
+//       )}
+//     </SectionCard>
+//   );
+// };
+
+// // =============================================================================
+// // SECTION: Professional Information — Attorney only (backed by AttorneyProfile)
+// // =============================================================================
+
+// const AttorneyInfoSection = () => {
+//   const { data: attorney, isLoading, refetch } = useAttorneyProfile();
+//   const fileInputRef = useRef<HTMLInputElement>(null);
+
+//   const [editing, setEditing] = useState(false);
+//   const [saving,  setSaving]  = useState(false);
+//   const [error,   setError]   = useState<string | null>(null);
+//   const [photoUploading, setPhotoUploading] = useState(false);
+//   const [removingPhoto,  setRemovingPhoto]  = useState(false);
+//   const [photoError,     setPhotoError]     = useState<string | null>(null);
+
+//   const [form, setForm] = useState({
+//     bar_number: "", bar_state: "", years_experience: "", law_firm_name: "",
+//     specialisations: "", languages: "", availability_note: "",
+//     max_active_cases: "", bio: "",
+//   });
+
+//   const seedForm = () => {
+//     if (!attorney) return;
+//     setForm({
+//       bar_number:        attorney.bar_number        ?? "",
+//       bar_state:         attorney.bar_state         ?? "",
+//       years_experience:  attorney.years_experience?.toString() ?? "",
+//       law_firm_name:     attorney.law_firm_name     ?? "",
+//       specialisations:   attorney.specialisations   ?? "",
+//       languages:         attorney.languages         ?? "",
+//       availability_note: attorney.availability_note ?? "",
+//       max_active_cases:  attorney.max_active_cases?.toString() ?? "",
+//       bio:               attorney.bio               ?? "",
+//     });
+//   };
+
+//   const setField = (key: keyof typeof form) => (
+//     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+//   ) => setForm(f => ({ ...f, [key]: e.target.value }));
+
+//   const handleSave = async () => {
+//     setSaving(true); setError(null);
+//     try {
+//       await updateAttorneyProfile({
+//         bar_number:        form.bar_number || undefined,
+//         bar_state:         form.bar_state || undefined,
+//         years_experience:  form.years_experience ? Number(form.years_experience) : undefined,
+//         law_firm_name:     form.law_firm_name || undefined,
+//         specialisations:   form.specialisations || undefined,
+//         languages:         form.languages || undefined,
+//         availability_note: form.availability_note || undefined,
+//         max_active_cases:  form.max_active_cases ? Number(form.max_active_cases) : undefined,
+//         bio:               form.bio || undefined,
+//       });
+//       await refetch();
+//       setEditing(false);
+//     } catch { setError("Failed to save professional details. Please try again."); }
+//     finally { setSaving(false); }
+//   };
+
+//   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+//     const file = e.target.files?.[0];
+//     if (!file) return;
+//     if (file.size > 5 * 1024 * 1024) { setPhotoError("File must be under 5 MB."); return; }
+//     setPhotoUploading(true); setPhotoError(null);
+//     try {
+//       await uploadAttorneyPhoto(file);
+//       await refetch();
+//     } catch { setPhotoError("Failed to upload photo."); }
+//     finally { setPhotoUploading(false); e.target.value = ""; }
+//   };
+
+//   const handleRemovePhoto = async () => {
+//     if (!attorney?.profile_photo_url) return;
+//     setRemovingPhoto(true); setPhotoError(null);
+//     try {
+//       await removeAttorneyPhoto();
+//       await refetch();
+//     } catch { setPhotoError("Failed to remove photo."); }
+//     finally { setRemovingPhoto(false); }
+//   };
+
+//   if (isLoading) return <SectionCard><div className="flex items-center justify-center py-[64px]"><Spinner size={28} className="text-indigo-600" /></div></SectionCard>;
+
+//   return (
+//     <SectionCard>
+//       <div className={`${cardPad} border-b border-[#f3f4f6] flex items-center justify-between gap-[12px]`}>
+//         <div>
+//           <h2 className="text-[17px] sm:text-[20px] font-semibold text-[#111827] flex items-center gap-[8px]">
+//             Professional Information
+//             {attorney?.is_verified ? (
+//               <span className="flex items-center gap-[4px] text-[11px] font-medium text-[#10b981] bg-[#d1fae5] px-[8px] py-[2px] rounded-full">
+//                 <CheckCircle size={10} /> Verified
+//               </span>
+//             ) : (
+//               <span className="flex items-center gap-[4px] text-[11px] font-medium text-[#c2410c] bg-[#fff7ed] px-[8px] py-[2px] rounded-full">
+//                 <AlertTriangle size={10} /> Not Verified
+//               </span>
+//             )}
+//           </h2>
+//           <p className="text-[13px] sm:text-[14px] text-[#6b7280] mt-[4px]">
+//             Your bar credentials, firm, and case-load preferences.
+//           </p>
+//         </div>
+//         {!editing && (
+//           <button onClick={() => { seedForm(); setEditing(true); setError(null); }}
+//             className="flex items-center gap-[6px] text-[13px] sm:text-[14px] font-medium transition flex-shrink-0"
+//             style={{ color: "var(--theme-primary)" }}>
+//             <Edit2 size={14} /> Edit
+//           </button>
+//         )}
+//       </div>
+
+//       {error && <div className={`${cardPadX} mt-[16px] bg-[#fef2f2] border border-[#fca5a5] text-[#dc2626] rounded-[10px] px-[16px] py-[12px] text-[13px]`}>{error}</div>}
+
+//       {/* Photo */}
+//       <div className={`${cardPadX} py-[20px] sm:py-[24px] border-b border-[#f3f4f6]`}>
+//         <p className="text-[13px] font-medium text-[#374151] mb-[12px]">Profile Photo</p>
+//         <div className="flex flex-wrap items-center gap-[16px]">
+//           <div className="w-[64px] h-[64px] sm:w-[80px] sm:h-[80px] rounded-full bg-[#f3f4f6] border-4 border-[#f3f4f6] flex items-center justify-center overflow-hidden flex-shrink-0">
+//             {attorney?.profile_photo_url
+//               ? <img src={attorney.profile_photo_url} alt="Profile" className="w-full h-full object-cover" />
+//               : <Building size={28} className="text-[#9ca3af]" />}
+//           </div>
+//           <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={handlePhotoChange} />
+//           <div className="flex flex-col gap-[8px]">
+//             <div className="flex flex-wrap gap-[8px]">
+//               <button onClick={() => fileInputRef.current?.click()} disabled={photoUploading}
+//                 className="flex items-center gap-[6px] px-[12px] sm:px-[14px] h-[34px] sm:h-[36px] text-white text-[12px] sm:text-[13px] font-medium rounded-[8px] hover:opacity-90 transition disabled:opacity-60"
+//                 style={{ background: "linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)" }}>
+//                 {photoUploading ? <><Spinner size={13} /> Uploading…</> : <><Upload size={13} /> Upload New</>}
+//               </button>
+//               <button onClick={handleRemovePhoto} disabled={removingPhoto || !attorney?.profile_photo_url}
+//                 className="flex items-center gap-[6px] px-[12px] sm:px-[14px] h-[34px] sm:h-[36px] border border-[#e5e7eb] text-[#6b7280] text-[12px] sm:text-[13px] font-medium rounded-[8px] hover:bg-[#f9fafb] transition disabled:opacity-60">
+//                 {removingPhoto ? <><Spinner size={13} className="text-[#6b7280]" /> Removing…</> : <><Trash2 size={13} /> Remove</>}
+//               </button>
+//             </div>
+//             {photoError ? <p className="text-[12px] text-[#ef4444]">{photoError}</p>
+//               : <p className="text-[12px] text-[#9ca3af]">JPG, PNG, GIF or WebP. Max 5 MB.</p>}
+//           </div>
+//         </div>
+//       </div>
+
+//       {/* Fields */}
+//       <div className={`${cardPad} flex flex-col gap-[16px] sm:gap-[20px]`}>
+//         {editing ? (
+//           <>
+//             <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
+//               <div className="flex flex-col gap-[6px]">
+//                 <label className="text-[13px] font-medium text-[#374151]">Bar Number</label>
+//                 <input value={form.bar_number} onChange={setField("bar_number")}
+//                   className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+//                   style={{ outlineColor: "var(--theme-primary)" }} />
+//               </div>
+//               <div className="flex flex-col gap-[6px]">
+//                 <label className="text-[13px] font-medium text-[#374151]">Bar State</label>
+//                 <input value={form.bar_state} onChange={setField("bar_state")}
+//                   className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+//                   style={{ outlineColor: "var(--theme-primary)" }} />
+//               </div>
+//             </div>
+//             <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
+//               <div className="flex flex-col gap-[6px]">
+//                 <label className="text-[13px] font-medium text-[#374151]">Law Firm Name</label>
+//                 <input value={form.law_firm_name} onChange={setField("law_firm_name")}
+//                   className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+//                   style={{ outlineColor: "var(--theme-primary)" }} />
+//               </div>
+//               <div className="flex flex-col gap-[6px]">
+//                 <label className="text-[13px] font-medium text-[#374151]">Years of Experience</label>
+//                 <input type="number" min={0} value={form.years_experience} onChange={setField("years_experience")}
+//                   className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+//                   style={{ outlineColor: "var(--theme-primary)" }} />
+//               </div>
+//             </div>
+//             <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
+//               <div className="flex flex-col gap-[6px]">
+//                 <label className="text-[13px] font-medium text-[#374151]">Specialisations</label>
+//                 <input value={form.specialisations} onChange={setField("specialisations")} placeholder="H-1B, L-1, PERM"
+//                   className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+//                   style={{ outlineColor: "var(--theme-primary)" }} />
+//                 <p className="text-[11px] text-[#9ca3af]">Comma-separated.</p>
+//               </div>
+//               <div className="flex flex-col gap-[6px]">
+//                 <label className="text-[13px] font-medium text-[#374151]">Languages</label>
+//                 <input value={form.languages} onChange={setField("languages")} placeholder="English, Spanish"
+//                   className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+//                   style={{ outlineColor: "var(--theme-primary)" }} />
+//                 <p className="text-[11px] text-[#9ca3af]">Comma-separated.</p>
+//               </div>
+//             </div>
+//             <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
+//               <div className="flex flex-col gap-[6px]">
+//                 <label className="text-[13px] font-medium text-[#374151]">Max Active Cases</label>
+//                 <input type="number" min={0} value={form.max_active_cases} onChange={setField("max_active_cases")}
+//                   className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+//                   style={{ outlineColor: "var(--theme-primary)" }} />
+//               </div>
+//               <div className="flex flex-col gap-[6px]">
+//                 <label className="text-[13px] font-medium text-[#374151]">Availability Note</label>
+//                 <input value={form.availability_note} onChange={setField("availability_note")} placeholder="e.g. Accepting new H-1B cases"
+//                   className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+//                   style={{ outlineColor: "var(--theme-primary)" }} />
+//               </div>
+//             </div>
+//             <div className="flex flex-col gap-[6px]">
+//               <label className="text-[13px] font-medium text-[#374151]">Bio</label>
+//               <textarea value={form.bio} onChange={setField("bio")} rows={4}
+//                 className="w-full rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] py-[10px] focus:outline-none focus:ring-2 transition resize-none"
+//                 style={{ outlineColor: "var(--theme-primary)" }} />
+//             </div>
+//           </>
+//         ) : (
+//           <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
+//             {[
+//               { label: "Bar Number",         value: attorney?.bar_number || "—" },
+//               { label: "Bar State",          value: attorney?.bar_state || "—" },
+//               { label: "Law Firm",           value: attorney?.law_firm_name || "—" },
+//               { label: "Years of Experience",value: attorney?.years_experience?.toString() || "—" },
+//               { label: "Specialisations",    value: attorney?.specialisations || "—" },
+//               { label: "Languages",          value: attorney?.languages || "—" },
+//               { label: "Max Active Cases",   value: attorney?.max_active_cases?.toString() || "—" },
+//               { label: "Availability",       value: attorney?.availability_note || "—" },
+//             ].map(({ label, value }) => (
+//               <div key={label} className="flex flex-col gap-[4px]">
+//                 <span className="text-[12px] text-[#6b7280] font-medium">{label}</span>
+//                 <span className="text-[13px] sm:text-[14px] text-[#111827]">{value}</span>
+//               </div>
+//             ))}
+//             {attorney?.bio && (
+//               <div className="flex flex-col gap-[4px] sm:col-span-2">
+//                 <span className="text-[12px] text-[#6b7280] font-medium">Bio</span>
+//                 <span className="text-[13px] sm:text-[14px] text-[#111827] leading-[20px]">{attorney.bio}</span>
+//               </div>
+//             )}
 //           </div>
 //         )}
 //       </div>
@@ -860,9 +1428,10 @@
 // // =============================================================================
 
 // export default function ProfileSecurity() {
-//   const location = useLocation();
-//   const session  = getUiSession();
-//   const isHR     = session?.roles?.includes("hr") ?? false;
+//   const location   = useLocation();
+//   const session    = getUiSession();
+//   const isHR       = session?.roles?.includes("hr") ?? false;
+//   const isAttorney = session?.roles?.includes("attorney") ?? false;
 
 //   const getSection = (): SectionId => {
 //     const p = location.pathname;
@@ -884,7 +1453,13 @@
 //   // ConnectedDevicesPlaceholder was a static duplicate showing less real
 //   // information than this section already provides.
 //   const COMPONENTS: Record<SectionId, React.ReactNode> = {
-//     profile:           <PersonalInfoSection />,
+//     profile: (
+//       <div className="flex flex-col gap-[24px]">
+//         <PersonalInfoSection />
+//         {isHR && <CompanyInfoSection />}
+//         {isAttorney && <AttorneyInfoSection />}
+//       </div>
+//     ),
 //     authentication:    <AuthenticationSection />,
 //     mfa:               <MFASection />,
 //     "login-history":   <LoginHistorySection />,
@@ -906,11 +1481,15 @@
 //     </div>
 //   );
 // }
+
+
+
+
 // src/pages/employee/ProfileSecurity.tsx
 // Shared for both employee + HR roles.
 // Role is detected from ui_session cookie — Privacy section adapts accordingly.
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Edit2, Upload, Trash2, Save, RotateCcw,
@@ -918,10 +1497,10 @@ import {
   MapPin, Download,
   Mail, Phone, Building, Globe2,
   Info, Check, X, FileText, Monitor, Clock, AlertTriangle,
-  Lock, Globe, Bell,
+  Lock, Globe, Bell, ShieldCheck,
 } from "lucide-react";
 
-import { useMyProfile, useLoginHistory,notifyProfileUpdated } from "../../hooks/employee/useProfile";
+import { useMyProfile, useLoginHistory,notifyProfileUpdated, type LoginHistoryResponse } from "../../hooks/employee/useProfile";
 import { updateMyProfile, signOutAllDevices, uploadProfilePicture, removeProfilePicture } from "../../api/employee/profile.api";
 import { useAuthStore } from "../../store/authStore";
 import { useCompanyProfile } from "../../hooks/hr/useCompanyProfile";
@@ -932,9 +1511,13 @@ import { useAttorneyProfile } from "../../hooks/lawyer/useAttorneyProfile";
 import {
   updateAttorneyProfile, uploadAttorneyPhoto, removeAttorneyPhoto,
 } from "../../api/lawyer/attorneyProfile.api";
-import imgUserAvatar from "../../assets/icons/user-avatar.jpg";
+import { useAddPersonalEmail, useVerifyPersonalEmail, useCheckPersonalEmail } from "../../hooks/auth/usePersonalEmail";
+// XL sheet row 14: stock user-avatar.jpg placeholder retired — new
+// accounts now render an initials-in-a-gradient-circle instead of a
+// generic person photo. Import removed to satisfy TS noUnusedLocals.
+// import imgUserAvatar from "../../assets/icons/user-avatar.jpg";
 import { getFileUrl } from "../../utils/fileUrl";
-import {  getUiSession } from "../../utils/uiSession";
+import {  getUiSession, updateUiSession } from "../../utils/uiSession";
 import { PageHeader, PageContent } from "../../components/layout/Pageheader";
 import { ThemeColorStrip } from "../settings/ThemeColorStrip";
 import {
@@ -945,20 +1528,24 @@ import {
 import type { SoundStyle } from "../../hooks/employee/useNotificationSoundSettings";
 
 // ── Country codes ─────────────────────────────────────────────────────────────
-const COUNTRIES = [
-  { code:"US",flag:"🇺🇸",dial:"+1"  },{ code:"GB",flag:"🇬🇧",dial:"+44" },
-  { code:"IN",flag:"🇮🇳",dial:"+91" },{ code:"CA",flag:"🇨🇦",dial:"+1"  },
-  { code:"AU",flag:"🇦🇺",dial:"+61" },{ code:"DE",flag:"🇩🇪",dial:"+49" },
-  { code:"FR",flag:"🇫🇷",dial:"+33" },{ code:"AE",flag:"🇦🇪",dial:"+971"},
-  { code:"SG",flag:"🇸🇬",dial:"+65" },{ code:"JP",flag:"🇯🇵",dial:"+81" },
-];
+// (List kept for the future OTP-verified phone-change flow — will be
+// re-used when the country picker returns. Commented out for now to
+// satisfy TS noUnusedLocals since the phone edit UI is currently
+// read-only per XL row 16.)
+// const COUNTRIES = [
+//   { code:"US",flag:"🇺🇸",dial:"+1"  },{ code:"GB",flag:"🇬🇧",dial:"+44" },
+//   { code:"IN",flag:"🇮🇳",dial:"+91" },{ code:"CA",flag:"🇨🇦",dial:"+1"  },
+//   { code:"AU",flag:"🇦🇺",dial:"+61" },{ code:"DE",flag:"🇩🇪",dial:"+49" },
+//   { code:"FR",flag:"🇫🇷",dial:"+33" },{ code:"AE",flag:"🇦🇪",dial:"+971"},
+//   { code:"SG",flag:"🇸🇬",dial:"+65" },{ code:"JP",flag:"🇯🇵",dial:"+81" },
+// ];
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type SectionId =
   | "profile" | "authentication" | "mfa" | "login-history"
   | "privacy"  | "devices"        | "session" | "security-alerts"
   | "notifications";
-
-// ── Shared small components ───────────────────────────────────────────────────
 
 const Toggle = ({ checked, onChange }: { checked: boolean; onChange: () => void }) => (
   <button onClick={onChange}
@@ -1003,10 +1590,6 @@ const Spinner = ({ size = 13, className = "text-white" }: { size?: number; class
 const cardPad  = "p-[20px] sm:p-[24px] lg:p-[32px]";
 const cardPadX = "px-[20px] sm:px-[24px] lg:px-[32px]";
 
-// =============================================================================
-// SECTION: Personal Information
-// =============================================================================
-
 const PersonalInfoSection = () => {
   const { data: profile, isLoading, refetch } = useMyProfile();
   const user = useAuthStore(s => s.user);
@@ -1024,22 +1607,75 @@ const PersonalInfoSection = () => {
   const [countryCode, setCountryCode] = useState("+91");
   const [timezone,    setTimezone]    = useState("PT");
   const [language,    setLanguage]    = useState("en-US");
+  /* XL sheet row 15: previously Full Name was rendered as a
+     ReadOnlyField with the hint "Contact support to update your
+     name." Backend already accepts `full_legal_name` on PATCH
+     /users/me/profile, so making this editable is a pure FE fix. */
+  const [fullName,    setFullName]    = useState("");
 
   const displayName  = (profile?.full_legal_name ?? `${user?.first_name ?? ""} ${user?.last_name ?? ""}`).trim() || "—";
   const displayEmail = profile?.email ?? user?.email ?? "—";
-  const avatarUrl    = getFileUrl(profile?.profile_picture_url) ?? imgUserAvatar;
+
+  /* XL sheet row 14: previously we fell back to a shipped stock
+     photo (`imgUserAvatar` = user-avatar.jpg in /assets/icons/) any
+     time the user hadn't uploaded a picture. That meant brand-new
+     accounts always looked like "some other person" until they
+     manually removed and re-uploaded. Fix: only render an <img>
+     when the backend really has a stored URL; otherwise show a
+     branded initials circle built from first + last name. */
+  const resolvedAvatarUrl = getFileUrl(profile?.profile_picture_url);
+  const initials = ((): string => {
+    const first = (user?.first_name ?? profile?.full_legal_name?.split(' ')[0] ?? '').trim();
+    const last  = (user?.last_name  ?? profile?.full_legal_name?.split(' ').slice(-1)[0] ?? '').trim();
+    const a = first[0] ?? '';
+    const b = last[0]  ?? '';
+    return (a + b).toUpperCase() || '?';
+  })();
 
   const seedForm = () => {
     setPhone(profile?.phone_number ?? "");
     setCountryCode(profile?.country_code ?? "+91");
     setTimezone(profile?.timezone ?? "PT");
     setLanguage(profile?.preferred_language ?? "en-US");
+    setFullName(displayName === "—" ? "" : displayName);
   };
 
   const handleSave = async () => {
     setSaving(true); setError(null);
     try {
-      await updateMyProfile({ timezone, preferred_language: language, phone_number: phone ? String(phone).trim() : undefined, country_code: countryCode || undefined });
+      /* Row 15: full_legal_name now flows through the same PATCH
+         alongside phone/timezone/language so the user can rename
+         themselves inline. Blank ("") means "don't touch" — we send
+         undefined so the backend leaves the field alone. */
+      const trimmedName = fullName.trim();
+      /* XL row 16: phone_number + country_code intentionally NOT
+         sent from this edit view anymore — updating them without OTP
+         verification is a takeover risk. Once the backend ships the
+         verified swap flow, we'll re-add these fields as their own
+         dedicated card with an OTP step. */
+      await updateMyProfile({
+        full_legal_name:      trimmedName ? trimmedName : undefined,
+        timezone,
+        preferred_language:   language,
+      });
+
+      /* Sync the UI session cookie so the sidebar avatar/initials +
+         the dashboard greeting reflect the new name immediately.
+         Backend PATCH /users/me/profile updates profiles.full_legal_name
+         but leaves users.first_name / users.last_name alone, so
+         /users/me will keep returning the old first/last name until a
+         backend-side sync ships. Splitting the display name and
+         writing it into the session cookie makes the UI look right
+         right now — Sidebar listens for the "ui-session-updated"
+         event and re-renders. */
+      if (trimmedName) {
+        const parts     = trimmedName.split(/\s+/);
+        const newFirst  = parts[0] ?? "";
+        const newLast   = parts.length > 1 ? parts.slice(1).join(" ") : "";
+        updateUiSession({ first_name: newFirst, last_name: newLast });
+      }
+      notifyProfileUpdated();
+
       await refetch(); setEditing(false);
       const returnTo = searchParams.get("returnTo");
       if (returnTo) navigate(returnTo);
@@ -1055,7 +1691,7 @@ const PersonalInfoSection = () => {
     try {
       await uploadProfilePicture(file);
       await refetch();
-      notifyProfileUpdated();   // ← tells Sidebar/SettingsSidebar to refetch too
+      notifyProfileUpdated();
     } catch { setAvatarError("Failed to upload photo."); }
     finally { setAvatarUploading(false); e.target.value = ""; }
   };
@@ -1066,7 +1702,7 @@ const PersonalInfoSection = () => {
     try {
       await removeProfilePicture();
       await refetch();
-      notifyProfileUpdated();   // ← same here
+      notifyProfileUpdated();
     } catch { setAvatarError("Failed to remove photo."); }
     finally { setRemoving(false); }
   };
@@ -1094,13 +1730,33 @@ const PersonalInfoSection = () => {
 
       {error && <div className={`${cardPadX} mt-[16px] bg-[#fef2f2] border border-[#fca5a5] text-[#dc2626] rounded-[10px] px-[16px] py-[12px] text-[13px]`}>{error}</div>}
 
-      {/* Avatar */}
       <div className={`${cardPadX} py-[20px] sm:py-[24px] border-b border-[#f3f4f6]`}>
         <p className="text-[13px] font-medium text-[#374151] mb-[12px]">Profile Picture</p>
         <div className="flex flex-wrap items-center gap-[16px]">
-          <img src={avatarUrl} alt="Profile"
-            className="w-[64px] h-[64px] sm:w-[80px] sm:h-[80px] rounded-full object-cover border-4 border-[#f3f4f6] flex-shrink-0"
-            onError={e => { (e.target as HTMLImageElement).src = imgUserAvatar; }} />
+          {resolvedAvatarUrl ? (
+            <img
+              src={resolvedAvatarUrl}
+              alt="Profile"
+              className="w-[64px] h-[64px] sm:w-[80px] sm:h-[80px] rounded-full object-cover border-4 border-[#f3f4f6] flex-shrink-0"
+              /* If the real upload fails to load (broken URL / permissions),
+                 don't fall back to a stock JPG — hide the img and let the
+                 sibling initials circle show through by triggering a
+                 re-render. Since we don't have a state hook for that, we
+                 just clear the src attribute; the layout still leaves
+                 space so the buttons don't jump. */
+              onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            />
+          ) : (
+            <div
+              aria-label={`Avatar for ${displayName}`}
+              className="w-[64px] h-[64px] sm:w-[80px] sm:h-[80px] rounded-full flex items-center justify-center border-4 border-[#f3f4f6] flex-shrink-0 text-white font-semibold text-[22px] sm:text-[26px] select-none"
+              style={{
+                background: 'linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)',
+              }}
+            >
+              {initials}
+            </div>
+          )}
           <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={handleAvatarChange} />
           <div className="flex flex-col gap-[8px]">
             <div className="flex flex-wrap gap-[8px]">
@@ -1120,26 +1776,56 @@ const PersonalInfoSection = () => {
         </div>
       </div>
 
-      {/* Fields */}
       <div className={`${cardPad} flex flex-col gap-[16px] sm:gap-[20px]`}>
         {editing ? (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
-              <ReadOnlyField label="Full Name"     value={displayName}  hint="Contact support to update your name." />
-              <ReadOnlyField label="Email Address" value={displayEmail} hint="Email cannot be changed here." />
+              {/* Full Name — now editable (XL row 15). Backend already
+                  accepts `full_legal_name` on PATCH /users/me/profile,
+                  so this is a pure UI switch from ReadOnlyField to a
+                  real <input>. Save is wired into handleSave() above. */}
+              <div className="flex flex-col gap-[6px]">
+                <label className="text-[13px] font-medium text-[#374151]">Full Name</label>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={e => setFullName(e.target.value)}
+                  placeholder="Enter your legal name"
+                  className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+                  style={{ outlineColor: "var(--theme-primary)" }}
+                />
+                <p className="text-[12px] text-[#9ca3af]">Use the name as it appears on your passport.</p>
+              </div>
+              {/* Email — still read-only. Changing an email safely
+                  requires an OTP-verified swap flow on the backend
+                  (POST /auth/email-change/request + verify) that
+                  isn't shipped yet; spec sent separately. */}
+              <ReadOnlyField label="Email Address" value={displayEmail} hint="Email changes require verification — coming soon." />
             </div>
+            {/* Phone Number — read-only in the edit view now (XL row 16).
+                Previously the number was directly editable which is a
+                security hole: a stolen session could silently swap the
+                number that receives MFA codes and password-reset SMS.
+                Same risk on registration (row 3 already limits to 10
+                digits but doesn't verify ownership).
+                Real fix requires an OTP-verified swap flow on the
+                backend (POST /auth/phone-change/request →
+                POST /auth/phone-change/verify). Spec sent separately.
+                Until then, we expose the current number in read-only
+                mode with a hint pointing the user to the coming flow. */}
             <div className="flex flex-col gap-[6px]">
               <label className="text-[13px] font-medium text-[#374151]">Phone Number</label>
               <div className="flex gap-[8px]">
-                <select value={countryCode} onChange={e => setCountryCode(e.target.value)}
-                  className="h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[10px] focus:outline-none focus:ring-2 w-[100px] sm:w-[110px] shrink-0 cursor-pointer"
-                  style={{ outlineColor: "var(--theme-primary)" }}>
-                  {COUNTRIES.map(c => <option key={`${c.code}-${c.dial}`} value={c.dial}>{c.flag} {c.dial}</option>)}
-                </select>
-                <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="9876543210"
-                  className="flex-1 h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
-                  style={{ outlineColor: "var(--theme-primary)" }} />
+                <div className="h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f3f4f6] text-[#6b7280] text-[14px] px-[10px] flex items-center w-[100px] sm:w-[110px] shrink-0 select-none">
+                  {countryCode || '+91'}
+                </div>
+                <div className="flex-1 h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f3f4f6] text-[#6b7280] text-[14px] px-[14px] flex items-center select-none">
+                  {phone || <span className="italic text-[#9ca3af]">Not set</span>}
+                </div>
               </div>
+              <p className="text-[12px] text-[#9ca3af]">
+                Phone changes require OTP verification — coming soon.
+              </p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
               <div className="flex flex-col gap-[6px]">
@@ -1204,9 +1890,167 @@ const PersonalInfoSection = () => {
   );
 };
 
-// =============================================================================
-// SECTION: Company Information — HR only (backed by EmployerProfile)
-// =============================================================================
+const PersonalEmailSection = () => {
+  const { data: profile, refetch } = useMyProfile();
+  const { addEmail, loading: sending, error: sendError, reset: resetAdd } = useAddPersonalEmail();
+  const { verify, loading: verifying, error: verifyError } = useVerifyPersonalEmail();
+  const { check: checkEmail, checking, result: availability, reset: resetAvailability } = useCheckPersonalEmail();
+
+  const [mode, setMode] = useState<"idle" | "entering-email" | "entering-code">("idle");
+  const [email, setEmail] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+
+  const existingEmail   = (profile as { personal_email?: string | null } | undefined)?.personal_email ?? null;
+  const isVerified      = !!(profile as { personal_email_verified?: boolean } | undefined)?.personal_email_verified;
+  const hasPendingEmail = !!existingEmail && !isVerified;
+
+  useEffect(() => {
+    if (mode !== "entering-email") return;
+    if (!email.trim() || !EMAIL_RE.test(email.trim())) { resetAvailability(); return; }
+    const t = setTimeout(() => void checkEmail(email.trim()), 500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [email, mode]);
+
+  const handleSend = async () => {
+    if (!email.trim()) return;
+    if (availability?.available === false) return;
+    const ok = await addEmail(email.trim());
+    if (ok) setMode("entering-code");
+  };
+
+  const handleResend = async () => {
+    if (!existingEmail) return;
+    await addEmail(existingEmail);
+  };
+
+  const handleVerify = async () => {
+    if (otpCode.trim().length !== 6) return;
+    const ok = await verify(otpCode.trim());
+    if (ok) {
+      await refetch();
+      setMode("idle");
+      setOtpCode("");
+      setEmail("");
+      resetAdd();
+      resetAvailability();
+    }
+  };
+
+  return (
+    <SectionCard>
+      <div className={`${cardPad} border-b border-[#f3f4f6]`}>
+        <h2 className="text-[17px] sm:text-[20px] font-semibold text-[#111827]">Backup Email</h2>
+        <p className="text-[13px] sm:text-[14px] text-[#6b7280] mt-[4px]">
+          Add a personal email so you can still sign in even if you ever lose access to your
+          primary email — for example if you leave your current company.
+        </p>
+      </div>
+
+      <div className={`${cardPad} flex flex-col gap-[16px]`}>
+        {mode === "idle" && isVerified && existingEmail && (
+          <div className="flex items-center justify-between gap-[12px] p-[14px] border border-[#e5e7eb] rounded-[10px]">
+            <div className="flex items-center gap-[10px] min-w-0">
+              <div className="w-[36px] h-[36px] rounded-[10px] bg-[#f0fdf4] flex items-center justify-center flex-shrink-0">
+                <ShieldCheck size={16} className="text-[#10b981]" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[13px] sm:text-[14px] font-medium text-[#111827] truncate">{existingEmail}</p>
+                <p className="text-[11px] text-[#10b981]">Verified — can be used to log in</p>
+              </div>
+            </div>
+            <button onClick={() => { setMode("entering-email"); setEmail(""); resetAvailability(); }}
+              className="h-[34px] px-[12px] border border-[#e5e7eb] text-[#374151] text-[12px] font-medium rounded-[8px] hover:bg-[#f9fafb] transition flex-shrink-0">
+              Change
+            </button>
+          </div>
+        )}
+
+        {mode === "idle" && hasPendingEmail && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-[12px] p-[14px] border border-[#fde68a] bg-[#fffbeb] rounded-[10px]">
+            <div className="flex items-center gap-[10px] min-w-0">
+              <div className="w-[36px] h-[36px] rounded-[10px] bg-[#fef3c7] flex items-center justify-center flex-shrink-0">
+                <AlertTriangle size={16} className="text-[#c2410c]" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[13px] sm:text-[14px] font-medium text-[#111827] truncate">{existingEmail}</p>
+                <p className="text-[11px] text-[#c2410c]">Verification incomplete</p>
+              </div>
+            </div>
+            <button onClick={() => { void handleResend(); setMode("entering-code"); }} disabled={sending}
+              className="h-[36px] px-[14px] border border-[#e5e7eb] text-[#374151] text-[12px] font-medium rounded-[8px] hover:bg-white transition flex-shrink-0 disabled:opacity-60">
+              {sending ? "Sending…" : "Resend code"}
+            </button>
+          </div>
+        )}
+
+        {mode === "idle" && !existingEmail && (
+          <button onClick={() => setMode("entering-email")}
+            className="flex items-center justify-center gap-[8px] h-[40px] px-[16px] border border-[#e5e7eb] text-[#374151] text-[13px] font-medium rounded-[10px] hover:bg-[#f9fafb] transition w-full sm:w-fit">
+            <Mail size={14} /> Add a backup email
+          </button>
+        )}
+
+        {mode === "entering-email" && (
+          <div className="flex flex-col gap-[10px] max-w-[380px]">
+            <label className="text-[13px] font-medium text-[#374151]">Personal email</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+              placeholder="you@personal-email.com"
+              className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+              style={{ outlineColor: "var(--theme-primary)" }} />
+
+            {checking && <p className="text-[12px] text-[#94a3b8]">Checking…</p>}
+            {!checking && availability?.available === false && (
+              <p className="text-[12px] text-[#ef4444]">{availability.reason}</p>
+            )}
+            {!checking && availability?.available === true && email.trim() && EMAIL_RE.test(email.trim()) && (
+              <p className="text-[12px] text-[#10b981]">Available</p>
+            )}
+            {sendError && <p className="text-[12px] text-[#ef4444]">{sendError}</p>}
+
+            <div className="flex gap-[8px]">
+              <button onClick={() => void handleSend()}
+                disabled={sending || !email.trim() || availability?.available === false}
+                className="h-[38px] px-[16px] text-white text-[13px] font-medium rounded-[10px] hover:opacity-90 transition disabled:opacity-60"
+                style={{ background: "linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)" }}>
+                {sending ? "Sending…" : "Send code"}
+              </button>
+              <button onClick={() => { setMode("idle"); setEmail(""); resetAvailability(); }}
+                className="h-[38px] px-[16px] border border-[#e5e7eb] text-[#374151] text-[13px] font-medium rounded-[10px] hover:bg-[#f9fafb] transition">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {mode === "entering-code" && (
+          <div className="flex flex-col gap-[10px] max-w-[380px]">
+            <label className="text-[13px] font-medium text-[#374151]">Verification code</label>
+            <p className="text-[12px] text-[#6b7280] -mt-[4px]">
+              Sent to {email || existingEmail}. Expires in 15 minutes.
+            </p>
+            <input value={otpCode} onChange={e => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="6-digit code" inputMode="numeric"
+              className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] tracking-[4px] focus:outline-none focus:ring-2 transition"
+              style={{ outlineColor: "var(--theme-primary)" }} />
+            {verifyError && <p className="text-[12px] text-[#ef4444]">{verifyError}</p>}
+            <div className="flex gap-[8px]">
+              <button onClick={() => void handleVerify()} disabled={verifying || otpCode.length !== 6}
+                className="h-[38px] px-[16px] text-white text-[13px] font-medium rounded-[10px] hover:opacity-90 transition disabled:opacity-60"
+                style={{ background: "linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)" }}>
+                {verifying ? "Verifying…" : "Confirm code"}
+              </button>
+              <button onClick={() => { setMode("idle"); setOtpCode(""); }}
+                className="h-[38px] px-[16px] border border-[#e5e7eb] text-[#374151] text-[13px] font-medium rounded-[10px] hover:bg-[#f9fafb] transition">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </SectionCard>
+  );
+};
 
 const COMPANY_SIZES = [
   { value: "1_10",      label: "1–10 employees"    },
@@ -1324,7 +2168,6 @@ const CompanyInfoSection = () => {
 
       {error && <div className={`${cardPadX} mt-[16px] bg-[#fef2f2] border border-[#fca5a5] text-[#dc2626] rounded-[10px] px-[16px] py-[12px] text-[13px]`}>{error}</div>}
 
-      {/* Logo */}
       <div className={`${cardPadX} py-[20px] sm:py-[24px] border-b border-[#f3f4f6]`}>
         <p className="text-[13px] font-medium text-[#374151] mb-[12px]">Company Logo</p>
         <div className="flex flex-wrap items-center gap-[16px]">
@@ -1352,7 +2195,6 @@ const CompanyInfoSection = () => {
         </div>
       </div>
 
-      {/* Fields */}
       <div className={`${cardPad} flex flex-col gap-[16px] sm:gap-[20px]`}>
         {editing ? (
           <>
@@ -1501,10 +2343,6 @@ const CompanyInfoSection = () => {
   );
 };
 
-// =============================================================================
-// SECTION: Professional Information — Attorney only (backed by AttorneyProfile)
-// =============================================================================
-
 const AttorneyInfoSection = () => {
   const { data: attorney, isLoading, refetch } = useAttorneyProfile();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1616,7 +2454,6 @@ const AttorneyInfoSection = () => {
 
       {error && <div className={`${cardPadX} mt-[16px] bg-[#fef2f2] border border-[#fca5a5] text-[#dc2626] rounded-[10px] px-[16px] py-[12px] text-[13px]`}>{error}</div>}
 
-      {/* Photo */}
       <div className={`${cardPadX} py-[20px] sm:py-[24px] border-b border-[#f3f4f6]`}>
         <p className="text-[13px] font-medium text-[#374151] mb-[12px]">Profile Photo</p>
         <div className="flex flex-wrap items-center gap-[16px]">
@@ -1644,7 +2481,6 @@ const AttorneyInfoSection = () => {
         </div>
       </div>
 
-      {/* Fields */}
       <div className={`${cardPad} flex flex-col gap-[16px] sm:gap-[20px]`}>
         {editing ? (
           <>
@@ -1763,14 +2599,6 @@ const AttorneyInfoSection = () => {
   );
 };
 
-// =============================================================================
-// SECTION: Authentication
-// =============================================================================
-
-// ── CHANGED: added `recommended` — a themed variant (border + "Recommended"
-// badge) so MFASection can reuse this component instead of hand-rolling its
-// own near-identical card markup. `features` is optional now since MFA's
-// cards don't use the feature-bullet list.
 const AuthMethodCard = ({ icon, iconBg, title, description, features, buttonLabel, active, recommended }: {
   icon: React.ReactNode; iconBg: string; title: string; description: string;
   features?: { ok: boolean; text: string }[]; buttonLabel: string; active?: boolean; recommended?: boolean;
@@ -1847,12 +2675,6 @@ const AuthenticationSection = () => {
   );
 };
 
-// =============================================================================
-// SECTION: MFA
-// ── CHANGED: both cards now reuse AuthMethodCard instead of duplicating its
-// icon/title/badge/button layout with slightly different one-off styling.
-// =============================================================================
-
 const MFASection = () => (
   <SectionCard>
     <div className={`${cardPad} border-b border-[#f3f4f6]`}>
@@ -1881,19 +2703,92 @@ const MFASection = () => (
   </SectionCard>
 );
 
-// =============================================================================
-// SECTION: Login History
-// ── This is also now the content behind the "devices" route — see the
-// COMPONENTS map at the bottom. The old ConnectedDevicesPlaceholder showed a
-// static "Current Device" card with strictly less information than this
-// section already provides for real (device, browser, OS, location, active
-// badge), so it added nothing and has been removed rather than left as a
-// second, lesser copy of the same feature.
-// =============================================================================
+/* XL sheet row 20 (follow-up): even with the 1500ms retry in
+   useLoginHistory the very first login can still return an empty
+   list — some backends only insert the login_history row after the
+   FE has already navigated and fetched. Rather than blank the whole
+   panel, we synthesize a "Current Session" card from the browser's
+   own user-agent + timestamp when the backend list is empty. It
+   auto-hides once the backend row shows up. */
+function detectBrowser(ua: string): string {
+  if (/edg\//i.test(ua))    return "Edge";
+  if (/opr\//i.test(ua))    return "Opera";
+  if (/chrome\//i.test(ua)) return "Chrome";
+  if (/safari\//i.test(ua)) return "Safari";
+  if (/firefox\//i.test(ua))return "Firefox";
+  return "Browser";
+}
+function detectOs(ua: string): string {
+  if (/windows/i.test(ua))  return "Windows";
+  if (/mac os/i.test(ua))   return "macOS";
+  if (/android/i.test(ua))  return "Android";
+  if (/iphone|ipad|ios/i.test(ua)) return "iOS";
+  if (/linux/i.test(ua))    return "Linux";
+  return "";
+}
+function detectDeviceType(ua: string): "desktop" | "mobile" | "tablet" | "unknown" {
+  if (/tablet|ipad/i.test(ua))  return "tablet";
+  if (/mobi|iphone|android/i.test(ua)) return "mobile";
+  return "desktop";
+}
+
+/* XL sheet row 21: Export History button did nothing. Wire it up
+   client-side — no new backend needed since the same list the panel
+   already fetches is what the user wants to export. Builds a CSV
+   from displayHistory, escapes commas/quotes, drops the current
+   Blob into a hidden <a download> click. */
+function toCsv(rows: LoginHistoryResponse[]): string {
+  const header = [
+    "Timestamp", "Status", "Auth method", "Browser", "OS",
+    "Device", "City", "Country", "IP address", "Current session",
+    "Suspicious", "Logged out at",
+  ];
+  const escape = (v: unknown): string => {
+    if (v === null || v === undefined) return "";
+    const s = String(v);
+    if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  };
+  const body = rows.map(r => [
+    r.created_at, r.status, r.auth_method, r.browser, r.os,
+    r.device_type, r.city, r.country, r.ip_address,
+    r.is_current_session ? "Yes" : "",
+    r.is_suspicious      ? "Yes" : "",
+    r.logged_out_at ?? "",
+  ].map(escape).join(","));
+  return [header.join(","), ...body].join("\n");
+}
 
 const LoginHistorySection = () => {
   const { data: history, isLoading, error } = useLoginHistory(20);
   const [signingOut, setSigningOut] = useState(false);
+
+  /* If the backend list is missing a current-session row, prepend a
+     synthesized one so the user always sees "you're logged in right
+     now" on this page — the whole point of the panel. */
+  const displayHistory: LoginHistoryResponse[] = useMemo(() => {
+    const hasCurrent = history.some(h => h.is_current_session);
+    if (hasCurrent) return history;
+    const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+    const synthesized: LoginHistoryResponse = {
+      id:                 "local-current-session",
+      status:             "success",
+      auth_method:        "password",
+      ip_address:         null,
+      city:               null,
+      country:            null,
+      browser:            detectBrowser(ua),
+      os:                 detectOs(ua),
+      device_type:        detectDeviceType(ua),
+      failure_reason:     null,
+      failed_attempts:    0,
+      is_suspicious:      false,
+      is_current_session: true,
+      logged_out_at:      null,
+      created_at:         new Date().toISOString(),
+    };
+    return [synthesized, ...history];
+  }, [history]);
 
   return (
     <SectionCard>
@@ -1902,15 +2797,36 @@ const LoginHistorySection = () => {
           <h2 className="text-[17px] sm:text-[20px] font-semibold text-[#111827]">Login History</h2>
           <p className="text-[13px] sm:text-[14px] text-[#6b7280] mt-[4px]">Review recent access to your account.</p>
         </div>
-        <button className="flex items-center gap-[6px] h-[38px] px-[14px] border border-[#e5e7eb] text-[#374151] text-[12px] sm:text-[13px] font-medium rounded-[10px] hover:bg-[#f9fafb] transition whitespace-nowrap flex-shrink-0">
+        <button
+          type="button"
+          disabled={isLoading || !!error}
+          onClick={() => {
+            const csv = toCsv(displayHistory);
+            const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement("a");
+            const stamp = new Date().toISOString().slice(0, 10);
+            a.href = url;
+            a.download = `vyuflo-login-history-${stamp}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            // Give the browser a tick before revoking so the download
+            // actually kicks off (some browsers race the revoke).
+            setTimeout(() => URL.revokeObjectURL(url), 500);
+          }}
+          className="flex items-center gap-[6px] h-[38px] px-[14px] border border-[#e5e7eb] text-[#374151] text-[12px] sm:text-[13px] font-medium rounded-[10px] hover:bg-[#f9fafb] transition whitespace-nowrap flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
           <Download size={14} /> Export History
         </button>
       </div>
       <div className={`${cardPad} flex flex-col gap-[10px]`}>
         {isLoading && <div className="flex items-center justify-center py-[32px]"><Spinner size={24} className="text-indigo-600" /></div>}
         {error && <p className="text-[13px] text-[#ef4444] text-center py-[16px]">{error}</p>}
-        {!isLoading && !error && history.length === 0 && <p className="text-[13px] text-[#6b7280] text-center py-[16px]">No login history.</p>}
-        {!isLoading && history.map(entry => {
+        {/* Empty-state message removed — displayHistory always contains
+            at least the synthesized current session, so the panel is
+            never fully blank. */}
+        {!isLoading && displayHistory.map(entry => {
           const isBad = entry.status === "blocked" || entry.status === "failed";
           return (
             <div key={entry.id} className={`border rounded-[12px] p-[14px] sm:p-[20px] ${isBad ? "border-[#fca5a5] bg-[#fff5f5]" : entry.is_current_session ? "bg-[var(--theme-light)]" : "border-[#e5e7eb]"}`}
@@ -1953,10 +2869,6 @@ const LoginHistorySection = () => {
     </SectionCard>
   );
 };
-
-// =============================================================================
-// SECTION: Privacy — adapts to role
-// =============================================================================
 
 const PrivacySection = ({ isHR }: { isHR: boolean }) => {
   const [toggles, setToggles] = useState(
@@ -2065,10 +2977,6 @@ const PrivacySection = ({ isHR }: { isHR: boolean }) => {
   );
 };
 
-// =============================================================================
-// SECTION: Security Alerts
-// =============================================================================
-
 const SecurityAlertsSection = () => {
   const [alerts, setAlerts] = useState({
     newDevice:       { email:true,  sms:true  },
@@ -2121,10 +3029,6 @@ const SecurityAlertsSection = () => {
   );
 };
 
-// =============================================================================
-// SECTION: Notification Sounds
-// =============================================================================
-
 const SOUND_STYLES: { value: SoundStyle; label: string; desc: string; emoji: string }[] = [
   { value: "ding",   label: "Ding",   desc: "Two-tone descending", emoji: "🔔" },
   { value: "chime",  label: "Chime",  desc: "Soft ascending",      emoji: "🎵" },
@@ -2138,7 +3042,6 @@ const NotificationSoundsSection = () => {
   return (
     <div className="flex flex-col gap-[16px] sm:gap-[20px]">
 
-      {/* Message Sounds */}
       <SectionCard>
         <div className={`${cardPad} border-b border-[#f3f4f6]`}>
           <div className="flex items-center gap-[10px]">
@@ -2155,7 +3058,6 @@ const NotificationSoundsSection = () => {
 
         <div className={`${cardPad} flex flex-col gap-[20px]`}>
 
-          {/* Enable toggle */}
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[14px] font-medium text-[#111827]">Enable Message Sound</p>
@@ -2164,7 +3066,6 @@ const NotificationSoundsSection = () => {
             <Toggle checked={settings.messageSound} onChange={() => update({ messageSound: !settings.messageSound })} />
           </div>
 
-          {/* Sound style picker */}
           <div className={`flex flex-col gap-[10px] transition-opacity ${!settings.messageSound ? "opacity-40 pointer-events-none" : ""}`}>
             <p className="text-[13px] font-medium text-[#374151]">Sound Style</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-[8px]">
@@ -2183,7 +3084,6 @@ const NotificationSoundsSection = () => {
             </div>
           </div>
 
-          {/* Volume slider */}
           <div className={`flex flex-col gap-[8px] transition-opacity ${!settings.messageSound ? "opacity-40 pointer-events-none" : ""}`}>
             <div className="flex items-center justify-between">
               <p className="text-[13px] font-medium text-[#374151]">Volume</p>
@@ -2198,7 +3098,6 @@ const NotificationSoundsSection = () => {
             </div>
           </div>
 
-          {/* Test */}
           <button onClick={() => { unlockAudio(); playSound("message"); }}
             disabled={!settings.messageSound || settings.messageSoundStyle === "silent"}
             className="flex items-center justify-center gap-[8px] h-[40px] px-[20px] border border-[#e5e7eb]
@@ -2209,7 +3108,6 @@ const NotificationSoundsSection = () => {
         </div>
       </SectionCard>
 
-      {/* Notification Sounds */}
       <SectionCard>
         <div className={`${cardPad} border-b border-[#f3f4f6]`}>
           <div className="flex items-center gap-[10px]">
@@ -2225,7 +3123,6 @@ const NotificationSoundsSection = () => {
 
         <div className={`${cardPad} flex flex-col gap-[20px]`}>
 
-          {/* Enable toggle */}
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[14px] font-medium text-[#111827]">Enable Notification Sound</p>
@@ -2234,7 +3131,6 @@ const NotificationSoundsSection = () => {
             <Toggle checked={settings.notifSound} onChange={() => update({ notifSound: !settings.notifSound })} />
           </div>
 
-          {/* Volume slider */}
           <div className={`flex flex-col gap-[8px] transition-opacity ${!settings.notifSound ? "opacity-40 pointer-events-none" : ""}`}>
             <div className="flex items-center justify-between">
               <p className="text-[13px] font-medium text-[#374151]">Volume</p>
@@ -2249,7 +3145,6 @@ const NotificationSoundsSection = () => {
             </div>
           </div>
 
-          {/* Test */}
           <button onClick={() => { unlockAudio(); playSound("notif"); }}
             disabled={!settings.notifSound}
             className="flex items-center justify-center gap-[8px] h-[40px] px-[20px] border border-[#e5e7eb]
@@ -2260,7 +3155,6 @@ const NotificationSoundsSection = () => {
         </div>
       </SectionCard>
 
-      {/* Info */}
       <div className="bg-[#eff6ff] border border-[#bfdbfe] rounded-[12px] p-[16px] flex items-start gap-[10px]">
         <span className="text-[18px] flex-shrink-0">💡</span>
         <p className="text-[12px] text-[#1e40af] leading-[18px]">
@@ -2271,10 +3165,6 @@ const NotificationSoundsSection = () => {
     </div>
   );
 };
-
-// =============================================================================
-// SECTION: Session (placeholder)
-// =============================================================================
 
 const SessionPlaceholder = () => {
   const [rememberMe, setRememberMe] = useState(true);
@@ -2310,28 +3200,17 @@ const SessionPlaceholder = () => {
   );
 };
 
-// =============================================================================
-// Route → section mapping + page titles
-// =============================================================================
-
 const SECTION_TITLES: Record<SectionId, { title: string; subtitle: string }> = {
   profile:           { title:"Profile",                       subtitle:"Manage your personal information and photo"        },
   authentication:    { title:"Authentication",                 subtitle:"Configure login methods and linked accounts"       },
   mfa:               { title:"Multi-Factor Authentication",    subtitle:"Add a second verification step for extra security" },
   "login-history":   { title:"Login History",                  subtitle:"Review recent access to your account"              },
   privacy:           { title:"Privacy Settings",               subtitle:"Control visibility and data sharing"               },
-  // ── CHANGED: this route now shows the real Login History content (see
-  // COMPONENTS below) instead of the old static placeholder, so the title
-  // reflects that rather than promising a separate "devices" feature.
   devices:           { title:"Connected Devices & Sessions",   subtitle:"Review recent access and sign out other sessions"  },
   session:           { title:"Session Settings",               subtitle:"Configure session timeout and concurrent logins"   },
   "security-alerts": { title:"Security Alerts",                subtitle:"Get notified about important security events"      },
   notifications:     { title:"Notification Sounds",            subtitle:"Customise sounds for messages and alerts"          },
 };
-
-// =============================================================================
-// Main export
-// =============================================================================
 
 export default function ProfileSecurity() {
   const location   = useLocation();
@@ -2355,13 +3234,11 @@ export default function ProfileSecurity() {
   const activeSection = getSection();
   const { title, subtitle } = SECTION_TITLES[activeSection];
 
-  // ── CHANGED: "devices" now reuses LoginHistorySection — the old
-  // ConnectedDevicesPlaceholder was a static duplicate showing less real
-  // information than this section already provides.
   const COMPONENTS: Record<SectionId, React.ReactNode> = {
     profile: (
       <div className="flex flex-col gap-[24px]">
         <PersonalInfoSection />
+        <PersonalEmailSection />
         {isHR && <CompanyInfoSection />}
         {isAttorney && <AttorneyInfoSection />}
       </div>

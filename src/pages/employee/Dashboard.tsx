@@ -1,6 +1,6 @@
 // src/pages/employee/Dashboard.tsx
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FileText, FileCheck2, Upload, Clock, Calendar, AlertTriangle, CheckCircle2,
@@ -10,13 +10,11 @@ import {
 } from 'lucide-react';
 import { PageHeader, PageContent } from '../../components/layout/Pageheader';
 import { useCurrentUser } from '../../hooks/auth/useAuth';
+import { useMyProfile } from '../../hooks/employee/useProfile';
+import { getUiSession } from '../../utils/uiSession';
 import { useDashboard } from '../../hooks/employee/useDashboard';
 import { DashboardTour } from '../../components/tour/DashboardTour';
 import { ComingSoonModal } from '../../components/common/ComingSoonModal';
-import { listLocalDrafts as listLocalI9Drafts }   from '../../api/employee/i9Form.api';
-import { listLocalDrafts as listLocalI983Drafts } from '../../api/employee/i983Form.api';
-import type { I9FormRecord }   from '../../types/employee/i9.types';
-import type { I983FormRecord } from '../../types/employee/i983.types';
 import type {
   CaseStageStatus, ActionItem, ActionPriority, ActionCategory,
   DocumentSummaryItem, DocStatus, Deadline, DeadlineUrgency,
@@ -433,6 +431,7 @@ const DOC_FILTERS: { key: DocFilter; label: string }[] = [
 export default function Dashboard() {
   const navigate = useNavigate();
   const { data: user } = useCurrentUser();
+  const { data: profile } = useMyProfile();
   const { data, isLoading } = useDashboard();
 
   const [search, setSearch] = useState('');
@@ -441,7 +440,30 @@ export default function Dashboard() {
   const [activityDrawer, setActivityDrawer] = useState(false);
   const [showConsultation, setShowConsultation] = useState(false);
 
-  const firstName = user?.first_name ?? 'there';
+  /* Read the greeting name from the UI session cookie first — the
+     Profile page updates it on save (XL row 15), so the greeting
+     stays in sync with the sidebar without waiting for a backend
+     round-trip to /users/me (which still returns the pre-edit
+     users.first_name until backend syncs). Re-computed on every
+     "ui-session-updated" event so the header refreshes live. */
+  const [sessionTick, setSessionTick] = useState(0);
+  useEffect(() => {
+    const handler = () => setSessionTick(t => t + 1);
+    window.addEventListener('ui-session-updated', handler);
+    return () => window.removeEventListener('ui-session-updated', handler);
+  }, []);
+  const firstName = useMemo(() => {
+    void sessionTick;                                   // re-run on session updates
+    /* Prefer profile.full_legal_name (source of truth after the
+       Profile page's Save) → then session (freshly-updated in the
+       same tab) → then users.first_name from /users/me (stale after
+       a rename until backend syncs the users table). Splitting on
+       whitespace covers "Charan Medanki" → "Charan". */
+    const fromProfile = profile?.full_legal_name?.trim().split(/\s+/)[0];
+    if (fromProfile) return fromProfile;
+    const s = getUiSession();
+    return (s?.first_name || user?.first_name || 'there').trim() || 'there';
+  }, [sessionTick, user?.first_name, profile?.full_legal_name]);
 
   // Lawyer→employee intake requests. Priority order:
   //   1. Backend action_items (real flow — when backend adds it)
@@ -508,93 +530,32 @@ export default function Dashboard() {
       }
     } catch { /* ignore */ }
 
-    if (!backendHasAnyIntake && !bridgeHasAnyIntake) {
-      // Demo #1 — Empty intake request (initial ask)
-      const DEMO1 = 'mock-session-demo';
-      if (!completedDemoIds.has(DEMO1)) {
-        items.push({
-          id:          `intake-req-${DEMO1}`,
-          title:       '📩 Complete your H-1B intake',
-          description: 'Your attorney has requested you fill out the initial intake form for your case. Please provide accurate details — you can refine later.',
-          category:    'form',
-          priority:    'urgent',
-          due_date:    new Date().toISOString(),
-          route:       `/my-intake/${DEMO1}`,
-          completed:   false,
-        });
-      }
-
-      // Demo #2 — Corrections needed (previously submitted, sent back)
-      const DEMO2 = 'mock-session-demo-corrections';
-      if (!completedDemoIds.has(DEMO2)) {
-        items.push({
-          id:          `intake-req-${DEMO2}`,
-          title:       '📝 Corrections needed on your L-1B intake',
-          description: 'Please update your passport expiration date and add your latest employment letter. Also, verify the start date for your current role — the year shown seems off.',
-          category:    'form',
-          priority:    'urgent',
-          due_date:    new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-          route:       `/my-intake/${DEMO2}`,
-          completed:   false,
-        });
-      }
-    }
+    // XL sheet row 12: brand-new accounts were seeing pre-populated
+    // "Complete your H-1B intake" + "Corrections needed on your L-1B
+    // intake" action items even before any attorney had actually sent
+    // an intake request. Those were seed demos we injected while the
+    // real intake API was still being wired up — the intake flow is
+    // now live, so this fallback is no longer helpful and just
+    // confuses new users. Removed entirely; the list stays empty
+    // until either the backend action_items feed or the local
+    // intake-requests bridge (populated by the lawyer's send-intake
+    // action) actually contains a row.
+    //
+    // The `backendHasAnyIntake` / `bridgeHasAnyIntake` / `completedDemoIds`
+    // reads above are kept so any existing user who already dismissed
+    // a demo won't see it flash back if they still have the localStorage
+    // entry — but no new demos are injected.
+    void backendHasAnyIntake; void bridgeHasAnyIntake; void completedDemoIds;
 
     return items;
   }, [user?.email, data]);
 
-  // Lawyer → employee FORM corrections (I-9 / I-983). Same priority
-  // order as intakeRequestActions: backend action_items wins; local
-  // fallback reads the open_corrections stored on each form draft.
-  const formCorrectionActions = useMemo(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    type ActionShape = any;
-    const items: ActionShape[] = [];
-
-    // Backend already surfaced these? Skip locals with the same form id.
-    const backendFormIds = new Set<string>();
-    for (const it of data?.action_items ?? []) {
-      const m = /\/forms\/(?:i9|i983)\/([^/?#]+)/.exec(it.route ?? '');
-      if (m) backendFormIds.add(m[1]);
-    }
-
-    try {
-      const i9   = listLocalI9Drafts();
-      const i983 = listLocalI983Drafts();
-      const push = (
-        formType: 'i9' | 'i983',
-        rec: I9FormRecord | I983FormRecord,
-      ) => {
-        const opens = (rec.open_corrections ?? []).filter(c => c.target === 'employee' && !c.resolved_at);
-        if (opens.length === 0) return;
-        if (backendFormIds.has(rec.id)) return;
-        for (const c of opens) {
-          items.push({
-            id:          `form-corr-${formType}-${c.id}`,
-            title:       `📝 Corrections needed on your Form ${formType === 'i9' ? 'I-9' : 'I-983'}`,
-            description: c.note + (c.fields?.length ? `  ·  Fields: ${c.fields.join(', ')}` : ''),
-            category:    'form',
-            priority:    'urgent',
-            due_date:    c.created_at ?? new Date().toISOString(),
-            route:       `/employee/forms/${formType}/${rec.application_id}/pdf`,
-            completed:   false,
-          });
-        }
-      };
-      i9.forEach((r)   => push('i9', r));
-      i983.forEach((r) => push('i983', r));
-    } catch { /* ignore */ }
-
-    return items;
-  }, [data]);
-
   const pendingActions = useMemo(
     () => [
       ...intakeRequestActions,
-      ...formCorrectionActions,
       ...((data?.action_items ?? []).filter(a => !a.completed)),
     ],
-    [data, intakeRequestActions, formCorrectionActions],
+    [data, intakeRequestActions],
   );
   const completedActions = useMemo(
     () => (data?.action_items ?? []).filter(a => a.completed), [data],
@@ -912,6 +873,11 @@ export default function Dashboard() {
                       { label: 'Upload Docs',      icon: <Upload size={15} />,route: cs?.application_id ? `/applications/${cs.application_id}?tab=tasks` : '/documents',comingSoon: false },
                       { label: 'Messages',          icon: <MessageSquare size={15} />, route: '/messages',          comingSoon: false },
                       { label: 'My Applications',   icon: <Briefcase size={15} />,     route: '/applications/list', comingSoon: false },
+                      // Book Consultation Quick Action — reroute to
+                      // the real /consultations page instead of the
+                      // "Coming Soon" modal. Merge from an earlier
+                      // branch had reverted this to route:null +
+                      // comingSoon:true; re-apply the fix.
                       { label: 'Book Consultation', icon: <CalendarClock size={15} />, route: '/consultations',     comingSoon: false },
                     ].map(qa => (
                       <button key={qa.label}

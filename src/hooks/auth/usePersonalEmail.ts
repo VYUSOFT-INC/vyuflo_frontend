@@ -34,6 +34,42 @@ export function useAddPersonalEmail() {
   };
 }
 
+/**
+ * Stub for the not-yet-shipped "is this email already used?" pre-flight
+ * check that PersonalEmailSection expects. The backend endpoint
+ * (`POST /auth/account/check-personal-email`) is planned but not yet
+ * live, so we short-circuit the check to `available` and never block
+ * the send-code flow. When the backend ships this endpoint, replace
+ * the body of `check` with the real axios call — signature stays
+ * identical, no consumer changes needed.
+ */
+type EmailAvailability = { available: boolean; reason?: string | null } | null;
+export function useCheckPersonalEmail() {
+  const [checking, setChecking] = useState(false);
+  const [result,   setResult]   = useState<EmailAvailability>(null);
+
+  const check = async (_email: string): Promise<boolean> => {
+    setChecking(true);
+    try {
+      // TODO(backend): call POST /auth/account/check-personal-email
+      // and return { available, reason }. For now assume every email
+      // is available so the downstream send-code button stays enabled.
+      const stub: EmailAvailability = { available: true };
+      setResult(stub);
+      return stub.available;
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  return {
+    check,
+    checking,
+    result,
+    reset: () => setResult(null),
+  };
+}
+
 export function useVerifyPersonalEmail() {
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState<string | null>(null);

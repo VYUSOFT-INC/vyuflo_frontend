@@ -614,7 +614,6 @@ export default function Signup() {
                         </div>
                         <p className="text-[#6b7280] text-xs mt-1 tracking-[-0.5px]">
                           For SMS notifications and two-factor authentication
-                          {' '}<span className="text-[#9ca3af]">· {form.phone.length}/10 digits</span>
                         </p>
                         {errors.phone && <p className="text-[#ef4444] text-xs mt-1 tracking-[-0.5px]">{errors.phone}</p>}
                       </div>

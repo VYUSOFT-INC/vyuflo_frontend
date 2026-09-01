@@ -1,5 +1,5 @@
 // src/hooks/useProfile.ts
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { AxiosError } from "axios";
 import { getLoginHistory, getMyProfile } from "../../api/employee/profile.api";
 import { useAuthStore } from "../../store/authStore";
@@ -112,7 +112,22 @@ export function useLoginHistory(limit = 20) {
     }
   }, [limit]);
 
+  /* XL sheet row 20: on a brand-new account's first visit to the
+     Login History page, the current session sometimes returns empty
+     because the backend hasn't finished inserting the login row yet
+     (session insert is async relative to the /login response). Fix:
+     when the initial fetch comes back empty, retry once after a
+     short delay. Second call almost always sees the fresh row. */
+  const didRetryRef = useRef(false);
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (isLoading || error || didRetryRef.current) return;
+    if (data.length === 0) {
+      didRetryRef.current = true;
+      const t = window.setTimeout(() => { void load(); }, 1500);
+      return () => window.clearTimeout(t);
+    }
+  }, [isLoading, error, data.length, load]);
 
   return { data, isLoading, error, refetch: load };
 }
