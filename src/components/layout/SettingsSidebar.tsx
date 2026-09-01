@@ -9,17 +9,23 @@ import { useMyProfile } from "../../hooks/employee/useProfile";
 import {
   ChevronLeft, X, User, Settings,
   Shield, Activity, Download,
-  LogOut, Lock, Bell,
+  LogOut, Lock,
+  // Bell removed with Notification Sounds sidebar entry (XL row 19).
 } from "lucide-react";
 
 interface SidebarItem { id: string; label: string; icon: React.ReactNode; path: string }
 
+// XL sheet row 19: Notification Sounds section removed from the
+// employee sidebar — feature only makes sense on a mobile app;
+// the web tab is already an active foreground surface. The section
+// component itself still lives in ProfileSecurity.tsx in case the
+// mobile build needs it, but there's no way to navigate to it
+// from the web UI anymore.
 const EMP_PERSONAL: SidebarItem[] = [
   { id:"profile",       label:"Profile",            icon:<User     size={16}/>, path:"/profile"                   },
   { id:"auth",          label:"Authentication",      icon:<Settings size={16}/>, path:"/profile/authentication"    },
   { id:"mfa",           label:"Multi-Factor Auth",   icon:<Lock     size={16}/>, path:"/profile/mfa"               },
   { id:"alerts",        label:"Security Alerts",     icon:<Shield   size={16}/>, path:"/profile/security-alerts"   },
-  { id:"notifications", label:"Notification Sounds", icon:<Bell     size={16}/>, path:"/profile/notifications"     },
 ];
 // ── CHANGED: "Devices" removed — ProfileSecurity.tsx now renders the same
 // LoginHistorySection content for both the "devices" and "login-history"
@@ -31,12 +37,12 @@ const EMP_SYSTEM: SidebarItem[] = [
   { id:"privacy",  label:"Privacy Settings", icon:<Download size={16}/>, path:"/profile/privacy"       },
 ];
 
+// Notification Sounds also removed from the HR variant — same reasoning.
 const HR_PERSONAL: SidebarItem[] = [
   { id:"profile",       label:"Profile",            icon:<User     size={16}/>, path:"/employer/profile"                   },
   { id:"auth",          label:"Authentication",      icon:<Settings size={16}/>, path:"/employer/profile/authentication"    },
   { id:"mfa",           label:"Multi-Factor Auth",   icon:<Lock     size={16}/>, path:"/employer/profile/mfa"               },
   { id:"alerts",        label:"Security Alerts",     icon:<Shield   size={16}/>, path:"/employer/profile/security-alerts"   },
-  { id:"notifications", label:"Notification Sounds", icon:<Bell     size={16}/>, path:"/employer/profile/notifications"     },
 ];
 // ── CHANGED: same removal as EMP_SYSTEM above, for the HR variant.
 const HR_SYSTEM: SidebarItem[] = [
