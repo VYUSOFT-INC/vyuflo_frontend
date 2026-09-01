@@ -12,7 +12,11 @@ import imgSupportIcon  from "../../assets/icons/signup-support.svg";
 import imgTrustIcon    from "../../assets/icons/signup-trust.svg";
 import imgEmployeeIcon from "../../assets/icons/signup-employee.svg";
 import imgEmployerIcon from "../../assets/icons/signup-employer.svg";
-import imgAdminIcon    from "../../assets/icons/signup-admin.svg";
+// Admin role removed from public signup — Vyuflo Admin is an internal
+// portal role and cannot be self-registered from the external signup
+// flow. Icon import kept commented for reference in case a future
+// invite-only admin signup surface reuses it.
+// import imgAdminIcon    from "../../assets/icons/signup-admin.svg";
 import imgPersonIcon   from "../../assets/icons/signup-person.svg";
 import imgEmailIcon    from "../../assets/icons/signup-email.svg";
 import imgPhoneIcon    from "../../assets/icons/signup-phone.svg";
@@ -124,7 +128,9 @@ const ROLES = [
   { value: "employee",  label: "Employee/Student", sub: "Individual visa applicant", icon: imgEmployeeIcon, iconBg: "bg-[#dbeafe]" },
   { value: "hr",        label: "Employer/HR",      sub: "Company sponsoring visas",  icon: imgEmployerIcon, iconBg: "bg-[#f3e8ff]" },
   { value: "attorney",  label: "Lawyer",            sub: "Immigration attorney",      icon: null,            iconBg: "bg-[#f3f4f6]" },
-  { value: "app_admin", label: "Admin",             sub: "System administrator",      icon: imgAdminIcon,    iconBg: "bg-[#dcfce7]" },
+  // "Admin" role intentionally NOT exposed here — Vyuflo Admin is an
+  // internal-only role, external users must not be able to self-register
+  // as admin from the public signup page.
 ];
 
 const COUNTRIES = [
@@ -183,7 +189,10 @@ export default function Signup() {
     if (!form.first_name.trim())                          e.first_name      = "First name is required.";
     if (!form.last_name.trim())                           e.last_name       = "Last name is required.";
     if (!form.email || !/\S+@\S+\.\S+/.test(form.email)) e.email           = "Valid email is required.";
-    if (!form.phone.trim()) e.phone = "Phone number is required.";
+    // Phone must be exactly 10 digits — onChange already strips
+    // non-digits, so this catches "too short" (< 10) or empty.
+    if (!form.phone.trim())                e.phone = "Phone number is required.";
+    else if (!/^\d{10}$/.test(form.phone)) e.phone = "Phone number must be exactly 10 digits.";
     if (!pw)                                              e.password        = "Password is required.";
     else if (!strength.len || !strength.upper || !strength.special)
                                                           e.password        = "Password doesn't meet requirements.";
@@ -412,10 +421,11 @@ export default function Signup() {
                           <span className="font-semibold text-[#ef4444]">*</span>
                           <span className="font-semibold text-[#111827]"> I am registering as:</span>
                         </label>
-                        <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                        {/* 3 roles → 3-col on ≥sm so no orphan row; single column on mobile */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                           {ROLES.map(r => (
                             <button key={r.value} type="button" onClick={() => set("role", r.value as Role)}
-                              className={`rounded-lg border-2 p-3 sm:p-[18px] text-left transition-all focus:outline-none
+                              className={`rounded-lg border-2 p-3 sm:p-4 text-left transition-all focus:outline-none min-h-[110px] flex flex-col justify-center
                                 ${form.role === r.value ? "border-[#2563eb] bg-[#eff6ff]" : "border-[#e5e7eb] bg-white hover:border-[#93c5fd]"}`}>
                               <div className={`${r.iconBg} w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center mb-2`}>
                                 {r.icon
@@ -439,6 +449,7 @@ export default function Signup() {
                           </label>
                           <div className="relative">
                             <input type="text" placeholder="Enter your first name" value={form.first_name}
+                              autoComplete="off"
                               onChange={e => set("first_name", e.target.value)}
                               className={`${inputBase} pr-10 ${errors.first_name ? "border-[#ef4444]" : ""}`} />
                             <img src={imgPersonIcon} alt="" className="absolute right-4 top-1/2 -translate-y-1/2 w-3.5 h-4 object-contain opacity-40" />
@@ -452,6 +463,7 @@ export default function Signup() {
                           </label>
                           <div className="relative">
                             <input type="text" placeholder="Enter your last name" value={form.last_name}
+                              autoComplete="off"
                               onChange={e => set("last_name", e.target.value)}
                               className={`${inputBase} pr-10 ${errors.last_name ? "border-[#ef4444]" : ""}`} />
                             <img src={imgPersonIcon} alt="" className="absolute right-4 top-1/2 -translate-y-1/2 w-3.5 h-4 object-contain opacity-40" />
@@ -468,6 +480,7 @@ export default function Signup() {
                         </label>
                         <div className="relative">
                           <input type="email" placeholder="you@example.com" value={form.email}
+                            autoComplete="off"
                             onChange={e => set("email", e.target.value)}
                             className={`${inputBase} pr-10 ${errors.email ? "border-[#ef4444]" : ""}`} />
                           <img src={imgEmailIcon} alt="" className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 object-contain opacity-40" />
@@ -491,13 +504,43 @@ export default function Signup() {
                             ))}
                           </select>
                           <div className="relative flex-1">
-                            <input type="tel" placeholder="(555) 123-4567" value={form.phone}
-                              onChange={e => set("phone", e.target.value)} className={`${inputBase} pr-10`} />
+                            {/* Phone: digits-only + hard cap at 10.
+                                - autoComplete set to "off" so the browser
+                                  never prefills this field on refresh.
+                                  Earlier we used "tel-national" which
+                                  caused Chrome to dump the previously
+                                  typed phone/email back into the field
+                                  on reload — user wants the form to
+                                  always open empty.
+                                - inputMode="numeric" pops the number pad
+                                  on mobile; pattern helps native form
+                                  validation.
+                                - onChange strips every non-digit and
+                                  slices to 10 chars, so typing letters
+                                  or paste-with-spaces is silently
+                                  normalised. */}
+                            <input
+                              type="tel"
+                              name="signup-phone-nofill"
+                              id="signup-phone-nofill"
+                              autoComplete="off"
+                              inputMode="numeric"
+                              pattern="[0-9]{10}"
+                              maxLength={10}
+                              placeholder="10-digit number"
+                              value={form.phone}
+                              onChange={e => {
+                                const digitsOnly = e.target.value.replace(/\D+/g, '').slice(0, 10);
+                                set("phone", digitsOnly);
+                              }}
+                              className={`${inputBase} pr-10`}
+                            />
                             <img src={imgPhoneIcon} alt="" className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 object-contain opacity-40" />
                           </div>
                         </div>
                         <p className="text-[#6b7280] text-xs mt-1 tracking-[-0.5px]">
                           For SMS notifications and two-factor authentication
+                          {' '}<span className="text-[#9ca3af]">· {form.phone.length}/10 digits</span>
                         </p>
                         {errors.phone && <p className="text-[#ef4444] text-xs mt-1 tracking-[-0.5px]">{errors.phone}</p>}
                       </div>
@@ -509,6 +552,7 @@ export default function Signup() {
                         </label>
                         <div className="relative">
                           <input type={showPw ? "text" : "password"} placeholder="Create a strong password"
+                            autoComplete="new-password"
                             value={form.password} onChange={e => set("password", e.target.value)}
                             className={`${inputBase} pr-12 ${errors.password ? "border-[#ef4444]" : ""}`} />
                           <button type="button" onClick={() => setShowPw(p => !p)}
@@ -540,6 +584,7 @@ export default function Signup() {
                         </label>
                         <div className="relative">
                           <input type={showCpw ? "text" : "password"} placeholder="Re-enter your password"
+                            autoComplete="new-password"
                             value={form.confirmPassword} onChange={e => set("confirmPassword", e.target.value)}
                             className={`${inputBase} pr-12 ${errors.confirmPassword ? "border-[#ef4444]" : ""}`} />
                           <button type="button" onClick={() => setShowCpw(p => !p)}
