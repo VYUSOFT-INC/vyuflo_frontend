@@ -62,6 +62,11 @@ const documentsApi = {
     return res.data;
   },
 
+  // PATCH /documents/:id/rename — display-name-only rename
+  rename: async (id: string, newName: string): Promise<Document> => {
+    const res = await axios.patch(`/documents/${id}/rename`, { new_name: newName });
+    return res.data;
+  },
   // GET /documents/hub — all of the current user's documents across every
   // case (scoped server-side to their own user_id), optionally filtered by 
   // a search term. Used by the "From Hub" picker. 

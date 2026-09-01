@@ -105,6 +105,12 @@ const documentHubApi = {
     return normalise(doc);
   },
 
+  // PATCH /documents/:id/rename — same backend endpoint as documents.api.ts's
+  // rename(); kept here too so DocumentHub.tsx doesn't reach across modules.
+  rename: async (id: string, newName: string): Promise<HubDocument> => {
+    const doc = await documentsApi.rename(id, newName);
+    return normalise(doc);
+  },
   getFileBlob: async (id: string) => {
     return documentsApi.getFile(id);
   },
