@@ -1489,7 +1489,7 @@
 // Shared for both employee + HR roles.
 // Role is detected from ui_session cookie — Privacy section adapts accordingly.
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Edit2, Upload, Trash2, Save, RotateCcw,
@@ -1500,7 +1500,7 @@ import {
   Lock, Globe, Bell, ShieldCheck,
 } from "lucide-react";
 
-import { useMyProfile, useLoginHistory,notifyProfileUpdated } from "../../hooks/employee/useProfile";
+import { useMyProfile, useLoginHistory,notifyProfileUpdated, type LoginHistoryResponse } from "../../hooks/employee/useProfile";
 import { updateMyProfile, signOutAllDevices, uploadProfilePicture, removeProfilePicture } from "../../api/employee/profile.api";
 import { useAuthStore } from "../../store/authStore";
 import { useCompanyProfile } from "../../hooks/hr/useCompanyProfile";
@@ -2703,9 +2703,92 @@ const MFASection = () => (
   </SectionCard>
 );
 
+/* XL sheet row 20 (follow-up): even with the 1500ms retry in
+   useLoginHistory the very first login can still return an empty
+   list — some backends only insert the login_history row after the
+   FE has already navigated and fetched. Rather than blank the whole
+   panel, we synthesize a "Current Session" card from the browser's
+   own user-agent + timestamp when the backend list is empty. It
+   auto-hides once the backend row shows up. */
+function detectBrowser(ua: string): string {
+  if (/edg\//i.test(ua))    return "Edge";
+  if (/opr\//i.test(ua))    return "Opera";
+  if (/chrome\//i.test(ua)) return "Chrome";
+  if (/safari\//i.test(ua)) return "Safari";
+  if (/firefox\//i.test(ua))return "Firefox";
+  return "Browser";
+}
+function detectOs(ua: string): string {
+  if (/windows/i.test(ua))  return "Windows";
+  if (/mac os/i.test(ua))   return "macOS";
+  if (/android/i.test(ua))  return "Android";
+  if (/iphone|ipad|ios/i.test(ua)) return "iOS";
+  if (/linux/i.test(ua))    return "Linux";
+  return "";
+}
+function detectDeviceType(ua: string): "desktop" | "mobile" | "tablet" | "unknown" {
+  if (/tablet|ipad/i.test(ua))  return "tablet";
+  if (/mobi|iphone|android/i.test(ua)) return "mobile";
+  return "desktop";
+}
+
+/* XL sheet row 21: Export History button did nothing. Wire it up
+   client-side — no new backend needed since the same list the panel
+   already fetches is what the user wants to export. Builds a CSV
+   from displayHistory, escapes commas/quotes, drops the current
+   Blob into a hidden <a download> click. */
+function toCsv(rows: LoginHistoryResponse[]): string {
+  const header = [
+    "Timestamp", "Status", "Auth method", "Browser", "OS",
+    "Device", "City", "Country", "IP address", "Current session",
+    "Suspicious", "Logged out at",
+  ];
+  const escape = (v: unknown): string => {
+    if (v === null || v === undefined) return "";
+    const s = String(v);
+    if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  };
+  const body = rows.map(r => [
+    r.created_at, r.status, r.auth_method, r.browser, r.os,
+    r.device_type, r.city, r.country, r.ip_address,
+    r.is_current_session ? "Yes" : "",
+    r.is_suspicious      ? "Yes" : "",
+    r.logged_out_at ?? "",
+  ].map(escape).join(","));
+  return [header.join(","), ...body].join("\n");
+}
+
 const LoginHistorySection = () => {
   const { data: history, isLoading, error } = useLoginHistory(20);
   const [signingOut, setSigningOut] = useState(false);
+
+  /* If the backend list is missing a current-session row, prepend a
+     synthesized one so the user always sees "you're logged in right
+     now" on this page — the whole point of the panel. */
+  const displayHistory: LoginHistoryResponse[] = useMemo(() => {
+    const hasCurrent = history.some(h => h.is_current_session);
+    if (hasCurrent) return history;
+    const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+    const synthesized: LoginHistoryResponse = {
+      id:                 "local-current-session",
+      status:             "success",
+      auth_method:        "password",
+      ip_address:         null,
+      city:               null,
+      country:            null,
+      browser:            detectBrowser(ua),
+      os:                 detectOs(ua),
+      device_type:        detectDeviceType(ua),
+      failure_reason:     null,
+      failed_attempts:    0,
+      is_suspicious:      false,
+      is_current_session: true,
+      logged_out_at:      null,
+      created_at:         new Date().toISOString(),
+    };
+    return [synthesized, ...history];
+  }, [history]);
 
   return (
     <SectionCard>
@@ -2714,15 +2797,36 @@ const LoginHistorySection = () => {
           <h2 className="text-[17px] sm:text-[20px] font-semibold text-[#111827]">Login History</h2>
           <p className="text-[13px] sm:text-[14px] text-[#6b7280] mt-[4px]">Review recent access to your account.</p>
         </div>
-        <button className="flex items-center gap-[6px] h-[38px] px-[14px] border border-[#e5e7eb] text-[#374151] text-[12px] sm:text-[13px] font-medium rounded-[10px] hover:bg-[#f9fafb] transition whitespace-nowrap flex-shrink-0">
+        <button
+          type="button"
+          disabled={isLoading || !!error}
+          onClick={() => {
+            const csv = toCsv(displayHistory);
+            const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement("a");
+            const stamp = new Date().toISOString().slice(0, 10);
+            a.href = url;
+            a.download = `vyuflo-login-history-${stamp}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            // Give the browser a tick before revoking so the download
+            // actually kicks off (some browsers race the revoke).
+            setTimeout(() => URL.revokeObjectURL(url), 500);
+          }}
+          className="flex items-center gap-[6px] h-[38px] px-[14px] border border-[#e5e7eb] text-[#374151] text-[12px] sm:text-[13px] font-medium rounded-[10px] hover:bg-[#f9fafb] transition whitespace-nowrap flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
           <Download size={14} /> Export History
         </button>
       </div>
       <div className={`${cardPad} flex flex-col gap-[10px]`}>
         {isLoading && <div className="flex items-center justify-center py-[32px]"><Spinner size={24} className="text-indigo-600" /></div>}
         {error && <p className="text-[13px] text-[#ef4444] text-center py-[16px]">{error}</p>}
-        {!isLoading && !error && history.length === 0 && <p className="text-[13px] text-[#6b7280] text-center py-[16px]">No login history.</p>}
-        {!isLoading && history.map(entry => {
+        {/* Empty-state message removed — displayHistory always contains
+            at least the synthesized current session, so the panel is
+            never fully blank. */}
+        {!isLoading && displayHistory.map(entry => {
           const isBad = entry.status === "blocked" || entry.status === "failed";
           return (
             <div key={entry.id} className={`border rounded-[12px] p-[14px] sm:p-[20px] ${isBad ? "border-[#fca5a5] bg-[#fff5f5]" : entry.is_current_session ? "bg-[var(--theme-light)]" : "border-[#e5e7eb]"}`}

@@ -873,7 +873,12 @@ export default function Dashboard() {
                       { label: 'Upload Docs',      icon: <Upload size={15} />,route: cs?.application_id ? `/applications/${cs.application_id}?tab=tasks` : '/documents',comingSoon: false },
                       { label: 'Messages',          icon: <MessageSquare size={15} />, route: '/messages',          comingSoon: false },
                       { label: 'My Applications',   icon: <Briefcase size={15} />,     route: '/applications/list', comingSoon: false },
-                      { label: 'Book Consultation', icon: <CalendarClock size={15} />, route: null,                 comingSoon: true  },
+                      // Book Consultation Quick Action — reroute to
+                      // the real /consultations page instead of the
+                      // "Coming Soon" modal. Merge from an earlier
+                      // branch had reverted this to route:null +
+                      // comingSoon:true; re-apply the fix.
+                      { label: 'Book Consultation', icon: <CalendarClock size={15} />, route: '/consultations',     comingSoon: false },
                     ].map(qa => (
                       <button key={qa.label}
                         onClick={() => qa.comingSoon ? setShowConsultation(true) : qa.route && navigate(qa.route)}

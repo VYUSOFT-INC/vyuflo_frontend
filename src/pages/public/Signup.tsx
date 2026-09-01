@@ -496,7 +496,9 @@ export default function Signup() {
                             <img src={imgPhoneIcon} alt="" className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 object-contain opacity-40" />
                           </div>
                         </div>
-                        <p className="text-[#6b7280] text-xs mt-1 tracking-[-0.5px]">For SMS notifications and two-factor authentication</p>
+                        <p className="text-[#6b7280] text-xs mt-1 tracking-[-0.5px]">
+                          For SMS notifications and two-factor authentication
+                        </p>
                         {errors.phone && <p className="text-[#ef4444] text-xs mt-1 tracking-[-0.5px]">{errors.phone}</p>}
                       </div>
                       {/* ── Password ── */}
