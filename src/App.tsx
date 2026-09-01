@@ -340,6 +340,8 @@ import { DashboardLayout } from './components/layout/DashboardLayout';
 // ── public pages ─────────────────────────────────────────────────────────────
 import Login            from './pages/public/Login';
 import ForgotPassword   from './pages/public/ForgotPassword';
+import TermsOfService   from './pages/public/TermsOfService';
+import PrivacyPolicy    from './pages/public/PrivacyPolicy';
 import Signup           from './pages/public/Signup';
 import ResetPasswordOTP from './pages/public/Resetpasswordotp';
 import ResetPasswordNew from './pages/public/ResetPasswordNew';
@@ -487,6 +489,8 @@ export default function App() {
             <Route element={<PublicRoute />}>
               <Route path="/login"           element={<Login />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/terms"           element={<TermsOfService />} />
+              <Route path="/privacy"         element={<PrivacyPolicy />} />
             </Route>
 
             {/* ── Signup (no auth required) ───────────────────────────────────── */}
