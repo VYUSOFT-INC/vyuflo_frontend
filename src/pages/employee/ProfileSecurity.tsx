@@ -1512,9 +1512,12 @@ import {
   updateAttorneyProfile, uploadAttorneyPhoto, removeAttorneyPhoto,
 } from "../../api/lawyer/attorneyProfile.api";
 import { useAddPersonalEmail, useVerifyPersonalEmail, useCheckPersonalEmail } from "../../hooks/auth/usePersonalEmail";
-import imgUserAvatar from "../../assets/icons/user-avatar.jpg";
+// XL sheet row 14: stock user-avatar.jpg placeholder retired — new
+// accounts now render an initials-in-a-gradient-circle instead of a
+// generic person photo. Import removed to satisfy TS noUnusedLocals.
+// import imgUserAvatar from "../../assets/icons/user-avatar.jpg";
 import { getFileUrl } from "../../utils/fileUrl";
-import {  getUiSession } from "../../utils/uiSession";
+import {  getUiSession, updateUiSession } from "../../utils/uiSession";
 import { PageHeader, PageContent } from "../../components/layout/Pageheader";
 import { ThemeColorStrip } from "../settings/ThemeColorStrip";
 import {
@@ -1524,13 +1527,18 @@ import {
 } from "../../hooks/employee/useNotificationSoundSettings";
 import type { SoundStyle } from "../../hooks/employee/useNotificationSoundSettings";
 
-const COUNTRIES = [
-  { code:"US",flag:"🇺🇸",dial:"+1"  },{ code:"GB",flag:"🇬🇧",dial:"+44" },
-  { code:"IN",flag:"🇮🇳",dial:"+91" },{ code:"CA",flag:"🇨🇦",dial:"+1"  },
-  { code:"AU",flag:"🇦🇺",dial:"+61" },{ code:"DE",flag:"🇩🇪",dial:"+49" },
-  { code:"FR",flag:"🇫🇷",dial:"+33" },{ code:"AE",flag:"🇦🇪",dial:"+971"},
-  { code:"SG",flag:"🇸🇬",dial:"+65" },{ code:"JP",flag:"🇯🇵",dial:"+81" },
-];
+// ── Country codes ─────────────────────────────────────────────────────────────
+// (List kept for the future OTP-verified phone-change flow — will be
+// re-used when the country picker returns. Commented out for now to
+// satisfy TS noUnusedLocals since the phone edit UI is currently
+// read-only per XL row 16.)
+// const COUNTRIES = [
+//   { code:"US",flag:"🇺🇸",dial:"+1"  },{ code:"GB",flag:"🇬🇧",dial:"+44" },
+//   { code:"IN",flag:"🇮🇳",dial:"+91" },{ code:"CA",flag:"🇨🇦",dial:"+1"  },
+//   { code:"AU",flag:"🇦🇺",dial:"+61" },{ code:"DE",flag:"🇩🇪",dial:"+49" },
+//   { code:"FR",flag:"🇫🇷",dial:"+33" },{ code:"AE",flag:"🇦🇪",dial:"+971"},
+//   { code:"SG",flag:"🇸🇬",dial:"+65" },{ code:"JP",flag:"🇯🇵",dial:"+81" },
+// ];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -1599,22 +1607,75 @@ const PersonalInfoSection = () => {
   const [countryCode, setCountryCode] = useState("+91");
   const [timezone,    setTimezone]    = useState("PT");
   const [language,    setLanguage]    = useState("en-US");
+  /* XL sheet row 15: previously Full Name was rendered as a
+     ReadOnlyField with the hint "Contact support to update your
+     name." Backend already accepts `full_legal_name` on PATCH
+     /users/me/profile, so making this editable is a pure FE fix. */
+  const [fullName,    setFullName]    = useState("");
 
   const displayName  = (profile?.full_legal_name ?? `${user?.first_name ?? ""} ${user?.last_name ?? ""}`).trim() || "—";
   const displayEmail = profile?.email ?? user?.email ?? "—";
-  const avatarUrl    = getFileUrl(profile?.profile_picture_url) ?? imgUserAvatar;
+
+  /* XL sheet row 14: previously we fell back to a shipped stock
+     photo (`imgUserAvatar` = user-avatar.jpg in /assets/icons/) any
+     time the user hadn't uploaded a picture. That meant brand-new
+     accounts always looked like "some other person" until they
+     manually removed and re-uploaded. Fix: only render an <img>
+     when the backend really has a stored URL; otherwise show a
+     branded initials circle built from first + last name. */
+  const resolvedAvatarUrl = getFileUrl(profile?.profile_picture_url);
+  const initials = ((): string => {
+    const first = (user?.first_name ?? profile?.full_legal_name?.split(' ')[0] ?? '').trim();
+    const last  = (user?.last_name  ?? profile?.full_legal_name?.split(' ').slice(-1)[0] ?? '').trim();
+    const a = first[0] ?? '';
+    const b = last[0]  ?? '';
+    return (a + b).toUpperCase() || '?';
+  })();
 
   const seedForm = () => {
     setPhone(profile?.phone_number ?? "");
     setCountryCode(profile?.country_code ?? "+91");
     setTimezone(profile?.timezone ?? "PT");
     setLanguage(profile?.preferred_language ?? "en-US");
+    setFullName(displayName === "—" ? "" : displayName);
   };
 
   const handleSave = async () => {
     setSaving(true); setError(null);
     try {
-      await updateMyProfile({ timezone, preferred_language: language, phone_number: phone ? String(phone).trim() : undefined, country_code: countryCode || undefined });
+      /* Row 15: full_legal_name now flows through the same PATCH
+         alongside phone/timezone/language so the user can rename
+         themselves inline. Blank ("") means "don't touch" — we send
+         undefined so the backend leaves the field alone. */
+      const trimmedName = fullName.trim();
+      /* XL row 16: phone_number + country_code intentionally NOT
+         sent from this edit view anymore — updating them without OTP
+         verification is a takeover risk. Once the backend ships the
+         verified swap flow, we'll re-add these fields as their own
+         dedicated card with an OTP step. */
+      await updateMyProfile({
+        full_legal_name:      trimmedName ? trimmedName : undefined,
+        timezone,
+        preferred_language:   language,
+      });
+
+      /* Sync the UI session cookie so the sidebar avatar/initials +
+         the dashboard greeting reflect the new name immediately.
+         Backend PATCH /users/me/profile updates profiles.full_legal_name
+         but leaves users.first_name / users.last_name alone, so
+         /users/me will keep returning the old first/last name until a
+         backend-side sync ships. Splitting the display name and
+         writing it into the session cookie makes the UI look right
+         right now — Sidebar listens for the "ui-session-updated"
+         event and re-renders. */
+      if (trimmedName) {
+        const parts     = trimmedName.split(/\s+/);
+        const newFirst  = parts[0] ?? "";
+        const newLast   = parts.length > 1 ? parts.slice(1).join(" ") : "";
+        updateUiSession({ first_name: newFirst, last_name: newLast });
+      }
+      notifyProfileUpdated();
+
       await refetch(); setEditing(false);
       const returnTo = searchParams.get("returnTo");
       if (returnTo) navigate(returnTo);
@@ -1672,9 +1733,30 @@ const PersonalInfoSection = () => {
       <div className={`${cardPadX} py-[20px] sm:py-[24px] border-b border-[#f3f4f6]`}>
         <p className="text-[13px] font-medium text-[#374151] mb-[12px]">Profile Picture</p>
         <div className="flex flex-wrap items-center gap-[16px]">
-          <img src={avatarUrl} alt="Profile"
-            className="w-[64px] h-[64px] sm:w-[80px] sm:h-[80px] rounded-full object-cover border-4 border-[#f3f4f6] flex-shrink-0"
-            onError={e => { (e.target as HTMLImageElement).src = imgUserAvatar; }} />
+          {resolvedAvatarUrl ? (
+            <img
+              src={resolvedAvatarUrl}
+              alt="Profile"
+              className="w-[64px] h-[64px] sm:w-[80px] sm:h-[80px] rounded-full object-cover border-4 border-[#f3f4f6] flex-shrink-0"
+              /* If the real upload fails to load (broken URL / permissions),
+                 don't fall back to a stock JPG — hide the img and let the
+                 sibling initials circle show through by triggering a
+                 re-render. Since we don't have a state hook for that, we
+                 just clear the src attribute; the layout still leaves
+                 space so the buttons don't jump. */
+              onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            />
+          ) : (
+            <div
+              aria-label={`Avatar for ${displayName}`}
+              className="w-[64px] h-[64px] sm:w-[80px] sm:h-[80px] rounded-full flex items-center justify-center border-4 border-[#f3f4f6] flex-shrink-0 text-white font-semibold text-[22px] sm:text-[26px] select-none"
+              style={{
+                background: 'linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-gradient-end) 100%)',
+              }}
+            >
+              {initials}
+            </div>
+          )}
           <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={handleAvatarChange} />
           <div className="flex flex-col gap-[8px]">
             <div className="flex flex-wrap gap-[8px]">
@@ -1698,21 +1780,52 @@ const PersonalInfoSection = () => {
         {editing ? (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
-              <ReadOnlyField label="Full Name"     value={displayName}  hint="Contact support to update your name." />
-              <ReadOnlyField label="Email Address" value={displayEmail} hint="Email cannot be changed here." />
+              {/* Full Name — now editable (XL row 15). Backend already
+                  accepts `full_legal_name` on PATCH /users/me/profile,
+                  so this is a pure UI switch from ReadOnlyField to a
+                  real <input>. Save is wired into handleSave() above. */}
+              <div className="flex flex-col gap-[6px]">
+                <label className="text-[13px] font-medium text-[#374151]">Full Name</label>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={e => setFullName(e.target.value)}
+                  placeholder="Enter your legal name"
+                  className="w-full h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
+                  style={{ outlineColor: "var(--theme-primary)" }}
+                />
+                <p className="text-[12px] text-[#9ca3af]">Use the name as it appears on your passport.</p>
+              </div>
+              {/* Email — still read-only. Changing an email safely
+                  requires an OTP-verified swap flow on the backend
+                  (POST /auth/email-change/request + verify) that
+                  isn't shipped yet; spec sent separately. */}
+              <ReadOnlyField label="Email Address" value={displayEmail} hint="Email changes require verification — coming soon." />
             </div>
+            {/* Phone Number — read-only in the edit view now (XL row 16).
+                Previously the number was directly editable which is a
+                security hole: a stolen session could silently swap the
+                number that receives MFA codes and password-reset SMS.
+                Same risk on registration (row 3 already limits to 10
+                digits but doesn't verify ownership).
+                Real fix requires an OTP-verified swap flow on the
+                backend (POST /auth/phone-change/request →
+                POST /auth/phone-change/verify). Spec sent separately.
+                Until then, we expose the current number in read-only
+                mode with a hint pointing the user to the coming flow. */}
             <div className="flex flex-col gap-[6px]">
               <label className="text-[13px] font-medium text-[#374151]">Phone Number</label>
               <div className="flex gap-[8px]">
-                <select value={countryCode} onChange={e => setCountryCode(e.target.value)}
-                  className="h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[10px] focus:outline-none focus:ring-2 w-[100px] sm:w-[110px] shrink-0 cursor-pointer"
-                  style={{ outlineColor: "var(--theme-primary)" }}>
-                  {COUNTRIES.map(c => <option key={`${c.code}-${c.dial}`} value={c.dial}>{c.flag} {c.dial}</option>)}
-                </select>
-                <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="9876543210"
-                  className="flex-1 h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f9fafb] text-[#111827] text-[14px] px-[14px] focus:outline-none focus:ring-2 transition"
-                  style={{ outlineColor: "var(--theme-primary)" }} />
+                <div className="h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f3f4f6] text-[#6b7280] text-[14px] px-[10px] flex items-center w-[100px] sm:w-[110px] shrink-0 select-none">
+                  {countryCode || '+91'}
+                </div>
+                <div className="flex-1 h-[46px] rounded-[10px] border border-[#e5e7eb] bg-[#f3f4f6] text-[#6b7280] text-[14px] px-[14px] flex items-center select-none">
+                  {phone || <span className="italic text-[#9ca3af]">Not set</span>}
+                </div>
               </div>
+              <p className="text-[12px] text-[#9ca3af]">
+                Phone changes require OTP verification — coming soon.
+              </p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
               <div className="flex flex-col gap-[6px]">

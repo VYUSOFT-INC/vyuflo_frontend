@@ -103,7 +103,16 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
   const { data: profile } = useMyProfile();
 
   const navItems      = getNavItems(session?.roles);
-  const fullName      = session ? `${session.first_name} ${session.last_name}`.trim() || 'User' : 'User';
+  /* Prefer profile.full_legal_name over the session's first+last so
+     the sidebar keeps showing the name the user picked in Profile
+     Settings across a logout/login cycle. Backend PATCH updates
+     profiles.full_legal_name but not users.first_name / users.last_name,
+     so the login response repopulates the session cookie with the
+     original signup name. profile.full_legal_name is the source of
+     truth for display. */
+  const fullName      = (profile?.full_legal_name && profile.full_legal_name.trim())
+    ? profile.full_legal_name.trim()
+    : (session ? `${session.first_name} ${session.last_name}`.trim() || 'User' : 'User');
   // getFileUrl() is correct here — the backend's GET /users/me/profile already
   // returns profile_picture_url as a ready-to-use versioned URL
   // (e.g. "/api/v1/users/me/avatar?v=1755712345"), not a raw storage key.
