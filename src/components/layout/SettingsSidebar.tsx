@@ -6,6 +6,7 @@ import { ProfileAvatar } from "../ui/ProfileAvatar";
 import { getUiSession, type UiSession } from "../../utils/uiSession";
 import { getFileUrl } from "../../utils/fileUrl";
 import { useMyProfile } from "../../hooks/employee/useProfile";
+import { authApi } from "../../api/auth/auth.api";
 import {
   ChevronLeft, X, User, Settings,
   Shield, Activity, Download,
@@ -55,7 +56,6 @@ interface Props { onClose?: () => void }
 export function SettingsSidebar({ onClose }: Props = {}) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { clearAuth: logout } = useAuthStore();
   const [session, setSession] = useState<UiSession | null>(null);
   const { data: profile } = useMyProfile();
 
@@ -78,6 +78,25 @@ export function SettingsSidebar({ onClose }: Props = {}) {
 
   const go       = (path: string) => { navigate(path); onClose?.(); };
   const isActive = (path: string) => location.pathname === path;
+
+  // FIXED: previously called useAuthStore's clearAuth() directly, which
+  // only wipes local Zustand state — the backend was never told, so the
+  // refresh_token stayed valid in Redis and the ui_session/refresh_token/
+  // avatar_session cookies never actually expired. authApi.logout() calls
+  // POST /auth/logout (revokes the refresh token, clears all three
+  // cookies) AND clears local state — matches the fix applied to Sidebar.tsx.
+  const handleLogout = async () => {
+    try {
+      await authApi.logout();
+    } catch {
+      // Network call itself failed (e.g. token already expired) — the
+      // clearAuth() inside authApi.logout() never ran in that case, so
+      // fall back to clearing local state directly here instead.
+      useAuthStore.getState().clearAuth();
+    } finally {
+      navigate("/login");
+    }
+  };
 
   const renderGroup = (label: string, items: SidebarItem[]) => (
     <div className="mb-[8px]">
@@ -155,7 +174,7 @@ export function SettingsSidebar({ onClose }: Props = {}) {
 
       {/* Sign out */}
       <div className="border-t border-[#f1f5f9] px-[12px] py-[12px] shrink-0">
-        <button onClick={() => { logout(); navigate("/login"); }}
+        <button onClick={() => void handleLogout()}
           className="flex items-center gap-[8px] w-full px-[12px] py-[10px] rounded-[8px] text-[14px] font-medium text-[#64748b] hover:bg-red-50 hover:text-red-600 transition-colors duration-150">
           <LogOut size={14} className="shrink-0" /> Sign Out
         </button>

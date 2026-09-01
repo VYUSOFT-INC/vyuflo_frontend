@@ -22,6 +22,7 @@ import { useMyProfile } from '../../hooks/employee/useProfile';
 import imgLogoIcon from '../../assets/vyuflo_icon.svg';
 import imgLogoName from '../../assets/vyuflo_logotype.svg';
 import { getNavItems } from '../../config/navConfig';
+import { authApi } from '../../api/auth/auth.api';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CSS filter that recolors a flat SVG (#64748b) to the active accent.
@@ -88,7 +89,6 @@ interface SidebarProps {
 // Sidebar
 // ─────────────────────────────────────────────────────────────────────────────
 export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarProps) {
-  const { clearAuth: logout } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -125,9 +125,25 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
   const isSettingsPage = location.pathname.startsWith('/admin/settings');
   const activeHash     = location.hash || '#general';
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
+  // FIXED: previously called useAuthStore's clearAuth() directly, which
+  // only wipes local Zustand state — it never told the backend anything.
+  // That meant the refresh_token stayed valid in Redis and the
+  // ui_session/refresh_token/avatar_session cookies never actually
+  // expired, so "signing out" didn't really end the session server-side.
+  // authApi.logout() calls POST /auth/logout (which revokes the refresh
+  // token and clears all three cookies) AND clears local state — this is
+  // the one function that does a complete, real sign-out.
+  const handleLogout = async () => {
+    try {
+      await authApi.logout();
+    } catch {
+      // Network call itself failed (e.g. token already expired) — the
+      // clearAuth() inside authApi.logout() never ran in that case, so
+      // fall back to clearing local state directly here instead.
+      useAuthStore.getState().clearAuth();
+    } finally {
+      navigate('/login');
+    }
   };
 
   const renderSectionHeader = (text: string) => (
@@ -278,7 +294,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
         {/* ── Sign out ─────────────────────────────────────────────────── */}
         <div className={['py-4 border-t border-[#f1f5f9] shrink-0 transition-all duration-300', collapsed ? 'lg:px-2 px-4' : 'px-4'].join(' ')}>
           <button
-            onClick={handleLogout}
+            onClick={() => void handleLogout()}
             title={collapsed ? 'Sign out' : undefined}
             className={[
               'flex items-center gap-2 w-full rounded-[12px] text-[14px] font-medium text-[#64748b] tracking-[-0.5px]',
