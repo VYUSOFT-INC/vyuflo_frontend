@@ -1519,6 +1519,8 @@ import { useAddPersonalEmail, useVerifyPersonalEmail, useCheckPersonalEmail } fr
 import { getFileUrl } from "../../utils/fileUrl";
 import {  getUiSession, updateUiSession } from "../../utils/uiSession";
 import { PageHeader, PageContent } from "../../components/layout/Pageheader";
+// XL row 29 — Passport / Immigration / Employment additional profile fields.
+import AdditionalProfileFields from "../../components/employee/AdditionalProfileFields";
 import { ThemeColorStrip } from "../settings/ThemeColorStrip";
 import {
   useNotificationSoundSettings,
@@ -3239,6 +3241,11 @@ export default function ProfileSecurity() {
       <div className="flex flex-col gap-[24px]">
         <PersonalInfoSection />
         <PersonalEmailSection />
+        {/* XL row 29: expose Passport / Immigration / Employment fields
+            so the Profile Readiness ring can reach 100% and downstream
+            visa filings (I-9, I-983) can be pre-populated. Employee
+            role only — HR and Attorney profiles don't need these. */}
+        {!isHR && !isAttorney && <AdditionalProfileFields email={session?.email ?? null} />}
         {isHR && <CompanyInfoSection />}
         {isAttorney && <AttorneyInfoSection />}
       </div>

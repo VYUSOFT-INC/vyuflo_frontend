@@ -11,7 +11,7 @@ import { listHRActionItems, type HRActionItem } from '../../api/hr/actionItems.a
 import { listLocalDrafts as listLocalI9Drafts }   from '../../api/employee/i9Form.api';
 import { listLocalDrafts as listLocalI983Drafts } from '../../api/employee/i983Form.api';
 
-/** Local-fallback shape — mirrors HRActionItem minus fields that we
+/** Local-fallback shape — mirrors HRActionItem minus fields that we local works
  *  can't cheaply synthesize (form_id vs application_id, requester name). */
 type Item = {
   id:               string;
