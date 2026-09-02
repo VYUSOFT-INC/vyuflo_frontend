@@ -1,4 +1,15 @@
+
 // // src/pages/employee/DocumentViewer.tsx
+// //
+// // FIXED: isFreshUpload was driven only by a ?fresh=1 URL flag, which nothing
+// // sets anymore now that DocumentHub no longer navigates here after upload
+// // (and DocCard/DocRow's onClick never added it either). That silently killed
+// // the "warn before leaving an unconfirmed upload" feature — Back just left
+// // without asking, even mid-extraction.
+// // Fix: derive "needs confirmation" from the document's own ocr_status
+// // instead of a URL flag, so it works regardless of entry point. isFreshUpload
+// // (the URL flag) is still respected if present, but is no longer required.
+
 // import { useState, useEffect }         from "react";
 // import { useSearchParams, useNavigate } from "react-router-dom";
 // import { useDocument }                  from "../../hooks/employee/useDocuments";
@@ -8,6 +19,42 @@
 // import type { Document }                from "../../types/employee/document.types";
 
 // // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// // NEW — decides whether a field should render as a native date picker
+// // instead of free text. Keep this list in sync with the backend's
+// // document_field_configurations "is_expiry_field" rows and any other known
+// // date-shaped fields (date_of_birth, valid_from/to, admit_until, etc.).
+// const DATE_FIELD_NAMES = new Set([
+//   "expiry_date", "date_of_birth", "issue_date",
+//   "valid_from", "valid_to", "admit_until", "card_expires",
+// ]);
+
+// function isDateField(fieldName: string): boolean {
+//   return DATE_FIELD_NAMES.has(fieldName);
+// }
+
+// // NEW — <input type="date"> requires its value in exactly "YYYY-MM-DD".
+// // OCR-extracted text won't always already be in that shape (e.g. a
+// // day-month-year string someone typed, or a slightly different extractor
+// // format), so this does a best-effort conversion for DISPLAY only. If it
+// // can't confidently parse the raw value, it returns "" so the date picker
+// // just shows empty and the person picks it fresh — better than guessing
+// // wrong and silently showing the wrong date.
+// function toDateInputValue(raw: string): string {
+//   if (!raw) return "";
+//   const trimmed = raw.trim();
+
+//   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed; // already ISO
+
+//   const dmy = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+//   if (dmy) {
+//     const [, d, m, y] = dmy;
+//     return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+//   }
+
+//   return "";
+// }
+
 // function Spinner({ color = "text-indigo-600" }: { color?: string }) {
 //   return (
 //     <svg className={`w-8 h-8 animate-spin ${color}`} fill="none" viewBox="0 0 24 24">
@@ -29,11 +76,11 @@
 // // ── Poor extraction popup ──────────────────────────────────────────────────
 // function PoorExtractionModal({ open, onReupload, onDismiss }: {
 //   open: boolean;
-//   onReupload: () => void;
+//   onReupload: () => void; 
 //   onDismiss: () => void;
 // }) {
 //   if (!open) return null;
-//   return (
+//   return ( 
 //     <>
 //       <div className="fixed inset-0 bg-black/40 z-[80]" onClick={onDismiss} />
 //       <div className="fixed inset-0 z-[81] flex items-center justify-center p-[16px]">
@@ -71,15 +118,64 @@
 //   );
 // }
 
+// // ── Leave / Cancel confirmation ────────────────────────────────────────────
+// function LeaveModal({ open, mode, saving, onSave, onDiscard, onLeaveWithoutSaving, onKeepEditing }: {
+//   open:  boolean;
+//   mode:  "fresh" | "edit" | null;
+//   saving: boolean;
+//   onSave: () => void;
+//   onDiscard: () => void;
+//   onLeaveWithoutSaving: () => void;
+//   onKeepEditing: () => void;
+// }) {
+//   if (!open || !mode) return null;
+//   return (
+//     <>
+//       <div className="fixed inset-0 bg-black/40 z-[80]" onClick={saving ? undefined : onKeepEditing} />
+//       <div className="fixed inset-0 z-[81] flex items-center justify-center p-[16px]">
+//         <div className="w-full max-w-[420px] bg-white rounded-[16px] shadow-2xl p-[24px] flex flex-col gap-[16px]">
+//           <div>
+//             <h3 className="text-[16px] font-bold text-[#0f172a]">
+//               {mode === "fresh" ? "This document hasn't been confirmed" : "You have unsaved changes"}
+//             </h3>
+//             <p className="text-[13px] text-[#64748b] mt-[6px] leading-[19px]">
+//               {mode === "fresh"
+//                 ? "You haven't submitted this document's fields yet. Save it, discard it, or keep reviewing."
+//                 : "Save your changes before leaving, or leave without saving."}
+//             </p>
+//           </div>
+//           <div className="flex items-center justify-end gap-[10px] flex-wrap">
+//             {mode === "fresh" && (
+//               <button onClick={onDiscard} disabled={saving}
+//                 className="h-[38px] px-[14px] rounded-[10px] border border-[#fecaca] text-[#dc2626] text-[13px] font-medium hover:bg-[#fef2f2] transition disabled:opacity-50">
+//                 Discard Upload
+//               </button>
+//             )}
+//             {mode === "edit" && (
+//               <button onClick={onLeaveWithoutSaving} disabled={saving}
+//                 className="h-[38px] px-[14px] rounded-[10px] border border-[#e5e7eb] text-[#374151] text-[13px] font-medium hover:bg-[#f8fafc] transition disabled:opacity-50">
+//                 Leave Without Saving
+//               </button>
+//             )}
+//             <button onClick={onKeepEditing} disabled={saving}
+//               className="h-[38px] px-[14px] rounded-[10px] border border-[#e5e7eb] text-[13px] font-medium text-[#374151] hover:bg-[#f8fafc] transition disabled:opacity-50">
+//               Keep Editing
+//             </button>
+//             <button onClick={onSave} disabled={saving}
+//               className="h-[38px] px-[16px] rounded-[10px] text-white text-[13px] font-semibold hover:opacity-90 transition disabled:opacity-60 flex items-center gap-[6px]"
+//               style={{ background: "linear-gradient(135deg, var(--theme-primary), var(--theme-gradient-end))" }}>
+//               {saving && <MiniSpinner color="text-white" />}
+//               Save & Leave
+//             </button>
+//           </div>
+//         </div>
+//       </div>
+//     </>
+//   );
+// }
+
 // // ─────────────────────────────────────────────────────────────────────────────
 // // ── LEFT — real scanned image, large, zoomable ─────────────────────────────
-// // HOISTED to a real top-level component — this is the fix. Previously this
-// // was defined INSIDE DocumentViewer's render body, so React created a brand
-// // new component type on every keystroke (any state update in the parent),
-// // unmounting and remounting this entire panel each time — which is why
-// // typing in the fields felt like it accepted one character at a time before
-// // losing focus. A stable, top-level component fixes that: React now
-// // correctly re-renders the SAME component in place instead of replacing it.
 // // ─────────────────────────────────────────────────────────────────────────────
 
 // interface ViewerPanelProps {
@@ -149,7 +245,6 @@
 
 // // ─────────────────────────────────────────────────────────────────────────────
 // // ── RIGHT — clean grid of directly-editable input boxes ────────────────────
-// // Also hoisted to a top-level component, same reasoning as ViewerPanel above.
 // // ─────────────────────────────────────────────────────────────────────────────
 
 // interface DataPanelProps {
@@ -166,18 +261,21 @@
 //   source: "db" | "ocr" | null;
 //   fileBlob: Blob | null;
 //   fileName: string;
+//   showCancelUpload: boolean;
+//   submitting: boolean;
 //   onUpdateEditValue: (id: string, value: string) => void;
 //   onDismissMismatch: () => void;
 //   onReupload: () => void;
 //   onRetryOcr: () => void;
 //   onSubmit: () => void;
+//   onCancelUpload: () => void;
 //   onClosePanel: () => void;
 // }
 
 // function DataPanel({
 //   doc, fields, avgConfidence, ocrLoading, ocrError, typeMismatch, qualityIssue,
-//   detectedType, missingMandatoryFields, anyLocked, source,
-//   onUpdateEditValue, onDismissMismatch, onReupload, onRetryOcr, onSubmit, onClosePanel,
+//   detectedType, missingMandatoryFields, anyLocked, source, showCancelUpload, submitting,
+//   onUpdateEditValue, onDismissMismatch, onReupload, onRetryOcr, onSubmit, onCancelUpload, onClosePanel,
 // }: DataPanelProps) {
 //   return (
 //     <div className="flex flex-col h-full overflow-hidden bg-[#f9fafb]">
@@ -297,14 +395,34 @@
 //                       {field.is_mandatory && <span className="text-[#ef4444] ml-[3px]">*</span>}
 //                     </label>
 //                     <div className="relative">
-//                       <input
-//                         value={field.edit_value ?? field.extracted_value}
-//                         onChange={e => onUpdateEditValue(field.id, e.target.value)}
-//                         disabled={field.is_locked}
-//                         placeholder={field.is_locked ? "" : "Type the value from the document…"}
-//                         className="w-full h-[44px] px-[14px] rounded-[8px] text-[#111827] text-[15px] font-semibold border-2 focus:outline-none focus:border-indigo-600 disabled:cursor-not-allowed placeholder:text-[13px] placeholder:font-normal placeholder:text-[#94a3b8]"
-//                         style={{ borderColor, backgroundColor: bgColor }}
-//                       />
+//                       {isDateField(field.field_name) ? (
+//                         // FIXED: date fields were plain text inputs, so a
+//                         // person could type "19-08-2026" (day-month-year)
+//                         // and the backend's expiry parsing would either
+//                         // misread it or, in the strict-ISO version, silently
+//                         // drop it entirely with no error. <input type="date">
+//                         // always returns unambiguous YYYY-MM-DD regardless of
+//                         // how the browser displays it to the person (locale
+//                         // formatting is a display-only concern) — no format
+//                         // for the backend to ever guess wrong again.
+//                         <input
+//                           type="date"
+//                           value={toDateInputValue(field.edit_value ?? field.extracted_value)}
+//                           onChange={e => onUpdateEditValue(field.id, e.target.value)}
+//                           disabled={field.is_locked}
+//                           className="w-full h-[44px] px-[14px] rounded-[8px] text-[#111827] text-[15px] font-semibold border-2 focus:outline-none focus:border-indigo-600 disabled:cursor-not-allowed"
+//                           style={{ borderColor, backgroundColor: bgColor }}
+//                         />
+//                       ) : (
+//                         <input
+//                           value={field.edit_value ?? field.extracted_value}
+//                           onChange={e => onUpdateEditValue(field.id, e.target.value)}
+//                           disabled={field.is_locked}
+//                           placeholder={field.is_locked ? "" : "Type the value from the document…"}
+//                           className="w-full h-[44px] px-[14px] rounded-[8px] text-[#111827] text-[15px] font-semibold border-2 focus:outline-none focus:border-indigo-600 disabled:cursor-not-allowed placeholder:text-[13px] placeholder:font-normal placeholder:text-[#94a3b8]"
+//                           style={{ borderColor, backgroundColor: bgColor }}
+//                         />
+//                       )}
 //                       {field.is_locked && (
 //                         <div className="absolute right-[12px] top-1/2 -translate-y-1/2">
 //                           <MiniSpinner />
@@ -325,7 +443,7 @@
 //           )}
 
 //           {fields.length > 0 && (
-//             <div className="flex items-center gap-[12px] pt-[12px] border-t border-[#f1f5f9]">
+//             <div className="flex items-center gap-[12px] pt-[12px] border-t border-[#f1f5f9] flex-wrap">
 //               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" className="shrink-0">
 //                 <rect x="3" y="10" width="18" height="11" rx="2" stroke="#94a3b8" strokeWidth="1.5"/>
 //                 <circle cx="12" cy="5" r="2" stroke="#94a3b8" strokeWidth="1.5"/>
@@ -342,12 +460,27 @@
 //                   </p>
 //                 ) : null}
 //               </div>
+
+//               {/* Cancel Upload — shown for any document not yet confirmed, not
+//                   just ones opened with ?fresh=1 (see showCancelUpload derivation
+//                   in the parent — driven by doc.ocr_status now, not a URL flag) */}
+//               {showCancelUpload && (
+//                 <button onClick={onCancelUpload}
+//                   disabled={submitting}
+//                   className="shrink-0 h-[38px] px-[16px] rounded-[8px] border border-[#fecaca] text-[#dc2626] text-[13px] font-medium hover:bg-[#fef2f2] transition disabled:opacity-50 disabled:cursor-not-allowed">
+//                   Cancel Upload
+//                 </button>
+//               )}
+
 //               <button onClick={onSubmit}
-//                 disabled={missingMandatoryFields.length > 0 || anyLocked}
+//                 disabled={missingMandatoryFields.length > 0 || anyLocked || submitting}
 //                 className="shrink-0 h-[38px] px-[24px] rounded-[8px] text-white text-[13px] font-semibold transition
-//                            disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 active:scale-[0.98]"
+//                            disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 active:scale-[0.98] flex items-center gap-[6px]"
 //                 style={{ background: "linear-gradient(135deg, var(--theme-primary), var(--theme-gradient-end))" }}>
-//                 {anyLocked ? "Extracting…" : source === "db" ? "Update" : "Submit"}
+//                 {submitting && <MiniSpinner color="text-white" />}
+//                 {submitting
+//                   ? (source === "db" ? "Updating…" : "Submitting…")
+//                   : anyLocked ? "Extracting…" : source === "db" ? "Update" : "Submit"}
 //               </button>
 //             </div>
 //           )}
@@ -363,6 +496,7 @@
 //   const [searchParams] = useSearchParams();
 //   const docId          = searchParams.get("doc_id")         ?? undefined;
 //   const returnAppId    = searchParams.get("application_id") ?? undefined;
+//   const freshFlag      = searchParams.get("fresh") === "1"; // still respected if present
 //   const returnUrl = searchParams.get("return_url")
 //   ? decodeURIComponent(searchParams.get("return_url")!)
 //   : returnAppId
@@ -382,8 +516,25 @@
 //   const [mobileTab, setMobileTab] = useState<"viewer" | "data">("viewer");
 //   const [showPoorExtractionModal, setShowPoorExtractionModal] = useState(false);
 
+//   // ── Leave/Cancel tracking ──────────────────────────────────────────────
+//   const [isDirty, setIsDirty] = useState(false);
+//   const [leaveModalMode, setLeaveModalMode] = useState<"fresh" | "edit" | null>(null);
+//   const [leaveSaving, setLeaveSaving] = useState(false);
+//   // NEW — tracks the Submit/Update button's own in-flight state. Separate
+//   // from leaveSaving (which covers the "Save & Leave" path inside the leave
+//   // confirmation modal) since these are two different buttons that can each
+//   // be mid-request independently.
+//   const [submitting, setSubmitting] = useState(false);
+
 //   const totalPages = doc?.total_pages ?? 1;
 //   const isPdf      = doc?.file_type === "pdf" || fileName.endsWith(".pdf");
+
+//   // FIX: this document counts as "needs confirmation" if its backend
+//   // ocr_status isn't "confirmed" yet — regardless of how the viewer was
+//   // opened. This is what actually decides the Cancel Upload button and the
+//   // "fresh" leave-modal, replacing the old URL-only isFreshUpload check.
+//   const isUnconfirmedDoc = doc ? doc.ocr_status !== "confirmed" : false;
+//   const treatAsFresh     = freshFlag || isUnconfirmedDoc;
 
 //   const {
 //     fields, avgConfidence, source,
@@ -421,6 +572,11 @@
 //     }
 //   }, [qualityIssue]);
 
+//   function handleFieldEdit(id: string, value: string) {
+//     setIsDirty(true);
+//     updateEditValue(id, value);
+//   }
+
 //   function exportData() {
 //     const rows = fields.map(f =>
 //       `"${f.field_name}","${f.extracted_value}",${f.confidence_score},${f.is_confirmed}`
@@ -447,12 +603,69 @@
 //   }
 
 //   async function handleSubmit() {
-//     await submitFields();
-//     navigate(returnUrl);
+//     setSubmitting(true);
+//     try {
+//       await submitFields();
+//       navigate(returnUrl);
+//     } finally {
+//       // Only resets on failure — a successful submit navigates away
+//       // immediately, so there's nothing left to reset back on this page.
+//       setSubmitting(false);
+//     }
 //   }
 
 //   function handleRetryOcr() {
 //     if (fileBlob) void loadFields(fileBlob, fileName);
+//   }
+
+//   // ── Back button ───────────────────────────────────────────────────────
+//   // Unconfirmed document (fresh OR just never confirmed) OR dirty edits on
+//   // an already-confirmed doc → confirm before leaving. Otherwise, just go.
+//   function handleBackClick() {
+//     if (treatAsFresh) {
+//       setLeaveModalMode("fresh");
+//     } else if (isDirty) {
+//       setLeaveModalMode("edit");
+//     } else {
+//       navigate(returnAppId ? `/applications/${returnAppId}` : returnUrl);
+//     }
+//   }
+
+//   function handleCancelUploadClick() {
+//     setLeaveModalMode("fresh");
+//   }
+
+//   async function handleLeaveModalSave() {
+//     setLeaveSaving(true);
+//     try {
+//       await submitFields();
+//       setLeaveModalMode(null);
+//       navigate(returnUrl);
+//     } finally {
+//       setLeaveSaving(false);
+//     }
+//   }
+
+//   async function handleLeaveModalDiscard() {
+//     setLeaveSaving(true);
+//     try {
+//       if (docId) {
+//         try { await documentsApi.delete(docId); } catch { /* already gone, ignore */ }
+//       }
+//       setLeaveModalMode(null);
+//       navigate(returnUrl);
+//     } finally {
+//       setLeaveSaving(false);
+//     }
+//   }
+
+//   function handleLeaveModalLeaveWithoutSaving() {
+//     setLeaveModalMode(null);
+//     navigate(returnAppId ? `/applications/${returnAppId}` : returnUrl);
+//   }
+
+//   function handleLeaveModalKeepEditing() {
+//     setLeaveModalMode(null);
 //   }
 
 //   const confirmedCount = fields.filter(f => f.is_confirmed).length;
@@ -486,9 +699,19 @@
 //         onDismiss={() => setShowPoorExtractionModal(false)}
 //       />
 
+//       <LeaveModal
+//         open={leaveModalMode !== null}
+//         mode={leaveModalMode}
+//         saving={leaveSaving}
+//         onSave={handleLeaveModalSave}
+//         onDiscard={handleLeaveModalDiscard}
+//         onLeaveWithoutSaving={handleLeaveModalLeaveWithoutSaving}
+//         onKeepEditing={handleLeaveModalKeepEditing}
+//       />
+
 //       {/* ── TOP BAR ── */}
 //       <div className="bg-white border-b border-[#e5e7eb] flex items-center h-[48px] sm:h-[52px] px-[12px] sm:px-[16px] shrink-0 gap-[8px] sm:gap-[12px]">
-//         <button onClick={() => navigate(returnAppId ? `/applications/${returnAppId}` : "/documents")}
+//         <button onClick={handleBackClick}
 //           className="flex items-center gap-[6px] text-[#64748b] text-[12px] sm:text-[13px] font-medium hover:text-[#0f172a] transition whitespace-nowrap shrink-0">
 //           <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
 //             <path d="M19 12H5M5 12l7 7M5 12l7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -566,8 +789,11 @@
 //             ocrError={ocrError} typeMismatch={typeMismatch} qualityIssue={qualityIssue}
 //             detectedType={detectedType} missingMandatoryFields={missingMandatoryFields}
 //             anyLocked={anyLocked} source={source} fileBlob={fileBlob} fileName={fileName}
-//             onUpdateEditValue={updateEditValue} onDismissMismatch={dismissMismatch}
+//             showCancelUpload={treatAsFresh}
+//             submitting={submitting}
+//             onUpdateEditValue={handleFieldEdit} onDismissMismatch={dismissMismatch}
 //             onReupload={handleReupload} onRetryOcr={handleRetryOcr} onSubmit={handleSubmit}
+//             onCancelUpload={handleCancelUploadClick}
 //             onClosePanel={() => { setRightOpen(false); setMobileTab("viewer"); }}
 //           />
 //         )}
@@ -587,8 +813,11 @@
 //               ocrError={ocrError} typeMismatch={typeMismatch} qualityIssue={qualityIssue}
 //               detectedType={detectedType} missingMandatoryFields={missingMandatoryFields}
 //               anyLocked={anyLocked} source={source} fileBlob={fileBlob} fileName={fileName}
-//               onUpdateEditValue={updateEditValue} onDismissMismatch={dismissMismatch}
+//               showCancelUpload={treatAsFresh}
+//               submitting={submitting}
+//               onUpdateEditValue={handleFieldEdit} onDismissMismatch={dismissMismatch}
 //               onReupload={handleReupload} onRetryOcr={handleRetryOcr} onSubmit={handleSubmit}
+//               onCancelUpload={handleCancelUploadClick}
 //               onClosePanel={() => setRightOpen(false)}
 //             />
 //           </div>
@@ -659,21 +888,24 @@
 // Fix: derive "needs confirmation" from the document's own ocr_status
 // instead of a URL flag, so it works regardless of entry point. isFreshUpload
 // (the URL flag) is still respected if present, but is no longer required.
+//
+// NEW — Rename: added a Rename (pencil) button next to the document name in
+// the top bar, using the same shared RenamePromptModal + documentsApi.rename()
+// as Document Hub, so renaming works at upload-review time too, not just
+// from the Hub's document list.
 
 import { useState, useEffect }         from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
+import { Pencil }                       from "lucide-react";
 import { useDocument }                  from "../../hooks/employee/useDocuments";
 import { useOCR }                       from "../../hooks/employee/useOCR";
 import documentsApi                     from "../../api/employee/documents.api";
 import type { OCRField }                from "../../types/employee/ocr.types";
 import type { Document }                from "../../types/employee/document.types";
+import { RenamePromptModal }            from "../../components/ui/RenamePromptModal";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// NEW — decides whether a field should render as a native date picker
-// instead of free text. Keep this list in sync with the backend's
-// document_field_configurations "is_expiry_field" rows and any other known
-// date-shaped fields (date_of_birth, valid_from/to, admit_until, etc.).
 const DATE_FIELD_NAMES = new Set([
   "expiry_date", "date_of_birth", "issue_date",
   "valid_from", "valid_to", "admit_until", "card_expires",
@@ -683,18 +915,11 @@ function isDateField(fieldName: string): boolean {
   return DATE_FIELD_NAMES.has(fieldName);
 }
 
-// NEW — <input type="date"> requires its value in exactly "YYYY-MM-DD".
-// OCR-extracted text won't always already be in that shape (e.g. a
-// day-month-year string someone typed, or a slightly different extractor
-// format), so this does a best-effort conversion for DISPLAY only. If it
-// can't confidently parse the raw value, it returns "" so the date picker
-// just shows empty and the person picks it fresh — better than guessing
-// wrong and silently showing the wrong date.
 function toDateInputValue(raw: string): string {
   if (!raw) return "";
   const trimmed = raw.trim();
 
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed; // already ISO
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
 
   const dmy = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
   if (dmy) {
@@ -825,9 +1050,6 @@ function LeaveModal({ open, mode, saving, onSave, onDiscard, onLeaveWithoutSavin
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ── LEFT — real scanned image, large, zoomable ─────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
-
 interface ViewerPanelProps {
   doc: Document;
   fileUrl: string | null;
@@ -894,9 +1116,6 @@ function ViewerPanel({ doc, fileUrl, isPdf, zoom, rotation, currentPage, totalPa
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ── RIGHT — clean grid of directly-editable input boxes ────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
-
 interface DataPanelProps {
   doc: Document;
   fields: OCRField[];
@@ -1046,15 +1265,6 @@ function DataPanel({
                     </label>
                     <div className="relative">
                       {isDateField(field.field_name) ? (
-                        // FIXED: date fields were plain text inputs, so a
-                        // person could type "19-08-2026" (day-month-year)
-                        // and the backend's expiry parsing would either
-                        // misread it or, in the strict-ISO version, silently
-                        // drop it entirely with no error. <input type="date">
-                        // always returns unambiguous YYYY-MM-DD regardless of
-                        // how the browser displays it to the person (locale
-                        // formatting is a display-only concern) — no format
-                        // for the backend to ever guess wrong again.
                         <input
                           type="date"
                           value={toDateInputValue(field.edit_value ?? field.extracted_value)}
@@ -1111,9 +1321,6 @@ function DataPanel({
                 ) : null}
               </div>
 
-              {/* Cancel Upload — shown for any document not yet confirmed, not
-                  just ones opened with ?fresh=1 (see showCancelUpload derivation
-                  in the parent — driven by doc.ocr_status now, not a URL flag) */}
               {showCancelUpload && (
                 <button onClick={onCancelUpload}
                   disabled={submitting}
@@ -1146,7 +1353,7 @@ export default function DocumentViewer() {
   const [searchParams] = useSearchParams();
   const docId          = searchParams.get("doc_id")         ?? undefined;
   const returnAppId    = searchParams.get("application_id") ?? undefined;
-  const freshFlag      = searchParams.get("fresh") === "1"; // still respected if present
+  const freshFlag      = searchParams.get("fresh") === "1";
   const returnUrl = searchParams.get("return_url")
   ? decodeURIComponent(searchParams.get("return_url")!)
   : returnAppId
@@ -1166,23 +1373,23 @@ export default function DocumentViewer() {
   const [mobileTab, setMobileTab] = useState<"viewer" | "data">("viewer");
   const [showPoorExtractionModal, setShowPoorExtractionModal] = useState(false);
 
-  // ── Leave/Cancel tracking ──────────────────────────────────────────────
   const [isDirty, setIsDirty] = useState(false);
   const [leaveModalMode, setLeaveModalMode] = useState<"fresh" | "edit" | null>(null);
   const [leaveSaving, setLeaveSaving] = useState(false);
-  // NEW — tracks the Submit/Update button's own in-flight state. Separate
-  // from leaveSaving (which covers the "Save & Leave" path inside the leave
-  // confirmation modal) since these are two different buttons that can each
-  // be mid-request independently.
   const [submitting, setSubmitting] = useState(false);
+
+  // ── NEW — Rename state ───────────────────────────────────────────────────
+  // Local override of the displayed name after a successful rename, since
+  // useDocument's cache may not refetch immediately. Falls back to the
+  // loaded doc's real name until a rename succeeds.
+  const [renamedName, setRenamedName] = useState<string | null>(null);
+  const [renameOpen,  setRenameOpen]  = useState(false);
+  const [renaming,    setRenaming]    = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
 
   const totalPages = doc?.total_pages ?? 1;
   const isPdf      = doc?.file_type === "pdf" || fileName.endsWith(".pdf");
 
-  // FIX: this document counts as "needs confirmation" if its backend
-  // ocr_status isn't "confirmed" yet — regardless of how the viewer was
-  // opened. This is what actually decides the Cancel Upload button and the
-  // "fresh" leave-modal, replacing the old URL-only isFreshUpload check.
   const isUnconfirmedDoc = doc ? doc.ocr_status !== "confirmed" : false;
   const treatAsFresh     = freshFlag || isUnconfirmedDoc;
 
@@ -1222,6 +1429,12 @@ export default function DocumentViewer() {
     }
   }, [qualityIssue]);
 
+  // Reset the local rename override whenever a different document loads,
+  // so an old override never bleeds into a new doc_id.
+  useEffect(() => {
+    setRenamedName(null);
+  }, [docId]);
+
   function handleFieldEdit(id: string, value: string) {
     setIsDirty(true);
     updateEditValue(id, value);
@@ -1258,8 +1471,6 @@ export default function DocumentViewer() {
       await submitFields();
       navigate(returnUrl);
     } finally {
-      // Only resets on failure — a successful submit navigates away
-      // immediately, so there's nothing left to reset back on this page.
       setSubmitting(false);
     }
   }
@@ -1268,9 +1479,23 @@ export default function DocumentViewer() {
     if (fileBlob) void loadFields(fileBlob, fileName);
   }
 
-  // ── Back button ───────────────────────────────────────────────────────
-  // Unconfirmed document (fresh OR just never confirmed) OR dirty edits on
-  // an already-confirmed doc → confirm before leaving. Otherwise, just go.
+  // ── NEW — Rename ─────────────────────────────────────────────────────────
+  async function handleConfirmRename(newName: string) {
+    if (!docId) return;
+    setRenaming(true);
+    setRenameError(null);
+    try {
+      const updated = await documentsApi.rename(docId, newName);
+      setRenamedName(updated.name);
+      setRenameOpen(false);
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } };
+      setRenameError(err?.response?.data?.detail ?? "Rename failed. Please try again.");
+    } finally {
+      setRenaming(false);
+    }
+  }
+
   function handleBackClick() {
     if (treatAsFresh) {
       setLeaveModalMode("fresh");
@@ -1338,6 +1563,8 @@ export default function DocumentViewer() {
     );
   }
 
+  const shownName = renamedName ?? doc.name;
+
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col bg-[#f9fafb] overflow-hidden"
@@ -1359,6 +1586,15 @@ export default function DocumentViewer() {
         onKeepEditing={handleLeaveModalKeepEditing}
       />
 
+      <RenamePromptModal
+        open={renameOpen}
+        mode="rename"
+        initialValue={shownName.replace(/\.[^/.]+$/, '')}
+        saving={renaming}
+        onConfirm={handleConfirmRename}
+        onCancel={() => { setRenameOpen(false); setRenameError(null); }}
+      />
+
       {/* ── TOP BAR ── */}
       <div className="bg-white border-b border-[#e5e7eb] flex items-center h-[48px] sm:h-[52px] px-[12px] sm:px-[16px] shrink-0 gap-[8px] sm:gap-[12px]">
         <button onClick={handleBackClick}
@@ -1377,10 +1613,20 @@ export default function DocumentViewer() {
             <span className="text-[#ef4444] text-[7px] font-black">PDF</span>
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="text-[#0f172a] text-[12px] sm:text-[13px] font-semibold leading-[16px] truncate">{doc.name}</span>
+            <div className="flex items-center gap-[6px] min-w-0">
+              <span className="text-[#0f172a] text-[12px] sm:text-[13px] font-semibold leading-[16px] truncate">{shownName}</span>
+              <button onClick={() => setRenameOpen(true)}
+                title="Rename"
+                className="text-[#94a3b8] hover:text-[#374151] transition p-[2px] shrink-0">
+                <Pencil size={13} />
+              </button>
+            </div>
             <span className="text-[#94a3b8] text-[10px] sm:text-[11px] leading-[14px] hidden sm:block">
               {doc.file_size_bytes ? `${(doc.file_size_bytes / 1024 / 1024).toFixed(1)} MB` : ""}
             </span>
+            {renameError && (
+              <span className="text-[#dc2626] text-[10px] leading-[13px]">{renameError}</span>
+            )}
           </div>
         </div>
 
