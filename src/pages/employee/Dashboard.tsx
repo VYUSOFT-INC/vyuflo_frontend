@@ -642,7 +642,12 @@ export default function Dashboard() {
           category:    'form',
           priority:    'urgent',
           due_date:    c.created_at ?? new Date().toISOString(),
-          route:       `/my-forms/${formType}/${rec.application_id || rec.id}`,
+          /* App.tsx registers the employee form editors at
+             `/employee/forms/i9/:applicationId/pdf` (and i983).
+             Previously we routed to `/my-forms/i9/{id}` which
+             fell through to the catch-all and crashed the whole
+             dashboard on click. Point at the real route. */
+          route:       `/employee/forms/${formType}/${rec.application_id || rec.id}/pdf`,
           completed:   false,
         });
       }
