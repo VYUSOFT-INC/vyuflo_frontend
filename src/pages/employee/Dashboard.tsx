@@ -6,13 +6,22 @@ import {
   FileText, FileCheck2, Upload, Clock, Calendar, AlertTriangle, CheckCircle2,
   ChevronRight, ArrowRight, MessageSquare, Phone, Mail, CreditCard, DollarSign,
   ShieldCheck, CircleDot, Circle, X, Info, Send, Briefcase,
-  ClipboardList, CalendarClock, ExternalLink, HelpCircle,
+  ClipboardList, CalendarClock, ExternalLink,
+  // HelpCircle removed with the duplicate top-right tour button (XL row 25).
 } from 'lucide-react';
 import { PageHeader, PageContent } from '../../components/layout/Pageheader';
 import { useCurrentUser } from '../../hooks/auth/useAuth';
 import { useMyProfile } from '../../hooks/employee/useProfile';
 import { getUiSession } from '../../utils/uiSession';
 import { useDashboard } from '../../hooks/employee/useDashboard';
+/* XL row 15/17-follow-up: pull the form-draft helpers as static imports
+   so Vite bundles them (dynamic `require()` doesn't resolve in the
+   Vite/ESM pipeline — that was silently returning nothing and left the
+   Action Items list empty even when the attorney's rejection was
+   sitting in localStorage). */
+import { listLocalDrafts as listI9Drafts } from '../../api/employee/i9Form.api';
+import { listLocalDrafts as listI983Drafts } from '../../api/employee/i983Form.api';
+import axiosClient from '../../api/axios';
 import { DashboardTour } from '../../components/tour/DashboardTour';
 import { ComingSoonModal } from '../../components/common/ComingSoonModal';
 import type {
@@ -550,12 +559,113 @@ export default function Dashboard() {
     return items;
   }, [user?.email, data]);
 
+  /* XL row 15/17-follow-up: attorney "Request Corrections" on I-9 or
+     I-983 marks the form record as review_status="needs_corrections"
+     and appends to open_corrections[]. That change lives on the
+     BACKEND record — not localStorage — so the employee dashboard
+     has to actually fetch the forms for the current application(s)
+     to see it. Fetches happen in a useEffect and drop into state
+     the memo below turns into action-item cards. Also keeps reading
+     localStorage drafts as a fallback so pre-backend demo flows keep
+     working. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [remoteFormRecords, setRemoteFormRecords] = useState<{ type: 'i9' | 'i983'; rec: any }[]>([]);
+  useEffect(() => {
+    // Collect every application_id we can see. case_summary is the
+    // primary source; applications array (if the shape carries one)
+    // is a secondary source for multi-case employees.
+    const appIds = new Set<string>();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const anyData = data as any;
+    if (anyData?.case_summary?.application_id) appIds.add(anyData.case_summary.application_id);
+    if (Array.isArray(anyData?.applications)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      anyData.applications.forEach((a: any) => { if (a?.application_id) appIds.add(a.application_id); });
+    }
+    if (appIds.size === 0) { setRemoteFormRecords([]); return; }
+
+    let alive = true;
+    (async () => {
+      /* Direct axios GETs — verbatim response, NO merge (unlike
+         loadOrCreateI9/loadOrCreateI983 which strip review_status +
+         open_corrections). If backend returns 404 (endpoint not
+         shipped), we silently skip; the local-drafts fallback below
+         will still surface anything the attorney saved via the
+         requestCorrections local write path. */
+      const results: { type: 'i9' | 'i983'; rec: unknown }[] = [];
+      for (const appId of appIds) {
+        try {
+          const r = await axiosClient.get('/employee/forms/i9', { params: { application_id: appId } });
+          const list = Array.isArray(r.data) ? r.data : (r.data ? [r.data] : []);
+          list.forEach((rec: unknown) => results.push({ type: 'i9', rec }));
+        } catch { /* 404 or transient — skip */ }
+        try {
+          const r = await axiosClient.get('/employee/forms/i983', { params: { application_id: appId } });
+          const list = Array.isArray(r.data) ? r.data : (r.data ? [r.data] : []);
+          list.forEach((rec: unknown) => results.push({ type: 'i983', rec }));
+        } catch { /* 404 or transient — skip */ }
+      }
+      if (alive) setRemoteFormRecords(results);
+    })();
+    return () => { alive = false; };
+  }, [data]);
+
+  const formCorrectionActions = useMemo(() => {
+    const out: typeof intakeRequestActions = [];
+    const seen = new Set<string>();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const push = (formType: 'i9' | 'i983', rec: any) => {
+      if (!rec) return;
+      const opens = Array.isArray(rec.open_corrections) ? rec.open_corrections : [];
+      /* Mirror the HRActionItemsCard pattern — one row per open
+         correction, but only the ones targeted at THIS role.
+         Attorney's Request Corrections modal has an "Employee | HR"
+         picker; each correction carries a `target` field. Employee
+         should skip anything targeted at HR (and vice-versa).
+         `target` undefined is treated as employee for backwards
+         compatibility with older records that predated the picker. */
+      for (const c of opens) {
+        if (!c || c.resolved_at) continue;
+        const target = (c.target ?? 'employee') as 'employee' | 'hr';
+        if (target !== 'employee') continue;
+        const cid = c.id ?? `${rec.application_id || rec.id}-${c.created_at ?? Math.random()}`;
+        const key = `form-corr-${formType}-${cid}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const note = (c.note ?? '').toString().trim() || 'Your attorney requested changes.';
+        out.push({
+          id:          key,
+          title:       `📝 Form ${formType === 'i9' ? 'I-9' : 'I-983'} — ${note.slice(0, 80)}`,
+          description: `Requested by ${c.requested_by_name ?? 'Attorney'} · ${
+            Array.isArray(c.fields) && c.fields.length ? `Fields: ${c.fields.join(', ')}` : 'Open the form to see the flagged items.'
+          }`,
+          category:    'form',
+          priority:    'urgent',
+          due_date:    c.created_at ?? new Date().toISOString(),
+          route:       `/my-forms/${formType}/${rec.application_id || rec.id}`,
+          completed:   false,
+        });
+      }
+    };
+    // 1. Live backend records (source of truth once endpoint ships)
+    remoteFormRecords.forEach(({ type, rec }) => push(type, rec));
+    // 2. Fallback — pre-backend local drafts (populated by the
+    //    attorney's requestCorrections local-write branch, exactly
+    //    like HRActionItemsCard does on the HR dashboard)
+    try {
+      listI9Drafts().forEach(r => push('i9', r));
+      listI983Drafts().forEach(r => push('i983', r));
+    } catch { /* stores empty */ }
+    return out;
+  }, [remoteFormRecords, intakeRequestActions]);
+
   const pendingActions = useMemo(
     () => [
+      ...formCorrectionActions,
       ...intakeRequestActions,
       ...((data?.action_items ?? []).filter(a => !a.completed)),
     ],
-    [data, intakeRequestActions],
+    [data, intakeRequestActions, formCorrectionActions],
   );
   const completedActions = useMemo(
     () => (data?.action_items ?? []).filter(a => a.completed), [data],
@@ -590,15 +700,11 @@ export default function Dashboard() {
         searchValue={search}
         searchPlaceholder="Search documents, deadlines..."
         onSearchChange={setSearch}
-        actions={
-          <button
-            onClick={() => window.dispatchEvent(new Event('visaflow:start-tour'))}
-            title="Take the tour"
-            className="size-[34px] rounded-[10px] border border-[#e2e8f0] flex items-center justify-center text-[#64748b] hover:bg-[#f8fafc] hover:text-indigo-600 transition"
-          >
-            <HelpCircle size={16} />
-          </button>
-        }
+        /* XL row 25: previously we had TWO tour-icon buttons — this
+           one next to the notification bell and the floating "?"
+           bubble at the bottom-right rendered by DashboardTour.tsx.
+           Removed this header-level one; the floating bubble is
+           enough for a single, discoverable entry point. */
       />
 
       <PageContent>

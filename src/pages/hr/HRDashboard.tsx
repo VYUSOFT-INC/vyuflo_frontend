@@ -2352,7 +2352,7 @@ export default function HRDashboard() {
         )}
       </PageContent>
 
-      {/* ── TOUR — auto-starts for first-time HR users ── */}
+      {/* ── TOUR — auto-starts for first-time HR users not repeated two times── */}
       {/* ── TOUR — auto-starts for first-time HR users ── */}
       <DashboardTour role="hr" />
     </div>
