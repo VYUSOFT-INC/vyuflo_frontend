@@ -477,6 +477,40 @@ const SecureMessaging: React.FC = () => {
   const loadConversations = useCallback(async () => {
     try {
       const d = await messageApi.listConversations();
+      /* XL row 32 — when a case is created the employee must see a
+         group chat with their whole case team (attorney + HR), not
+         just a direct 1:1. Backend doesn't auto-create the group
+         yet (spec sent separately), so on first load we check the
+         dashboard's case_team list and auto-POST a group thread if
+         one isn't already there. Silent no-op if backend rejects. */
+      const alreadyHasGroup = d.some(c => c.thread_type === "group");
+      if (alreadyHasGroup) {
+        setConversations(d);
+        return;
+      }
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { getDashboardApi } = require("../../api/employee/dashboard.api");
+        const dash = await getDashboardApi();
+        const team = (dash?.case_team ?? []) as Array<{ id: string; name: string; role: string }>;
+        const teammates = team
+          .filter(m => m && m.id && (m.role === "attorney" || m.role === "hr" || m.role === "employer"))
+          .map(m => m.id);
+        if (teammates.length >= 1) {
+          try {
+            const g = await messageApi.createConversation({
+              thread_type:     "group",
+              participant_ids: teammates,
+              application_id:  dash?.case_summary?.application_id,
+              title:           dash?.case_summary?.case_number
+                ? `Case Team · ${dash.case_summary.case_number}`
+                : "Case Team",
+            });
+            setConversations([g, ...d]);
+            return;
+          } catch { /* backend doesn't support groups yet — fall through */ }
+        }
+      } catch { /* dashboard fetch failed — fall through */ }
       setConversations(d);
     } catch { /* silent */ } finally { setLoadingConvs(false); }
   }, []);

@@ -1277,16 +1277,32 @@ export default function Signup() {
                           <span className="font-semibold text-[#ef4444]">*</span>
                           <span className="font-semibold text-[#111827]"> Email Address</span>
                         </label>
-                        <div className="relative">
-                          <input type="email" placeholder="you@example.com" value={form.email}
-                            autoComplete="off"
-                            onChange={e => set("email", e.target.value)}
-                            className={`${inputBase} pr-10 ${errors.email ? "border-[#ef4444]" : ""}`} />
-                          <img src={imgEmailIcon} alt="" className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 object-contain opacity-40" />
-                        </div>
-                        {errors.email
-                          ? <p className="text-[#ef4444] text-xs mt-1 tracking-[-0.5px]">{errors.email}</p>
-                          : <p className="text-[#6b7280] text-xs mt-1 tracking-[-0.5px]">We'll send a verification email to this address</p>}
+                        {/* Live email validity — user types garbage, sees an
+                            inline error immediately instead of just staring
+                            at a disabled Continue button. Only kicks in
+                            after they've typed at least one character so the
+                            empty-form state isn't already red. */}
+                        {(() => {
+                          const emailRe   = /\S+@\S+\.\S+/;
+                          const hasVal    = form.email.trim().length > 0;
+                          const liveBad   = hasVal && !emailRe.test(form.email);
+                          const shownBad  = liveBad || !!errors.email;
+                          const shownMsg  = errors.email || (liveBad ? "Please enter a valid email address (e.g. name@example.com)." : "");
+                          return (
+                            <>
+                              <div className="relative">
+                                <input type="email" placeholder="you@example.com" value={form.email}
+                                  autoComplete="off"
+                                  onChange={e => set("email", e.target.value)}
+                                  className={`${inputBase} pr-10 ${shownBad ? "border-[#ef4444]" : ""}`} />
+                                <img src={imgEmailIcon} alt="" className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 object-contain opacity-40" />
+                              </div>
+                              {shownBad
+                                ? <p className="text-[#ef4444] text-xs mt-1 tracking-[-0.5px]">{shownMsg}</p>
+                                : <p className="text-[#6b7280] text-xs mt-1 tracking-[-0.5px]">We'll send a verification email to this address</p>}
+                            </>
+                          );
+                        })()}
                       </div>
 
                       {/* ── Phone ── */}

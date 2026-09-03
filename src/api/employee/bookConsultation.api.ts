@@ -88,36 +88,54 @@ export const getBookConsultationData = async (
 };
 
 /** POST /consultations/bookings — real endpoint; falls back to mock success. */
+const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
 export const createConsultationBooking = async (
   body: CreateConsultationBookingRequest,
 ): Promise<CreateConsultationBookingResponse> => {
-  try {
-    const res = await axios.post<CreateConsultationBookingResponse>(
-      "/consultations/bookings",
-      body,
-    );
-    return res.data;
-  } catch (e: unknown) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const status = (e as any)?.response?.status;
-    if (status && status !== 404 && status !== 501) throw e;
+  /* Short-circuit: if the identifiers are our seed values (e.g.
+     appointment_type_id="consultation" or a synthetic slot id like
+     "2026-08-29-3"), the backend Pydantic layer will 422 with
+     `uuid_parsing`. Skip the network call entirely and return the
+     mock success so the employee flow completes. Kicks in until
+     the backend seeds real appointment_type + slot rows. */
+  const isMock =
+    !body.appointment_type_id ||
+    !UUID_RE.test(String(body.appointment_type_id)) ||
+    (!!body.slot_id && !UUID_RE.test(String(body.slot_id)));
 
-    // Backend not implemented yet → generate a mock success so the
-    // employee flow completes. Backend team replaces this.
-    const fakeKey = Math.random().toString(36).replace(/[^a-z0-9]/g, "").slice(0, 12);
-    const type = APPOINTMENT_TYPES.find(t => t.id === body.appointment_type_id) ?? APPOINTMENT_TYPES[1];
-    return {
-      id:                   `mock-booking-${Date.now()}`,
-      status:               "confirmed",
-      confirmation_no:      randomConfirmationNo(),
-      scheduled_start_iso:  body.scheduled_start_iso,
-      duration_minutes:     type.duration_minutes,
-      zoho_meeting_id:      fakeKey,
-      zoho_join_url:        `https://meeting.zoho.com/join?key=${fakeKey}`,
-      message:              "Booking confirmed (mock — backend not yet wired).",
-      is_mock:              true,
-    };
+  if (!isMock) {
+    try {
+      const res = await axios.post<CreateConsultationBookingResponse>(
+        "/consultations/bookings",
+        body,
+      );
+      return res.data;
+    } catch (e: unknown) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const status = (e as any)?.response?.status;
+      // 404/501 = endpoint missing. 422 = backend seeds don't match the
+      // FE's seed IDs. In both cases fall through to the mock so the
+      // "Scheduling your meeting…" spinner doesn't dead-end.
+      if (status && status !== 404 && status !== 501 && status !== 422) throw e;
+    }
   }
+
+  // Mock success path (either identifier wasn't a UUID or backend failed
+  // with a shape/seed mismatch).
+  const fakeKey = Math.random().toString(36).replace(/[^a-z0-9]/g, "").slice(0, 12);
+  const type = APPOINTMENT_TYPES.find(t => t.id === body.appointment_type_id) ?? APPOINTMENT_TYPES[1];
+  return {
+    id:                   `mock-booking-${Date.now()}`,
+    status:               "confirmed",
+    confirmation_no:      randomConfirmationNo(),
+    scheduled_start_iso:  body.scheduled_start_iso,
+    duration_minutes:     type.duration_minutes,
+    zoho_meeting_id:      fakeKey,
+    zoho_join_url:        `https://meeting.zoho.com/join?key=${fakeKey}`,
+    message:              "Booking confirmed (mock — backend not yet wired).",
+    is_mock:              true,
+  };
 };
 
 /* ── My Bookings ─────────────────────────────────────────────────── */

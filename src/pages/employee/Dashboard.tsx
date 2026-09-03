@@ -613,6 +613,22 @@ export default function Dashboard() {
   const formCorrectionActions = useMemo(() => {
     const out: typeof intakeRequestActions = [];
     const seen = new Set<string>();
+    /* XL row 12/32 follow-up: localStorage form drafts are shared by
+       every user who logged into this browser. A brand-new employee
+       with no assigned case was seeing the previous account's
+       "Form I-9 — please fill the form" bleed in. Fix: only accept
+       local drafts whose application_id matches THIS user's known
+       apps (from data.case_summary + data.applications). If the new
+       user has zero apps yet, we skip the local fallback entirely
+       — nothing to show, "All caught up" like it should be. */
+    const myAppIds = new Set<string>();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const anyData = data as any;
+    if (anyData?.case_summary?.application_id) myAppIds.add(anyData.case_summary.application_id);
+    if (Array.isArray(anyData?.applications)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      anyData.applications.forEach((a: any) => { if (a?.application_id) myAppIds.add(a.application_id); });
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const push = (formType: 'i9' | 'i983', rec: any) => {
       if (!rec) return;
@@ -654,15 +670,24 @@ export default function Dashboard() {
     };
     // 1. Live backend records (source of truth once endpoint ships)
     remoteFormRecords.forEach(({ type, rec }) => push(type, rec));
-    // 2. Fallback — pre-backend local drafts (populated by the
-    //    attorney's requestCorrections local-write branch, exactly
-    //    like HRActionItemsCard does on the HR dashboard)
-    try {
-      listI9Drafts().forEach(r => push('i9', r));
-      listI983Drafts().forEach(r => push('i983', r));
-    } catch { /* stores empty */ }
+    // 2. Fallback — pre-backend local drafts, but scoped to the
+    //    current user's applications (see myAppIds above). Prevents
+    //    a stale draft from a previous browser user surfacing on a
+    //    fresh account's action items.
+    if (myAppIds.size > 0) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        listI9Drafts().forEach((r: any) => {
+          if (r?.application_id && myAppIds.has(r.application_id)) push('i9', r);
+        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        listI983Drafts().forEach((r: any) => {
+          if (r?.application_id && myAppIds.has(r.application_id)) push('i983', r);
+        });
+      } catch { /* stores empty */ }
+    }
     return out;
-  }, [remoteFormRecords, intakeRequestActions]);
+  }, [remoteFormRecords, intakeRequestActions, data]);
 
   const pendingActions = useMemo(
     () => [
