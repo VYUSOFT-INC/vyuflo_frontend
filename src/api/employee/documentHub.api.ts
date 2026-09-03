@@ -4,6 +4,15 @@
 // calls the same backend endpoint (POST /documents/{id}/reupload). Needed
 // so Document Hub can re-upload an expired standalone (non-case) document
 // without deleting its history, matching the ApplicationDetail.tsx flow.
+//
+// FIXED (task linking): uploadDocument() now accepts an optional taskId
+// and forwards it to documentsApi.upload(). Previously every Hub upload
+// sent document_type: "unclassified" with no task_id, so the backend's
+// old name-matching guess could never link the upload to a real
+// ApplicationTask — the file uploaded fine but the task stayed pending
+// forever. Callers that know which requirement an upload satisfies (see
+// DocumentHub.tsx's task picker) should now pass documentType + taskId
+// explicitly.
 
 import documentsApi from "../employee/documents.api";
 import axios from "../axios";
@@ -69,11 +78,17 @@ const documentHubApi = {
     }));
   },
 
+  // FIXED: added optional taskId (5th param) and now forwards documentType
+  // + taskId to documentsApi.upload() instead of always defaulting
+  // document_type to "unclassified" with no task_id. When both are
+  // provided, the backend links the new document straight to that task
+  // instead of guessing from a name match.
   uploadDocument: async (
     file: File,
     applicationId?: string,
     documentType?: string,
-    category?: string
+    category?: string,
+    taskId?: string,   // ← NEW
   ): Promise<HubDocument> => {
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
     const autoCategory = ["jpg", "jpeg", "png", "gif", "webp"].includes(ext)
@@ -87,6 +102,7 @@ const documentHubApi = {
       document_type: documentType ?? "unclassified",
       category: category ?? autoCategory,
       file,
+      task_id: taskId,
     });
 
     return normalise(doc);
@@ -97,9 +113,10 @@ const documentHubApi = {
     await documentsApi.delete(id);
   },
 
-  // ── NEW — Re-upload an expired standalone document. Same backend endpoint
-  //    as documents.api.ts's reupload(); kept here too so DocumentHub.tsx
-  //    doesn't need to reach across to the other API module for one call.
+  // ── Re-upload an expired/proactively-renewed standalone document. Same
+  //    backend endpoint as documents.api.ts's reupload(); kept here too so
+  //    DocumentHub.tsx doesn't need to reach across to the other API module
+  //    for one call.
   reupload: async (oldDocId: string, file: File): Promise<HubDocument> => {
     const doc = await documentsApi.reupload(oldDocId, file);
     return normalise(doc);
@@ -184,4 +201,4 @@ const documentHubApi = {
   },
 };
 
-export default documentHubApi; 
+export default documentHubApi;
