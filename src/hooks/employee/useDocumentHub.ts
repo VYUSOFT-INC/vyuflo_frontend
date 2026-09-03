@@ -8,6 +8,10 @@
 // = "all"); a case only gets selected when the person explicitly clicks its
 // tab, or when the page is opened with ?application_id=... in the URL
 // (handled separately, in DocumentHub.tsx).
+//
+// FIXED (task linking): uploadDocument() now accepts an optional taskId in
+// its options object and forwards it through to documentHubApi. See
+// DocumentHub.tsx's task picker for where this gets populated.
 
 import { useState, useEffect, useCallback } from "react";
 import documentHubApi from "../../api/employee/documentHub.api";
@@ -83,9 +87,12 @@ export function useDocumentHub() {
   }, []);
 
   // ── Upload — returns HubDocument so caller can react (toast, refresh, etc) ─
+  // FIXED: options now accepts taskId, forwarded to documentHubApi so the
+  // backend can link the upload directly to a specific ApplicationTask
+  // instead of guessing from documentType text.
   const uploadDocument = useCallback(async (
     file: File,
-    options?: { applicationId?: string; documentType?: string; category?: string }
+    options?: { applicationId?: string; documentType?: string; category?: string; taskId?: string }
   ): Promise<HubDocument | null> => {
     setUploading(true);
     setUploadError(null);
@@ -95,6 +102,7 @@ export function useDocumentHub() {
         options?.applicationId,
         options?.documentType,
         options?.category,
+        options?.taskId,
       );
       void fetchAll(); // refresh list in background
       return doc;

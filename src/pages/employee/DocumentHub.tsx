@@ -1,4 +1,3 @@
-
 // src/pages/employee/DocumentHub.tsx
 //
 // CHANGED: Replace/Re-upload is now available on ANY document the person
@@ -28,6 +27,25 @@
 // NEW — Rename: both "name this document" at upload time (client-side File
 // rename, no backend call) and "rename an existing document" (hits the new
 // PATCH /documents/:id/rename endpoint) via the shared RenamePromptModal.
+//
+// FIXED (task linking — root cause of "uploaded from Hub but task never
+// completes"): generic Hub uploads always sent document_type:
+// "unclassified" and no task_id, so the backend's old name-matching guess
+// could never link the new document to a real ApplicationTask — the file
+// uploaded and even completed OCR fine, but is_completed on the task never
+// flipped to true, because confirm_document_ocr() looks up the task BY the
+// document_id link that upload never set in the first place.
+//
+// Fix has two parts:
+//   1. The upload API chain (documentsApi → documentHubApi → useDocumentHub)
+//      now accepts and forwards an explicit taskId end-to-end.
+//   2. When a person drops/browses a file while a specific application tab
+//      is active AND that application still has pending (missing/required)
+//      requirements, UploadTaskPickerModal asks which requirement this
+//      upload satisfies instead of silently guessing or silently leaving it
+//      unlinked. Skipping still uploads as a standalone document — nothing
+//      that worked before is removed, the silent guess is just replaced
+//      with an explicit choice.
 
 import { useRef, useState, useEffect, useCallback, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -36,6 +54,7 @@ import { useDocumentHub }   from "../../hooks/employee/useDocumentHub";
 import documentHubApi from "../../api/employee/documentHub.api";
 import type { HubDocument, RequirementItem } from "../../types/employee/documentHub.types";
 import { RenamePromptModal } from "../../components/ui/RenamePromptModal";
+import { UploadTaskPickerModal } from "../../components/ui/UploadTaskPickerModal";
 
 import imgUpload      from "../../assets/icons/appdetail-upload-cloud.svg";
 import imgPdf         from "../../assets/icons/docup-pdf-icon.svg";
@@ -157,7 +176,7 @@ function PreviewModal({ doc, reuploading, onClose, onDelete, onReupload, onRenam
   }
 
   function handleReuploadFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]; 
+    const file = e.target.files?.[0];
     if (file) onReupload(activeDoc, file);
     e.target.value = '';
   }
@@ -200,18 +219,18 @@ function PreviewModal({ doc, reuploading, onClose, onDelete, onReupload, onRenam
                         : "text-[#374151] border border-[#e2e8f0] hover:bg-[#f8fafc]"
                     }`}
                     style={isExpired ? { backgroundImage: "linear-gradient(135deg, var(--theme-primary), var(--theme-gradient-end))" } : undefined}
-                    title={isExpired ? "Re-upload a renewed version" : "Replace with a newer version"}>
+                    title={isExpired ? "Renew — upload a current version" : "Replace with a newer version"}>
                     {reuploading ? (
                       <>
                         <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                         </svg>
-                        Uploading…
+                        {isExpired ? "Renewing…" : "Uploading…"}
                       </>
                     ) : (
                       <>
-                        <RefreshCw size={13} /> {isExpired ? "Re-upload" : "Replace"}
+                        <RefreshCw size={13} /> {isExpired ? "Renew" : "Replace"}
                       </>
                     )}
                   </button>
@@ -418,16 +437,26 @@ function ReqIcon({ status }: { status: string }) {
   return <img src={imgMissing} alt="" className="size-[20px] shrink-0" />;
 }
 
-function DocCard({ doc, onOpen, onDelete, onRename }: {
+function DocCard({ doc, onOpen, onDelete, onRename, onReupload, reuploading }: {
   doc: HubDocument;
   onOpen: (doc: HubDocument) => void;
   onDelete: (doc: HubDocument) => void;
   onRename: (doc: HubDocument) => void;
+  onReupload: (doc: HubDocument, file: File) => void;
+  reuploading: boolean;
 }) {
   const isExpired      = doc.status === 'expired';
   const isSuperseded  = doc.status === 'superseded';
   const isPending     = !!doc.activates_on; // waiting for the old document's expiry to arrive
   const showDeleteBtn = !isExpired && !isSuperseded;
+  const renewInputRef = useRef<HTMLInputElement>(null);
+
+  function handleRenewFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) onReupload(doc, file);
+    e.target.value = '';
+  }
+
   return (
     <div onClick={() => onOpen(doc)}
          className={`bg-white border rounded-[16px] shadow-[0px_1px_4px_rgba(0,0,0,0.04)] flex flex-col gap-[12px] p-[20px] cursor-pointer transition-all duration-200 relative group ${
@@ -489,7 +518,28 @@ function DocCard({ doc, onOpen, onDelete, onRename }: {
         <span className="text-[10px] text-[#94a3b8] italic">Used in a case</span>
       )}
       {isExpired && (
-        <span className="text-[10px] text-[#c2410c] italic font-medium">Click to re-upload</span>
+        <>
+          <input ref={renewInputRef} type="file" className="hidden" onChange={handleRenewFile} onClick={e => e.stopPropagation()} disabled={reuploading} />
+          <button
+            onClick={e => { e.stopPropagation(); renewInputRef.current?.click(); }}
+            disabled={reuploading}
+            className="w-full h-[32px] rounded-[8px] text-white text-[12px] font-semibold flex items-center justify-center gap-[6px] transition disabled:opacity-60"
+            style={{ backgroundImage: "linear-gradient(135deg, var(--theme-primary), var(--theme-gradient-end))" }}>
+            {reuploading ? (
+              <>
+                <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Renewing…
+              </>
+            ) : (
+              <>
+                <RefreshCw size={12} /> Renew
+              </>
+            )}
+          </button>
+        </>
       )}
       {isSuperseded && (
         <span className="text-[10px] text-[#94a3b8] italic">Older version of {doc.document_type} — see the current one below</span>
@@ -503,16 +553,25 @@ function DocCard({ doc, onOpen, onDelete, onRename }: {
   );
 }
 
-function DocRow({ doc, onOpen, onDelete, onRename }: {
+function DocRow({ doc, onOpen, onDelete, onRename, onReupload, reuploading }: {
   doc: HubDocument;
   onOpen: (doc: HubDocument) => void;
   onDelete: (doc: HubDocument) => void;
   onRename: (doc: HubDocument) => void;
+  onReupload: (doc: HubDocument, file: File) => void;
+  reuploading: boolean;
 }) {
   const isExpired      = doc.status === 'expired';
   const isSuperseded  = doc.status === 'superseded';
   const isPending     = !!doc.activates_on;
   const showDeleteBtn = !isExpired && !isSuperseded;
+  const renewInputRef = useRef<HTMLInputElement>(null);
+
+  function handleRenewFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) onReupload(doc, file);
+    e.target.value = '';
+  }
   return (
     <div onClick={() => onOpen(doc)}
          className={`flex items-center gap-[16px] px-[20px] py-[14px] border-b last:border-0 cursor-pointer transition-colors group ${
@@ -533,13 +592,25 @@ function DocRow({ doc, onOpen, onDelete, onRename }: {
         <p className="text-[#94a3b8] text-[11px] truncate">
           {doc.application_name ?? doc.document_type} • {fmtSize(doc.file_size_bytes)}
           {doc.in_use && !isExpired && !isSuperseded && <span className="ml-[6px] italic">• Used in a case</span>}
-          {isExpired && <span className="ml-[6px] italic text-[#c2410c] font-medium">• Click to re-upload</span>}
+          {isExpired && <span className="ml-[6px] italic text-[#c2410c] font-medium">• Renewal needed</span>}
           {isSuperseded && <span className="ml-[6px] italic">• Older version of {doc.document_type} — see the current one below</span>}
           {isPending && <span className="ml-[6px] italic text-indigo-600 font-medium">• Becomes active on {fmtDate(doc.activates_on)}</span>}
         </p>
       </div>
       <StatusBadge status={doc.status} />
       <span className="text-[#94a3b8] text-[12px] shrink-0 hidden sm:block">{fmtDate(doc.uploaded_at)}</span>
+      {isExpired && (
+        <>
+          <input ref={renewInputRef} type="file" className="hidden" onChange={handleRenewFile} onClick={e => e.stopPropagation()} disabled={reuploading} />
+          <button
+            onClick={e => { e.stopPropagation(); renewInputRef.current?.click(); }}
+            disabled={reuploading}
+            className="h-[30px] px-[12px] rounded-[8px] text-white text-[12px] font-semibold flex items-center gap-[5px] shrink-0 transition disabled:opacity-60"
+            style={{ backgroundImage: "linear-gradient(135deg, var(--theme-primary), var(--theme-gradient-end))" }}>
+            <RefreshCw size={12} /> {reuploading ? "Renewing…" : "Renew"}
+          </button>
+        </>
+      )}
       {!isSuperseded && (
         <button
           onClick={e => { e.stopPropagation(); onRename(doc); }}
@@ -625,6 +696,16 @@ export default function DocumentHub() {
   const [renamingDoc, setRenamingDoc] = useState<HubDocument | null>(null);
   const [renaming, setRenaming] = useState(false);
 
+  // ── NEW — task-picker state ────────────────────────────────────────────
+  // Set when a file needs a requirement chosen for it (active app tab has
+  // pending requirements) before it can be uploaded. See doUpload/
+  // handleUploadAndNavigate below.
+  const [pendingTaskPicker, setPendingTaskPicker] = useState<{
+    file:    File;
+    appId:   string;
+    choices: RequirementItem[];
+  } | null>(null);
+
   const pushToast = useCallback((tone: ToastTone, title: string, message?: string) => {
     const tid = `${Date.now()}-${Math.random()}`;
     setToasts(prev => [...prev, { id: tid, tone, title, message }]);
@@ -645,18 +726,19 @@ export default function DocumentHub() {
   const storagePct = Math.min(100, Math.round((storage.used_mb / storage.total_mb) * 100));
   const usedLabel  = `${storage.used_mb.toFixed(1)} MB of ${storage.total_mb} MB`;
 
-  // FIXED: previously just uploaded and toasted — never navigated to the
-  // viewer, so OCR extraction (triggered there by loadFields) never ran for
-  // Hub uploads. Now mirrors ApplicationDetail's handleUpload: on success,
-  // navigate to /documents/viewer so OCR fires. Returns to the active
-  // application if one was filtered/selected when the upload happened,
-  // otherwise back to the Hub itself.
-  async function handleUploadAndNavigate(file: File) {
-    const appId = activeFilter !== "all" ? activeFilter : undefined;
-
+  // ── NEW — the actual upload call, now optionally carrying a chosen
+  // requirement's document_type + task_id so the backend links it directly
+  // instead of guessing. Extracted out of handleUploadAndNavigate so both
+  // the "no picker needed" path and the picker's onSelect/onSkip callbacks
+  // can share it.
+  async function doUpload(file: File, appId?: string, taskChoice?: RequirementItem) {
     pushToast('info', 'Uploading…', file.name);
 
-    const doc = await uploadDocument(file, { applicationId: appId });
+    const doc = await uploadDocument(file, {
+      applicationId: appId,
+      documentType:  taskChoice?.task_name,
+      taskId:        taskChoice?.id,
+    });
 
     if (doc?.id) {
       pushToast('success', 'Uploaded!', `${file.name} has been added to your documents.`);
@@ -665,6 +747,48 @@ export default function DocumentHub() {
     } else {
       pushToast('error', 'Upload failed', uploadError ?? 'Please try again.');
     }
+  }
+
+  // FIXED: previously just uploaded and toasted — never navigated to the
+  // viewer, so OCR extraction (triggered there by loadFields) never ran for
+  // Hub uploads. Now mirrors ApplicationDetail's handleUpload: on success,
+  // navigate to /documents/viewer so OCR fires. Returns to the active
+  // application if one was filtered/selected when the upload happened,
+  // otherwise back to the Hub itself.
+  //
+  // FIXED (task linking): if a specific application tab is active and that
+  // application still has pending requirements, ask which one this upload
+  // satisfies instead of silently sending document_type: "unclassified"
+  // (which the backend could never match to a real task). Skipping the
+  // picker uploads as a standalone document, same as the old behavior.
+  async function handleUploadAndNavigate(file: File) {
+    const appId = activeFilter !== "all" ? activeFilter : undefined;
+
+    if (appId && requirements) {
+      const missing = requirements.items.filter(i => i.status === "missing" || i.status === "required");
+      if (missing.length > 0) {
+        setPendingTaskPicker({ file, appId, choices: missing });
+        return;
+      }
+    }
+
+    await doUpload(file, appId);
+  }
+
+  function handleTaskPickerSelect(choice: RequirementItem) {
+    const target = pendingTaskPicker;
+    setPendingTaskPicker(null);
+    if (target) void doUpload(target.file, target.appId, choice);
+  }
+
+  function handleTaskPickerSkip() {
+    const target = pendingTaskPicker;
+    setPendingTaskPicker(null);
+    if (target) void doUpload(target.file, target.appId);
+  }
+
+  function handleTaskPickerCancel() {
+    setPendingTaskPicker(null);
   }
 
   // Both drop and browse now stash the file and open the name prompt,
@@ -729,14 +853,22 @@ export default function DocumentHub() {
 
   // Replace/re-upload a document — works whether it's expired or not.
   // Old document kept as history ("superseded"), never deleted.
+  // FIXED: renewing a document only reuploaded the file and refreshed the
+  // list in place — it never navigated to DocumentViewer, so OCR never ran
+  // on the new version until the person separately clicked back into it.
+  // Now mirrors handleUploadAndNavigate: on success, go straight to the
+  // viewer for the new document so OCR review happens immediately, same
+  // flow as a fresh upload (Renew → DocumentViewer → Submit).
   async function handleReupload(doc: HubDocument, file: File) {
     setReuploading(true);
     try {
       pushToast('info', 'Uploading new version…', file.name);
-      await documentHubApi.reupload(doc.id, file);
+      const renewed = await documentHubApi.reupload(doc.id, file);
       pushToast('success', 'Uploaded!', `${doc.name} has been replaced with the new version.`);
       setPreviewDoc(null);
-      await refetch?.();
+      const appId = renewed.application_id;
+      const returnUrl = encodeURIComponent(appId ? `/applications/${appId}` : '/documents');
+      navigate(`/documents/viewer?doc_id=${renewed.id}${appId ? `&application_id=${appId}` : ''}&return_url=${returnUrl}`);
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } };
       pushToast('error', "Replace failed", err?.response?.data?.detail ?? 'Please try again.');
@@ -792,6 +924,15 @@ export default function DocumentHub() {
         onConfirm={handleConfirmUploadName}
         onSkip={handleSkipUploadName}
         onCancel={() => setPendingUploadFile(null)}
+      />
+
+      <UploadTaskPickerModal
+        open={!!pendingTaskPicker}
+        fileName={pendingTaskPicker?.file.name ?? ''}
+        choices={pendingTaskPicker?.choices ?? []}
+        onSelect={handleTaskPickerSelect}
+        onSkip={handleTaskPickerSkip}
+        onCancel={handleTaskPickerCancel}
       />
 
       <RenamePromptModal
@@ -966,14 +1107,14 @@ export default function DocumentHub() {
               {!isLoading && !error && documents.length > 0 && viewMode === "grid" && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-[16px] p-[20px]">
                   {documents.map(doc => (
-                    <DocCard key={doc.id} doc={doc} onOpen={handleOpenPreview} onDelete={handleDeleteClick} onRename={handleOpenRename} />
+                    <DocCard key={doc.id} doc={doc} onOpen={handleOpenPreview} onDelete={handleDeleteClick} onRename={handleOpenRename} onReupload={handleReupload} reuploading={reuploading} />
                   ))}
                 </div>
               )}
               {!isLoading && !error && documents.length > 0 && viewMode === "list" && (
                 <div className="flex flex-col">
                   {documents.map(doc => (
-                    <DocRow key={doc.id} doc={doc} onOpen={handleOpenPreview} onDelete={handleDeleteClick} onRename={handleOpenRename} />
+                    <DocRow key={doc.id} doc={doc} onOpen={handleOpenPreview} onDelete={handleDeleteClick} onRename={handleOpenRename} onReupload={handleReupload} reuploading={reuploading} />
                   ))}
                 </div>
               )}

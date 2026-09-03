@@ -1052,16 +1052,13 @@ export default function ApplicationDetail() {
   async function handleReuse(taskId: string, sourceDocumentId: string) {
     try {
       pushToast('info', 'Linking document…');
-      const reusedDoc = await documentsApi.reuse(sourceDocumentId, id!);
-
+      const reusedDoc = await documentsApi.reuse(sourceDocumentId, id!, taskId);  // ← now sends taskId
       pushToast('success', 'Linked!', 'Reused from your Document Hub — opening for review…');
-
       const returnUrl = encodeURIComponent(`/applications/${id}?tab=tasks`);
       navigate(`/documents/viewer?doc_id=${reusedDoc.id}&application_id=${id}&return_url=${returnUrl}`);
     } catch {
       pushToast('error', 'Could not link document', 'Please try uploading it fresh instead.');
     }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     void taskId;
   }
 

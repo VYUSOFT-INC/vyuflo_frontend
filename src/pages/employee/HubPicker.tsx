@@ -5,9 +5,23 @@
 // Tasks tab (TaskRow) and the new HR-styled Documents tab
 // (ApplicationDocumentsTab), which also needs a "reuse from Hub" action for
 // missing required documents.
+//
+// FIXED (garbled "Linkihgis" pill): the row's action pill both swapped its
+// text ("Use this" → "Linking…") AND animated color/background via a
+// generic `transition` class in the same render. Because "Linking…" is a
+// different width than "Use this", the box reflow and the color fade
+// happened simultaneously, and Safari would paint a blended frame of the
+// old and new glyphs mid-transition — the "Linkihgis" artifact. Fixed by:
+//   1. Giving the pill a fixed width (`w-[76px]` + `justify-center`) so
+//      swapping label text never triggers a reflow.
+//   2. Replacing the text swap with a spinner icon while picking, instead
+//      of changing the string content — the label itself never re-paints
+//      mid-transition.
+//   3. Scoping the transition to `transition-colors` only (not `transition`
+//      on everything), so there's nothing else animating at the same time.
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { FileText, Image as ImageIcon, File as FileIcon, Search } from 'lucide-react';
+import { FileText, Image as ImageIcon, File as FileIcon, Search, Loader2 } from 'lucide-react';
 import documentsApi from '../../api/employee/documents.api';
 import type { Document } from '../../types/employee/document.types';
 
@@ -64,7 +78,7 @@ export function HubPicker({ onSelect }: { onSelect: (documentId: string) => void
             {filtered.length} document{filtered.length !== 1 ? "s" : ""}
           </span>
         )}
-      </div> 
+      </div>
 
       <div className="p-[12px]">
         <div className="relative mb-[10px]">
@@ -94,10 +108,11 @@ export function HubPicker({ onSelect }: { onSelect: (documentId: string) => void
           ) : filtered.map(d => {
             const badge = fileTypeBadge(d.file_type);
             const isPicking = picking === d.id;
+            const anyPicking = picking !== null;
             return (
-              <button key={d.id} type="button" disabled={isPicking}
+              <button key={d.id} type="button" disabled={anyPicking}
                 onClick={async () => { setPicking(d.id); await onSelect(d.id); setPicking(null); }}
-                className="flex items-center gap-[10px] px-[10px] py-[9px] rounded-[10px] border border-transparent hover:border-[#e5e7eb] hover:bg-[#f8fafc] text-left transition disabled:opacity-60 group">
+                className="flex items-center gap-[10px] px-[10px] py-[9px] rounded-[10px] border border-transparent hover:border-[#e5e7eb] hover:bg-[#f8fafc] text-left transition disabled:cursor-not-allowed group">
                 <div className={`size-[36px] rounded-[9px] ${badge.bg} ${badge.iconColor} flex items-center justify-center shrink-0`}>
                   {badge.icon}
                 </div>
@@ -108,15 +123,25 @@ export function HubPicker({ onSelect }: { onSelect: (documentId: string) => void
                     {d.file_size_bytes ? ` · ${(d.file_size_bytes / 1024 / 1024).toFixed(1)} MB` : ""}
                   </p>
                 </div>
+                {/*
+                  FIXED: fixed width (w-[76px]) + justify-center so the pill
+                  never reflows when its content changes, and the label
+                  swap is replaced with a spinner icon so the text itself
+                  never re-paints mid color-transition. Only background/text
+                  color animate now (transition-colors), nothing else.
+                */}
                 <span
-                  className={`text-[11px] font-semibold shrink-0 px-[10px] py-[6px] rounded-[8px] transition ${
+                  className={`flex items-center justify-center gap-[5px] w-[76px] shrink-0 text-[11px] font-semibold px-[10px] py-[6px] rounded-[8px] transition-colors duration-150 ${
                     isPicking
                       ? "text-white"
-                      : "text-indigo-600 bg-indigo-50 group-hover:bg-indigo-600 group-hover:text-white"
+                      : anyPicking
+                        ? "text-[#cbd5e1] bg-[#f1f5f9]"
+                        : "text-indigo-600 bg-indigo-50 group-hover:bg-indigo-600 group-hover:text-white"
                   }`}
                   style={isPicking ? { backgroundImage: PRIMARY_GRADIENT } : undefined}
                 >
-                  {isPicking ? "Linking…" : "Use this"}
+                  {isPicking ? <Loader2 size={12} className="animate-spin shrink-0" /> : null}
+                  {isPicking ? "Linking" : "Use this"}
                 </span>
               </button>
             );

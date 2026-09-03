@@ -36,7 +36,7 @@ const documentsApi = {
     return { blob: res.data, fileName, contentType };
   },
 
-    // documents.api.ts — add alongside reupload()
+  // GET /documents/:id/versions
   getVersions: async (documentId: string): Promise<{
     id: string; file_name: string; version: number; status: string; uploaded_at: string;
   }[]> => {
@@ -45,17 +45,27 @@ const documentsApi = {
   },
 
   // POST /documents/upload — multipart upload
+  //
+  // FIXED (task linking): added optional task_id. When the caller already
+  // knows which task this upload satisfies (e.g. a requirement picked from
+  // a list), pass it directly — the backend now prefers task_id over
+  // guessing from document_type text, which routinely failed for generic
+  // uploads (see document_service.py's upload_document()).
   upload: async (body: {
     application_id: string;
     document_type:  string;
     category:       string;
     file:           File;
+    custom_name?:   string;
+    task_id?:       string;   // ← NEW
   }): Promise<Document> => {
     const form = new FormData();
     form.append("application_id", body.application_id);
     form.append("document_type",  body.document_type);
     form.append("category",       body.category);
     form.append("file",           body.file);
+    if (body.custom_name) form.append("custom_name", body.custom_name);
+    if (body.task_id)     form.append("task_id", body.task_id);
     const res = await axios.post("/documents/upload", form, {
       headers: { "Content-Type": "multipart/form-data" },
     });
@@ -67,9 +77,10 @@ const documentsApi = {
     const res = await axios.patch(`/documents/${id}/rename`, { new_name: newName });
     return res.data;
   },
+
   // GET /documents/hub — all of the current user's documents across every
-  // case (scoped server-side to their own user_id), optionally filtered by 
-  // a search term. Used by the "From Hub" picker. 
+  // case (scoped server-side to their own user_id), optionally filtered by
+  // a search term. Used by the "From Hub" picker.
   listHub: async (params?: { search?: string }): Promise<Document[]> => {
     const res = await axios.get("/documents/hub", { params });
     return Array.isArray(res.data) ? res.data : res.data.items ?? [];
@@ -78,9 +89,13 @@ const documentsApi = {
   // POST /documents/:id/reuse — attach an existing Hub document to a new
   // case WITHOUT re-uploading (duplicates the file server-side so the two
   // rows are independent — safe to delete one without breaking the other).
-  reuse: async (sourceDocumentId: string, applicationId: string): Promise<Document> => {
+  // Sends task_id explicitly — see document_service.py's
+  // reuse_document_for_case() comments for why name-matching alone wasn't
+  // reliable.
+  reuse: async (sourceDocumentId: string, applicationId: string, taskId?: string): Promise<Document> => {
     const form = new FormData();
     form.append("application_id", applicationId);
+    if (taskId) form.append("task_id", taskId);
     const res = await axios.post(`/documents/${sourceDocumentId}/reuse`, form, {
       headers: { "Content-Type": "multipart/form-data" },
     });
